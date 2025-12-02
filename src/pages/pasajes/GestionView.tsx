@@ -1,5 +1,5 @@
 // src/pages/pasajes/GestionView.tsx
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { cerrar, getState, setProveedor, subscribe } from "../../store/pasajeStore";
 import { getProvidersState } from "../../store/providersStore";
 import {
@@ -61,11 +61,6 @@ function fmt(dt?: Date | null) {
 function ticketDate(s: any): Date {
   if (s.tipo === "Pasaje") return new Date(s.salida ?? s.creado);
   return new Date(s.inicio ?? s.creado);
-}
-
-function hasCostoVigente(s: any): boolean {
-  const vence = s.costoVenceEn ? new Date(s.costoVenceEn) : null;
-  return !!(s.costo && vence && new Date() < vence);
 }
 
 function addMonths(base: Date, delta: number) {
