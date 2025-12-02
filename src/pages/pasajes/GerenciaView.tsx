@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { aprobarCosto, getState, subscribe } from "../../store/pasajeStore";
 import type { EstadoSolicitud } from "../../store/pasajeStore";
 import {
@@ -8,7 +8,6 @@ import {
   Hotel,
   BadgeCheck,
   XCircle,
-  Receipt,
   Filter,
   Eye,
   EyeOff,

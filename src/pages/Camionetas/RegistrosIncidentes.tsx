@@ -653,8 +653,8 @@ export default function RegistrosIncidentes({
 
   /* ----- NAV HORIZONTAL SOLO DENTRO DE LA TABLA (flexible) ----- */
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [scrollLeft, setScrollLeft] = React.useState(0);
-  const [scrollMax, setScrollMax] = React.useState(0);
+  const [, setScrollLeft] = React.useState(0);
+  const [, setScrollMax] = React.useState(0);
 
   const recalcScroll = React.useCallback(() => {
     const el = scrollRef.current;
@@ -721,24 +721,6 @@ export default function RegistrosIncidentes({
         e.pointerId
       );
     } catch {}
-  };
-
-  const scrollByAmount = (dir: "left" | "right") => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const step = Math.max(240, Math.round(el.clientWidth * 0.8));
-    el.scrollBy({
-      left: dir === "left" ? -step : step,
-      behavior: "smooth",
-    });
-  };
-
-  const onRangeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const val = Number(e.currentTarget.value);
-    el.scrollTo({ left: val, behavior: "instant" as ScrollBehavior });
-    setScrollLeft(val);
   };
 
   /* -------- Exportar Excel con datos mostrados (dataFiltrada) -------- */

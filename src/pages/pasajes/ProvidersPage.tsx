@@ -3,7 +3,6 @@ import React from "react";
 import {
   Plus,
   PencilLine,
-  X,
   Save,
   ToggleLeft,
   ToggleRight,
