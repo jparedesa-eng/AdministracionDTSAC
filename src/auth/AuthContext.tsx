@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { supabase } from "../supabase/supabaseClient";
 
+
 export type Profile = {
   id: string;
   dni: string;

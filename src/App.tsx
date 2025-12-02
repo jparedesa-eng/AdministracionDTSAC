@@ -89,17 +89,18 @@ function ProtectedLayout() {
 export default function App() {
   return (
     <Routes>
-      {/* 1) Ruta pública: Login */}
+      {/* RUTAS PÚBLICAS: login en / y /login */}
+      <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
 
-      {/* 2) Todo lo demás pasa por RequireAuth */}
+      {/* RUTAS PROTEGIDAS */}
       <Route element={<RequireAuth />}>
         <Route element={<ProtectedLayout />}>
-          {/* 2.1 Index ("/") = Dashboard protegido */}
+          {/* Dashboard (home después de login) */}
           <Route
-            index
+            path="/dashboard"
             element={
-              <ProtectedRoute path="/">
+              <ProtectedRoute path="/dashboard">
                 <Dashboard />
               </ProtectedRoute>
             }
@@ -303,7 +304,7 @@ export default function App() {
             }
           />
 
-          {/* 403 dentro de sesión */}
+          {/* 403 (protegido) */}
           <Route
             path="/403"
             element={
@@ -315,7 +316,7 @@ export default function App() {
 
           {/* 404 protegido */}
           <Route
-            path="*"
+            path="/app-not-found"
             element={
               <section className="rounded-2xl border bg-white p-6 shadow-sm">
                 <h1 className="text-xl font-semibold">404</h1>
@@ -328,7 +329,7 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* 4) Cualquier ruta rara pública → /login */}
+      {/* Fallback GLOBAL: cualquier otra ruta → /login */}
       <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
