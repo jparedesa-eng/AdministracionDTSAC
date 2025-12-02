@@ -1,7 +1,7 @@
 // src/App.tsx
 import React from "react";
 import { Menu } from "lucide-react";
-import { Routes, Route, Outlet } from "react-router-dom";
+import { Routes, Route, Outlet, Navigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
 
 /* Auth */
@@ -24,19 +24,19 @@ import InventarioMantenedor from "./pages/Camionetas/Inventario";
 import RegistrosGastos from "./pages/Camionetas/RegistrosIncidentes";
 import RegistrosChecklist from "./pages/Camionetas/RegistrosChecklist";
 import Conductores from "./pages/Camionetas/Conductores";
-import Garita from "./pages/Camionetas/Garita"; // 👈 NUEVO
+import Garita from "./pages/Camionetas/Garita";
 
-/* Programación de mantenimiento (nuevo) */
+/* Programación de mantenimiento */
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
 
-/* Pasajes & Hospedaje (React + Tailwind) */
+/* Pasajes & Hospedaje */
 import SolicitarPasaje from "./pages/pasajes/SolicitarView";
 import ProveedorPasaje from "./pages/pasajes/ProveedorView";
 import GerenciaPasaje from "./pages/pasajes/GerenciaView";
 import GestionPasaje from "./pages/pasajes/GestionView";
 import ProveedoresPasaje from "./pages/pasajes/ProvidersPage";
 
-/* Configuración: nuevos mantenedores */
+/* Configuración */
 import PersonalPage from "./pages/configuracion/PersonalPage";
 import GerenciasPage from "./pages/configuracion/GerenciasPage";
 
@@ -71,13 +71,11 @@ function ProtectedLayout() {
         <span className="font-semibold">Administración</span>
       </header>
 
-      {/* Sidebar fijo (desktop) + drawer (mobile) */}
+      {/* Sidebar + contenido */}
       <Sidebar open={isOpen} onClose={() => setIsOpen(false)} />
 
-      {/* Contenido principal: en desktop se corre 72 (18rem) hacia la derecha */}
       <main className="md:pl-72">
         <div className="min-h-[calc(100vh-48px)] md:min-h-screen flex flex-col bg-gray-50">
-          {/* Separación superior para respirar */}
           <div className="h-6 md:h-12" />
           <div className="flex-1 p-4 md:p-6">
             <Outlet />
@@ -91,21 +89,26 @@ function ProtectedLayout() {
 export default function App() {
   return (
     <Routes>
-      {/* Pública: Login */}
+      {/* 1) Ruta pública: Login */}
       <Route path="/login" element={<Login />} />
 
-      {/* Protegido: requiere sesión */}
+      {/* 2) "/" redirige siempre a /login */}
+      <Route path="/" element={<Navigate to="/login" replace />} />
+
+      {/* 3) Rutas protegidas */}
       <Route element={<RequireAuth />}>
         <Route element={<ProtectedLayout />}>
-          {/* Rutas base */}
+          {/* Dashboard en /dashboard */}
           <Route
-            index
+            path="/dashboard"
             element={
-              <ProtectedRoute path="/">
+              <ProtectedRoute path="/dashboard">
                 <Dashboard />
               </ProtectedRoute>
             }
           />
+
+          {/* Rutas base */}
           <Route
             path="/inventario"
             element={
@@ -186,8 +189,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Garita (Control QR) */}
           <Route
             path="/camionetas/garita"
             element={
@@ -196,8 +197,6 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-
-          {/* Programación de mantenimiento */}
           <Route
             path="/camionetas/mantenimiento"
             element={
@@ -289,7 +288,7 @@ export default function App() {
             }
           />
 
-          {/* Configuración: nuevos mantenedores */}
+          {/* Configuración */}
           <Route
             path="/configuracion/personal"
             element={
@@ -307,7 +306,7 @@ export default function App() {
             }
           />
 
-          {/* 403 */}
+          {/* 403 (ya logueado pero sin permiso) */}
           <Route
             path="/403"
             element={
@@ -331,6 +330,9 @@ export default function App() {
           />
         </Route>
       </Route>
+
+      {/* Si quisieras que cualquier otra ruta pública fuera a /login, podrías descomentar: */}
+      {/* <Route path="*" element={<Navigate to="/login" replace />} /> */}
     </Routes>
   );
 }

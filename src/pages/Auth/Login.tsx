@@ -3,14 +3,26 @@ import React from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../../auth/AuthContext";
 
+type LocationState = {
+  from?: string;
+};
+
 export default function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
-  // Normaliza el "from": si apunta a /login, redirige a "/"
-  const location = useLocation() as unknown as { state?: { from?: string } };
-  const rawFrom = location.state?.from || "/";
-  const redirectTo = !rawFrom || rawFrom.startsWith("/login") ? "/" : rawFrom;
+  // Leemos el "from" si existe
+  const state = (location.state as LocationState | null) ?? {};
+  const rawFrom = state.from;
+
+  // Decidimos a dónde redirigir después del login:
+  // - si no hay from, o es "/" o apunta a /login, mandamos a /dashboard
+  // - si hay from válido, lo usamos
+  const redirectTo =
+    !rawFrom || rawFrom === "/" || rawFrom.startsWith("/login")
+      ? "/dashboard"
+      : rawFrom;
 
   const [dni, setDni] = React.useState("");
   const [pass, setPass] = React.useState("");
@@ -28,7 +40,6 @@ export default function Login() {
     setError(null);
 
     try {
-      // Importante: login resuelve rápido; no bloqueamos por perfil
       await login(dni.trim(), pass);
       navigate(redirectTo, { replace: true });
     } catch (err: any) {
@@ -81,7 +92,9 @@ export default function Login() {
             <h1 className="text-5xl font-normal leading-tight tracking-tight md:text-7xl">
               Bienvenido
             </h1>
-            <p className="mt-3 text-lg font-normal opacity-95">Portal de Administración</p>
+            <p className="mt-3 text-lg font-normal opacity-95">
+              Portal de Administración
+            </p>
           </div>
         </section>
 
@@ -89,7 +102,9 @@ export default function Login() {
         <section className="flex items-center justify-center px-6 py-12">
           <div className="w-full max-w-md lg:-translate-x-20">
             <div className="mb-8 text-center">
-              <h2 className="text-2xl font-medium tracking-tight text-gray-500">Iniciar sesión</h2>
+              <h2 className="text-2xl font-medium tracking-tight text-gray-500">
+                Iniciar sesión
+              </h2>
             </div>
 
             {error && (
@@ -98,16 +113,25 @@ export default function Login() {
               </div>
             )}
 
-            <form onSubmit={onSubmit} className="grid gap-4" autoComplete="off" spellCheck={false}>
+            <form
+              onSubmit={onSubmit}
+              className="grid gap-4"
+              autoComplete="off"
+              spellCheck={false}
+            >
               {/* DNI */}
               <div>
-                <label className="text-sm font-medium text-gray-700">DNI</label>
+                <label className="text-sm font-medium text-gray-700">
+                  DNI
+                </label>
                 <input
                   inputMode="numeric"
                   pattern="\d*"
                   maxLength={8}
                   value={dni}
-                  onChange={(e) => setDni(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                  onChange={(e) =>
+                    setDni(e.target.value.replace(/\D/g, "").slice(0, 8))
+                  }
                   placeholder="Ingresa tu DNI (8 dígitos)"
                   className="mt-1 w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent placeholder:text-gray-400 focus:ring-gray-300"
                 />
@@ -115,7 +139,9 @@ export default function Login() {
 
               {/* Contraseña */}
               <div>
-                <label className="text-sm font-medium text-gray-700">Contraseña</label>
+                <label className="text-sm font-medium text-gray-700">
+                  Contraseña
+                </label>
                 <div className="relative mt-1">
                   <input
                     type={show ? "text" : "password"}
