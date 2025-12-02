@@ -92,17 +92,14 @@ export default function App() {
       {/* 1) Ruta pública: Login */}
       <Route path="/login" element={<Login />} />
 
-      {/* 2) "/" redirige siempre a /login */}
-      <Route path="/" element={<Navigate to="/login" replace />} />
-
-      {/* 3) Rutas protegidas */}
+      {/* 2) Todo lo demás pasa por RequireAuth */}
       <Route element={<RequireAuth />}>
         <Route element={<ProtectedLayout />}>
-          {/* Dashboard en /dashboard */}
+          {/* 2.1 Index ("/") = Dashboard protegido */}
           <Route
-            path="/dashboard"
+            index
             element={
-              <ProtectedRoute path="/dashboard">
+              <ProtectedRoute path="/">
                 <Dashboard />
               </ProtectedRoute>
             }
@@ -306,7 +303,7 @@ export default function App() {
             }
           />
 
-          {/* 403 (ya logueado pero sin permiso) */}
+          {/* 403 dentro de sesión */}
           <Route
             path="/403"
             element={
@@ -331,8 +328,8 @@ export default function App() {
         </Route>
       </Route>
 
-      {/* Si quisieras que cualquier otra ruta pública fuera a /login, podrías descomentar: */}
-      {/* <Route path="*" element={<Navigate to="/login" replace />} /> */}
+      {/* 4) Cualquier ruta rara pública → /login */}
+      <Route path="*" element={<Navigate to="/login" replace />} />
     </Routes>
   );
 }
