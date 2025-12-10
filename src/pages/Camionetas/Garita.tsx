@@ -11,7 +11,7 @@ import { Modal } from "../../components/ui/Modal";
 type TicketRow = any; // luego puedes tiparlo con tu interfaz real
 
 export default function Garita() {
-  const [scanActive, setScanActive] = React.useState(false);
+  const [scanActive, setScanActive] = React.useState(true);
   const [ticketId, setTicketId] = React.useState<string | null>(null);
   const [ticket, setTicket] = React.useState<TicketRow | null>(null);
   const [loadingTicket, setLoadingTicket] = React.useState(false);
@@ -141,15 +141,15 @@ export default function Garita() {
   const siguienteEstado = puedePasarAEnUso
     ? "En uso"
     : puedePasarACerrada
-      ? "Cerrada"
-      : null;
+    ? "Cerrada"
+    : null;
 
   // Etiqueta del botón para el guardia
   const etiquetaAccion = puedePasarAEnUso
     ? "Entregar camioneta"
     : puedePasarACerrada
-      ? "Terminar uso"
-      : "";
+    ? "Terminar uso"
+    : "";
 
   // Aplica el cambio de estado (se llama al confirmar en el Modal)
   const aplicarCambioEstado = async () => {
@@ -242,67 +242,71 @@ export default function Garita() {
         </header>
 
         {/* Bloque escáner */}
-        {!scanActive && !ticket && !loadingTicket && (
-          <section className="mb-4 flex min-h-[350px] items-center justify-center rounded-2xl bg-white p-8 shadow-sm">
-            <button
-              type="button"
-              onClick={() => {
-                setScanActive(true);
-                setTicket(null);
-                setTicketId(null);
-              }}
-              className="flex w-full max-w-xs flex-col items-center justify-center gap-3 rounded-xl bg-emerald-600 px-10 py-8 shadow-lg transition-all hover:bg-emerald-700 hover:shadow-xl active:scale-95"
-            >
-              <Calendar className="h-16 w-16 text-white" />
-              <span className="text-2xl font-bold text-white">Escanear QR</span>
-              <span className="text-sm text-emerald-50">Toca para activar la cámara</span>
-            </button>
-          </section>
-        )}
-
-        {scanActive && (
-          <section className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
-            <div className="mb-3 flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <div className="grid h-9 w-9 place-items-center rounded-lg bg-gray-900 text-white">
-                  <Calendar className="h-4 w-4" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-gray-900">
-                    Escáner de tickets
-                  </p>
-                  <p className="text-xs text-gray-500">
-                    Apunta la cámara al código QR.
-                  </p>
-                </div>
+        <section className="mb-4 rounded-2xl bg-white p-4 shadow-sm">
+          <div className="mb-3 flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="grid h-9 w-9 place-items-center rounded-lg bg-gray-900 text-white">
+                <Calendar className="h-4 w-4" />
               </div>
+              <div>
+                <p className="text-sm font-medium text-gray-900">
+                  Escáner de tickets
+                </p>
+                <p className="text-xs text-gray-500">
+                  Apunta la cámara al código QR.
+                </p>
+              </div>
+            </div>
 
+            <div className="flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => {
-                  setScanActive(false);
+                  setScanActive((prev) => !prev);
+                  if (!scanActive) {
+                    // al reactivar, permito escanear otro
+                    setTicket(null);
+                    setTicketId(null);
+                  }
                 }}
                 className="rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-100"
               >
-                Cancelar
+                {scanActive ? "Pausar" : "Escanear"}
+              </button>
+
+              {/* Botón de prueba (puedes quitarlo en producción) */}
+              <button
+                type="button"
+                onClick={() =>
+                  handleScanId("fc2e3608-2480-4f73-ae42-33acd4c26da0")
+                }
+                className="rounded-full border border-gray-200 bg-white px-3 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Probar ticket demo
               </button>
             </div>
+          </div>
 
+          {scanActive && (
             <div className="overflow-hidden rounded-2xl bg-black/80">
               {/* html5-qrcode monta aquí el video */}
-              <div id="qr-reader" className="min-h-[450px] w-full" />
+              <div id="qr-reader" className="aspect-square w-full" />
             </div>
-          </section>
-        )}
+          )}
 
-        {loadingTicket && (
-          <section className="mb-4 rounded-2xl bg-white p-6 shadow-sm">
-            <div className="flex flex-col items-center gap-3 text-gray-600">
-              <Loader2 className="h-8 w-8 animate-spin" />
-              <p className="text-sm">Cargando información del ticket…</p>
+          {!scanActive && !ticket && !loadingTicket && (
+            <p className="mt-3 text-xs text-gray-500">
+              Escaneo pausado. Pulsa <strong>Escanear</strong> para leer un QR.
+            </p>
+          )}
+
+          {loadingTicket && (
+            <div className="mt-3 flex items-center gap-2 text-xs text-gray-600">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Cargando información del ticket…
             </div>
-          </section>
-        )}
+          )}
+        </section>
 
         {/* Datos del ticket */}
         {ticket && (
@@ -398,10 +402,11 @@ export default function Garita() {
                   type="button"
                   onClick={() => setConfirmOpen(true)}
                   disabled={updating}
-                  className={`inline-flex w-full items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-sm ${puedePasarAEnUso
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "bg-sky-600 hover:bg-sky-700"
-                    } disabled:opacity-60`}
+                  className={`inline-flex w-full items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-sm ${
+                    puedePasarAEnUso
+                      ? "bg-emerald-600 hover:bg-emerald-700"
+                      : "bg-sky-600 hover:bg-sky-700"
+                  } disabled:opacity-60`}
                 >
                   {updating ? (
                     <>

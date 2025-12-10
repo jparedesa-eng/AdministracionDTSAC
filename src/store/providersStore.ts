@@ -15,7 +15,6 @@ export type Provider = {
   ruc: string;
   nombre: string;
   kind: "Pasaje" | "Hospedaje";
-  subtipo?: "Aéreo" | "Terrestre" | null; // Nuevo campo
   traslado: boolean;
   alimentacion: boolean;
   contacto?: string | null;
@@ -29,7 +28,6 @@ type ProviderRow = {
   ruc: string;
   nombre: string;
   tipo: "Pasaje" | "Hospedaje";
-  subtipo: "Aéreo" | "Terrestre" | null;
   traslado: boolean;
   alimentacion: boolean;
   contacto: string | null;
@@ -73,7 +71,6 @@ function rowToProvider(row: ProviderRow): Provider {
     ruc: row.ruc,
     nombre: row.nombre,
     kind: row.tipo,
-    subtipo: row.subtipo,
     traslado: !!row.traslado,
     alimentacion: !!row.alimentacion,
     contacto: row.contacto,
@@ -88,7 +85,6 @@ function providerToRowInput(p: {
   ruc: string;
   nombre: string;
   kind: "Pasaje" | "Hospedaje";
-  subtipo?: "Aéreo" | "Terrestre" | null;
   traslado: boolean;
   alimentacion: boolean;
   contacto?: string | null;
@@ -100,7 +96,6 @@ function providerToRowInput(p: {
     ruc: p.ruc,
     nombre: p.nombre,
     tipo: p.kind,
-    subtipo: p.subtipo ?? null,
     traslado: !!p.traslado,
     alimentacion: !!p.alimentacion,
     contacto: p.contacto ?? null,
@@ -146,7 +141,6 @@ export async function seedIfEmpty() {
 export async function upsertProvider(p: {
   id?: string;
   kind: "Pasaje" | "Hospedaje";
-  subtipo?: "Aéreo" | "Terrestre" | null;
   nombre: string;
   ruc: string;
   traslado: boolean;

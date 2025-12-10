@@ -106,57 +106,31 @@ function ProviderDialog({
             />
           </div>
 
-          {/* Tipo / Subtipo / Estado */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-sm font-medium text-gray-700">Tipo</label>
-              <select
-                value={(draft.kind as "Pasaje" | "Hospedaje") || "Pasaje"}
-                onChange={(e) =>
-                  change("kind", e.target.value as "Pasaje" | "Hospedaje")
-                }
-                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-              >
-                <option>Pasaje</option>
-                <option>Hospedaje</option>
-              </select>
-            </div>
+          {/* Tipo / Estado */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">Tipo</label>
+            <select
+              value={(draft.kind as "Pasaje" | "Hospedaje") || "Pasaje"}
+              onChange={(e) =>
+                change("kind", e.target.value as "Pasaje" | "Hospedaje")
+              }
+              className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+            >
+              <option>Pasaje</option>
+              <option>Hospedaje</option>
+            </select>
+          </div>
 
-            {draft.kind === "Pasaje" && (
-              <div>
-                <label className="text-sm font-medium text-gray-700">
-                  Subtipo
-                </label>
-                <select
-                  value={draft.subtipo || ""}
-                  onChange={(e) =>
-                    change(
-                      "subtipo",
-                      e.target.value ? (e.target.value as any) : null
-                    )
-                  }
-                  className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                >
-                  <option value="">(Cualquiera)</option>
-                  <option value="Aéreo">Aéreo</option>
-                  <option value="Terrestre">Terrestre</option>
-                </select>
-              </div>
-            )}
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Estado
-              </label>
-              <select
-                value={(draft.activo ?? true) ? "Activo" : "Desactivado"}
-                onChange={(e) => change("activo", e.target.value === "Activo")}
-                className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-              >
-                <option>Activo</option>
-                <option>Desactivado</option>
-              </select>
-            </div>
+          <div>
+            <label className="text-sm font-medium text-gray-700">Estado</label>
+            <select
+              value={(draft.activo ?? true) ? "Activo" : "Desactivado"}
+              onChange={(e) => change("activo", e.target.value === "Activo")}
+              className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+            >
+              <option>Activo</option>
+              <option>Desactivado</option>
+            </select>
           </div>
 
           {/* Traslado / Alimentación SOLO para hospedaje */}
@@ -429,7 +403,6 @@ export default function ProvidersPage() {
       await upsertProvider({
         id: prov.id || undefined,
         kind: prov.kind,
-        subtipo: prov.subtipo,
         nombre: prov.nombre,
         ruc: (prov as any).ruc,
         traslado: (prov as any).traslado,
@@ -513,7 +486,6 @@ export default function ProvidersPage() {
                   <th className="px-4 py-3">RUC</th>
                   <th className="px-4 py-3">Nombre</th>
                   <th className="px-4 py-3">Tipo</th>
-                  <th className="px-4 py-3">Subtipo</th>
                   <th className="px-4 py-3">Traslado</th>
                   <th className="px-4 py-3">Alimentación</th>
                   <th className="px-4 py-3">Contacto</th>
@@ -527,7 +499,7 @@ export default function ProvidersPage() {
                 {currentRows.length === 0 && (
                   <tr>
                     <td
-                      colSpan={11}
+                      colSpan={10}
                       className="px-4 py-10 text-center text-sm text-gray-500"
                     >
                       No hay proveedores registrados.
@@ -550,13 +522,6 @@ export default function ProvidersPage() {
                       </td>
                       <td className="px-4 py-3 font-medium">{p.nombre}</td>
                       <td className="px-4 py-3">{p.kind}</td>
-                      <td className="px-4 py-3">
-                        {p.kind === "Pasaje" && p.subtipo ? (
-                          p.subtipo
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
-                      </td>
                       <td className="px-4 py-3">
                         {isHospedaje ? (
                           traslado ? (

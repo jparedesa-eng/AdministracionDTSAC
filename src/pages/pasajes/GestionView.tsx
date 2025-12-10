@@ -1,18 +1,7 @@
 // src/pages/pasajes/GestionView.tsx
 import { useEffect, useMemo, useState } from "react";
-import {
-  cerrar,
-  getState,
-  setProveedor,
-  subscribe,
-  seleccionarPropuestasAdmin,
-  getPropuestaSeleccion,
-  loadSolicitudes,
-} from "../../store/pasajeStore";
-import { getProvidersState, loadProviders, subscribeProviders } from "../../store/providersStore";
-import {
-  getPropuestasBySolicitud,
-} from "../../store/propuestasStore";
+import { cerrar, getState, setProveedor, subscribe } from "../../store/pasajeStore";
+import { getProvidersState } from "../../store/providersStore";
 import {
   CalendarDays,
   User2,
@@ -26,11 +15,9 @@ import {
   Clock3,
   Loader2,
   FileText,
-  Files,
-  Bus,
+  XCircle,
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
-import { PropuestasModal } from "../../components/propuestas/PropuestasModal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastType } from "../../components/ui/Toast";
 
@@ -102,11 +89,9 @@ function parseInputDate(s: string): Date | null {
 
 const STAGES = [
   "Pendiente",
-  "Pendiente propuesta",
-  "Propuesta realizada",
-  "Gerencia aprobado",
-  "Pendiente de compra",
-  "Compra realizada",
+  "En proceso",
+  "Costo aprobado",
+  "Con pase",
   "Facturado",
   "Cerrado",
 ] as const;
@@ -121,16 +106,6 @@ function getStatusLabel(estado: string): string {
   switch (estado) {
     case "Pendiente":
       return "Pendiente de asignación";
-    case "Pendiente propuesta":
-      return "Pendiente propuesta";
-    case "Propuesta realizada":
-      return "Propuesta realizada";
-    case "Gerencia aprobado":
-      return "Gerencia aprobado";
-    case "Pendiente de compra":
-      return "Pendiente de compra";
-    case "Compra realizada":
-      return "Compra realizada";
     default:
       return estado;
   }
@@ -146,46 +121,6 @@ function getStatusMeta(estado: string) {
         bar: "bg-rose-500",
         softBg: "bg-rose-50",
       };
-    case "Pendiente propuesta":
-      return {
-        accent: "bg-amber-500",
-        text: "text-amber-600",
-        pill: "bg-amber-50 text-amber-700 border-amber-200",
-        bar: "bg-amber-500",
-        softBg: "bg-amber-50",
-      };
-    case "Propuesta realizada":
-      return {
-        accent: "bg-blue-500",
-        text: "text-blue-600",
-        pill: "bg-blue-50 text-blue-700 border-blue-200",
-        bar: "bg-blue-500",
-        softBg: "bg-blue-50",
-      };
-    case "Gerencia aprobado":
-      return {
-        accent: "bg-emerald-500",
-        text: "text-emerald-600",
-        pill: "bg-emerald-50 text-emerald-700 border-emerald-200",
-        bar: "bg-emerald-500",
-        softBg: "bg-emerald-50",
-      };
-    case "Pendiente de compra":
-      return {
-        accent: "bg-indigo-500",
-        text: "text-indigo-600",
-        pill: "bg-indigo-50 text-indigo-700 border-indigo-200",
-        bar: "bg-indigo-500",
-        softBg: "bg-indigo-50",
-      };
-    case "Compra realizada":
-      return {
-        accent: "bg-purple-500",
-        text: "text-purple-600",
-        pill: "bg-purple-50 text-purple-700 border-purple-200",
-        bar: "bg-purple-500",
-        softBg: "bg-purple-50",
-      };
     case "En proceso":
       return {
         accent: "bg-sky-500",
@@ -196,19 +131,19 @@ function getStatusMeta(estado: string) {
       };
     case "Costo aprobado":
       return {
-        accent: "bg-teal-500",
-        text: "text-teal-600",
-        pill: "bg-teal-50 text-teal-700 border-teal-200",
-        bar: "bg-teal-500",
-        softBg: "bg-teal-50",
+        accent: "bg-emerald-500",
+        text: "text-emerald-600",
+        pill: "bg-emerald-50 text-emerald-700 border-emerald-200",
+        bar: "bg-emerald-500",
+        softBg: "bg-emerald-50",
       };
     case "Con pase":
       return {
-        accent: "bg-cyan-500",
-        text: "text-cyan-600",
-        pill: "bg-cyan-50 text-cyan-700 border-cyan-200",
-        bar: "bg-cyan-500",
-        softBg: "bg-cyan-50",
+        accent: "bg-indigo-500",
+        text: "text-indigo-600",
+        pill: "bg-indigo-50 text-indigo-700 border-indigo-200",
+        bar: "bg-indigo-500",
+        softBg: "bg-indigo-50",
       };
     case "Facturado":
       return {
@@ -299,13 +234,7 @@ function TicketRow({
 }) {
   const [open, setOpen] = useState(false);
   const isPasaje = s.tipo === "Pasaje";
-  const isAereo = isPasaje && s.subtipo === "Aéreo";
-
-  let icon = <Hotel className="h-4 w-4" />;
-  if (isPasaje) {
-    if (isAereo) icon = <Plane className="h-4 w-4" />;
-    else icon = <Bus className="h-4 w-4" />;
-  }
+  const icon = isPasaje ? <Plane className="h-4 w-4" /> : <Hotel className="h-4 w-4" />;
   const meta = getStatusMeta(s.estado);
   const gerenciaLabel = s.gerencia || "Sin gerencia";
 
@@ -397,59 +326,15 @@ function TicketRow({
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {/* Botón para ver propuestas (Aéreos) */}
-            {isPasaje && s.subtipo === "Aéreo" && (
+            {canAssign && (
               <button
                 type="button"
-                onClick={() => onAssign()} // Reutilizamos onAssign para abrir el modal de propuestas si es aéreo? Mejor pasar prop distinta
-                className="hidden" // Lo manejaremos con prop dedicada
-              />
+                onClick={onAssign}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+              >
+                Asignar proveedor →
+              </button>
             )}
-
-            {/* Lógica de botones */}
-            {isPasaje && s.subtipo === "Aéreo" ? (
-              // Lógica Aéreo
-              <>
-                {/* Si ya tiene proveedor, mostrar botón ver propuestas */}
-                {s.proveedor && (
-                  <button
-                    type="button"
-                    onClick={onAssign} // Usamos onAssign como "Acción principal"
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-50"
-                  >
-                    <Files className="h-4 w-4" />
-                    {(() => {
-                      const seleccion = getPropuestaSeleccion(s.id);
-                      return (seleccion?.propuestaIdaAdmin || seleccion?.propuestaVueltaAdmin)
-                        ? "Ver compra"
-                        : "Ver propuestas";
-                    })()}
-                  </button>
-                )}
-                {/* Si no tiene proveedor, botón asignar */}
-                {!s.proveedor && canAssign && (
-                  <button
-                    type="button"
-                    onClick={onAssign}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                  >
-                    Asignar proveedor →
-                  </button>
-                )}
-              </>
-            ) : (
-              // Lógica No Aéreo (Terrestre / Hospedaje)
-              canAssign && (
-                <button
-                  type="button"
-                  onClick={onAssign}
-                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-                >
-                  Asignar proveedor →
-                </button>
-              )
-            )}
-
             {canClose && (
               <button
                 type="button"
@@ -484,8 +369,8 @@ function TicketRow({
               {s.costoAprobado == null
                 ? "—"
                 : s.costoAprobado
-                  ? "Aprobado"
-                  : "Rechazado"}
+                ? "Aprobado"
+                : "Rechazado"}
             </div>
             <div>
               <span className="font-medium">Pase compra:</span>{" "}
@@ -512,19 +397,7 @@ function TicketRow({
 
 export default function GestionView() {
   const [, force] = useState(0);
-
-  useEffect(() => {
-    // Load solicitudes on mount
-    loadSolicitudes().catch((err) => {
-      console.error("Error loading solicitudes", err);
-    });
-
-    // Subscribe to changes
-    const unsubscribe = subscribe(() => force((x) => x + 1));
-    return () => {
-      unsubscribe();
-    };
-  }, []);
+  useEffect(() => subscribe(() => force((x) => x + 1)), []);
 
   const [toast, setToast] = useState<ToastState>(null);
   const showToast = (type: ToastType, message: string) => {
@@ -553,36 +426,28 @@ export default function GestionView() {
     setRangeTo(to);
   };
 
-  // Cargar proveedores al montar el componente
-  const [, forceProviders] = useState(0);
-  useEffect(() => {
-    loadProviders().catch((err) => console.error("Error cargando proveedores", err));
-    const unsub = subscribeProviders(() => forceProviders((v) => v + 1));
-    return unsub;
-  }, []);
-
   const base = useMemo(() => {
     const from = rangeFrom
       ? new Date(
-        rangeFrom.getFullYear(),
-        rangeFrom.getMonth(),
-        rangeFrom.getDate(),
-        0,
-        0,
-        0,
-        0
-      )
+          rangeFrom.getFullYear(),
+          rangeFrom.getMonth(),
+          rangeFrom.getDate(),
+          0,
+          0,
+          0,
+          0
+        )
       : null;
     const to = rangeTo
       ? new Date(
-        rangeTo.getFullYear(),
-        rangeTo.getMonth(),
-        rangeTo.getDate(),
-        23,
-        59,
-        59,
-        999
-      )
+          rangeTo.getFullYear(),
+          rangeTo.getMonth(),
+          rangeTo.getDate(),
+          23,
+          59,
+          59,
+          999
+        )
       : null;
 
     return [...getState().solicitudes]
@@ -610,21 +475,17 @@ export default function GestionView() {
   const counters = useMemo(() => {
     const map = {
       Pendiente: 0,
-      "Pendiente propuesta": 0,
-      "Propuesta realizada": 0,
-      "Gerencia aprobado": 0,
-      "Pendiente de compra": 0,
-      "Compra realizada": 0,
-    } as Record<string, number>;
-
+      "En proceso": 0,
+      "Costo aprobado": 0,
+      "Con pase": 0,
+      Facturado: 0,
+      Cerrado: 0,
+      Rechazado: 0,
+    } as Record<Stage | "Rechazado", number>;
     base.forEach((s) => {
-      const estado = s.estado || "Pendiente";
-      if (estado in map) {
-        map[estado] += 1;
-      } else {
-        // Si hay un estado nuevo no contemplado, agregarlo
-        map[estado] = (map[estado] || 0) + 1;
-      }
+      const st = (s.estado as Stage) || "Pendiente";
+      if (st in map) map[st] += 1;
+      if (s.estado === "Rechazado") map["Rechazado"] += 1;
     });
     return map;
   }, [base]);
@@ -662,96 +523,15 @@ export default function GestionView() {
 
   const [assignDlg, setAssignDlg] = useState<{
     open: boolean;
-    ticketId: string | null;
+    idx: number | null;
     tipo: "Pasaje" | "Hospedaje";
     nombre: string;
   }>({
     open: false,
-    ticketId: null,
+    idx: null,
     tipo: "Pasaje",
     nombre: "",
   });
-
-  /* Modal Selección Admin (Aéreo) */
-  const [selPropAdminId, setSelPropAdminId] = useState<string | null>(null);
-
-  // Nuevo estado para confirmación Admin
-  const [selPropAdminConfirm, setSelPropAdminConfirm] = useState<{
-    open: boolean;
-    solicitudId: string | null;
-    idaId: number | null;
-    vueltaId: number | null;
-  }>({ open: false, solicitudId: null, idaId: null, vueltaId: null });
-
-  // 1. Trigger desde el modal
-  const handleSelectPropuestaAdminRequest = (idaId: number | null, vueltaId: number | null) => {
-    setSelPropAdminConfirm({ open: true, solicitudId: selPropAdminId, idaId, vueltaId });
-  };
-
-  // 2. Ejecutar tras confirmar
-  const confirmSelectPropuestaAdmin = async () => {
-    const { solicitudId, idaId, vueltaId } = selPropAdminConfirm;
-    if (!solicitudId) return;
-
-    // Buscar las propuestas para obtener los datos
-    const propuestas = getPropuestasBySolicitud(solicitudId);
-
-    // Calcular costo total y obtener datos de vuelo
-    let costoTotal = 0;
-    let aerolinea = "";
-    let vuelo = "";
-    let salida = new Date();
-    let retorno = new Date();
-    let tarifa = "";
-
-    if (idaId) {
-      const pIda = propuestas.find(x => x.nroPropuesta === idaId);
-      if (pIda) {
-        costoTotal += pIda.costoTotal ?? 0;
-        const t0 = pIda.tramos[0];
-        if (t0) {
-          aerolinea = t0.aerolinea ?? "";
-          vuelo = t0.vuelo ?? "";
-          salida = t0.salida ? new Date(t0.salida) : new Date();
-          tarifa = t0.tarifa ?? "";
-        }
-      }
-    }
-
-    if (vueltaId) {
-      const pVuelta = propuestas.find(x => x.nroPropuesta === vueltaId);
-      if (pVuelta) {
-        costoTotal += pVuelta.costoTotal ?? 0;
-        const t0 = pVuelta.tramos[0];
-        if (t0 && t0.llegada) {
-          retorno = new Date(t0.llegada);
-        }
-      }
-    }
-
-    const datos = {
-      costo: costoTotal,
-      aerolinea,
-      vuelo,
-      salida,
-      retorno,
-      tarifa,
-    };
-
-    const ok = await seleccionarPropuestasAdmin(solicitudId, idaId, vueltaId, datos);
-    if (ok) {
-      showToast("success", "Propuesta aprobada y pase de compra generado.");
-      setSelPropAdminConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null });
-    } else {
-      showToast("error", "Error al aprobar propuesta.");
-    }
-  };
-
-  const currentSolicitudForModal = useMemo(
-    () => filtered.find((s) => s.id === selPropAdminId),
-    [filtered, selPropAdminId]
-  );
-
 
   const allProviders = getProvidersState().providers;
 
@@ -766,13 +546,13 @@ export default function GestionView() {
   };
 
   const openAssign = (
-    ticketId: string,
+    idx: number,
     tipo: "Pasaje" | "Hospedaje",
     currentName?: string | null
   ) =>
     setAssignDlg({
       open: true,
-      ticketId,
+      idx,
       tipo,
       nombre: currentName ?? "",
     });
@@ -862,11 +642,12 @@ export default function GestionView() {
   /* Config de tarjetas de conteo */
   const counterConfig = [
     { key: "Pendiente", label: "Pendiente", icon: Clock3 },
-    { key: "Pendiente propuesta", label: "Pendiente propuesta", icon: Loader2 },
-    { key: "Propuesta realizada", label: "Propuesta realizada", icon: FileText },
-    { key: "Gerencia aprobado", label: "Gerencia aprobado", icon: BadgeCheck },
-    { key: "Pendiente de compra", label: "Pendiente de compra", icon: Clock3 },
-    { key: "Compra realizada", label: "Compra realizada", icon: CheckCircle2 },
+    { key: "En proceso", label: "En proceso", icon: Loader2 },
+    { key: "Costo aprobado", label: "Costo aprobado", icon: BadgeCheck },
+    { key: "Con pase", label: "Con pase", icon: Ticket },
+    { key: "Facturado", label: "Facturado", icon: FileText },
+    { key: "Cerrado", label: "Cerrado", icon: CheckCircle2 },
+    { key: "Rechazado", label: "Rechazado", icon: XCircle },
   ] as const;
 
   return (
@@ -884,7 +665,7 @@ export default function GestionView() {
         </div>
 
         {/* Contadores por estado con color e icono */}
-        <section className="grid gap-3 grid-cols-2 md:grid-cols-3 lg:grid-cols-6">
+        <section className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-7">
           {counterConfig.map(({ key, label, icon: Icon }) => {
             const meta = getStatusMeta(key);
             const count = (counters as any)[key] ?? 0;
@@ -1005,11 +786,12 @@ export default function GestionView() {
                     {[
                       "Todos",
                       "Pendiente",
-                      "Pendiente propuesta",
-                      "Propuesta realizada",
-                      "Gerencia aprobado",
-                      "Pendiente de compra",
-                      "Compra realizada",
+                      "En proceso",
+                      "Costo aprobado",
+                      "Con pase",
+                      "Facturado",
+                      "Cerrado",
+                      "Rechazado",
                     ].map((e) => (
                       <option key={e}>{e}</option>
                     ))}
@@ -1085,16 +867,11 @@ export default function GestionView() {
             current.map((s) => {
               const idx = getState().solicitudes.indexOf(s);
 
-              // Reglas para mostrar botón "Asignar proveedor":
-              // - Pasajes Aéreos: Mostrar si estado es "Pendiente" (sin proveedor aún)
-              // - Terrestre/Hospedaje: Mostrar si estado es "Gerencia aprobado"
-              // - No mostrar si ya está cerrado
+              // Reglas:
+              // - Asignar proveedor se oculta cuando el costo está aprobado
+              // - Cerrar ticket solo cuando está facturado y no está ya cerrado
               const canAssign =
-                s.estado !== "Cerrado" &&
-                (s.estado === "Pendiente" ||
-                  s.estado === "Gerencia aprobado" ||
-                  s.estado === "Pendiente propuesta" ||
-                  s.estado === "Propuesta realizada");
+                s.costoAprobado !== true && s.estado !== "Cerrado";
               const canClose = !!s.factura && s.estado !== "Cerrado";
 
               return (
@@ -1103,23 +880,13 @@ export default function GestionView() {
                   s={s}
                   canAssign={canAssign}
                   canClose={canClose}
-                  onAssign={() => {
-                    // Si es aéreo y tiene proveedor, abrimos modal de propuestas
-                    if (
-                      s.tipo === "Pasaje" &&
-                      s.subtipo === "Aéreo" &&
-                      s.proveedor
-                    ) {
-                      setSelPropAdminId(s.id);
-                    } else {
-                      // Flujo normal de asignar proveedor
-                      openAssign(
-                        s.id,
-                        s.tipo as "Pasaje" | "Hospedaje",
-                        s.proveedor ?? ""
-                      );
-                    }
-                  }}
+                  onAssign={() =>
+                    openAssign(
+                      idx,
+                      s.tipo as "Pasaje" | "Hospedaje",
+                      s.proveedor ?? ""
+                    )
+                  }
                   onClose={() => askClose(idx, `${s.nombre} (${s.dni})`)}
                 />
               );
@@ -1188,42 +955,13 @@ export default function GestionView() {
               className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
             >
               <option value="">Selecciona un proveedor</option>
-              {(() => {
-                const allSolicitudes = getState().solicitudes;
-                const target = assignDlg.ticketId
-                  ? allSolicitudes.find((s) => s.id === assignDlg.ticketId)
-                  : null;
-
-                return allProviders
-                  .filter((p: any) => {
-                    // Solo proveedores activos
-                    if (!p.activo) return false;
-                    // Mismo tipo (Pasaje/Hospedaje)
-                    if (p.kind !== assignDlg.tipo) return false;
-                    // Si el ticket tiene subtipo (ej. Aéreo), el proveedor también debe coincidir
-                    if (
-                      target?.subtipo &&
-                      p.subtipo &&
-                      p.subtipo !== target.subtipo
-                    ) {
-                      return false;
-                    }
-                    // Si el ticket tiene subtipo pero el proveedor no tiene (null), ¿lo mostramos?
-                    // El usuario pidió "filtrar segun el tipo y subtipo", asumimos estricto si ambos tienen valor, 
-                    // o si el ticket pide Aéreo, solo Aéreos.
-                    if (target?.subtipo && !p.subtipo) {
-                      // Si el proveedor no tiene subtipo definido, lo excluimos si buscamos algo específico
-                      return false;
-                    }
-
-                    return true;
-                  })
-                  .map((p: any) => (
-                    <option key={p.id} value={p.nombre}>
-                      {p.nombre}
-                    </option>
-                  ));
-              })()}
+              {allProviders
+                .filter((p: any) => p.kind === assignDlg.tipo)
+                .map((p: any) => (
+                  <option key={p.id} value={p.nombre}>
+                    {p.nombre}
+                  </option>
+                ))}
             </select>
           </div>
           <div className="flex justify-end gap-2">
@@ -1238,112 +976,20 @@ export default function GestionView() {
             </button>
             <button
               type="button"
-              disabled={!assignDlg.nombre || !assignDlg.ticketId}
-              onClick={async () => {
-                if (assignDlg.ticketId && assignDlg.nombre) {
-                  // Buscar el ticket por ID en el estado global
-                  const allSolicitudes = getState().solicitudes;
-                  const ticketIndex = allSolicitudes.findIndex((s) => s.id === assignDlg.ticketId);
-                  const ticket = allSolicitudes[ticketIndex];
-
-                  if (!ticket || ticketIndex === -1) {
-                    showToast("error", "No se encontró el ticket.");
-                    setAssignDlg((prev) => ({ ...prev, open: false }));
-                    return;
-                  }
-
-                  console.log("Asignando proveedor a ticket:", {
-                    id: ticket.id,
-                    tipo: ticket.tipo,
-                    subtipo: ticket.subtipo,
-                    estado: ticket.estado,
-                    proveedor: assignDlg.nombre,
-                    index: ticketIndex
-                  });
-
-                  const ok = await setProveedor(ticketIndex, assignDlg.nombre);
-                  if (ok) {
-                    showToast(
-                      "success",
-                      `Proveedor asignado correctamente (${assignDlg.nombre}).`
-                    );
-                    setAssignDlg((prev) => ({ ...prev, open: false }));
-                  } else {
-                    const isAereo = ticket.tipo === "Pasaje" && ticket.subtipo === "Aéreo";
-                    const errorMsg = isAereo
-                      ? "No se pudo asignar el proveedor. Verifica que el ticket no esté cerrado o facturado."
-                      : "No se pudo asignar el proveedor. Para Terrestre/Hospedaje, Gerencia debe aprobar primero.";
-                    showToast("error", errorMsg);
-                  }
-                } else {
-                  setAssignDlg((prev) => ({ ...prev, open: false }));
+              disabled={!assignDlg.nombre || assignDlg.idx == null}
+              onClick={() => {
+                if (assignDlg.idx != null && assignDlg.nombre) {
+                  setProveedor(assignDlg.idx, assignDlg.nombre);
+                  showToast(
+                    "success",
+                    `Proveedor asignado correctamente (${assignDlg.nombre}).`
+                  );
                 }
+                setAssignDlg((prev) => ({ ...prev, open: false }));
               }}
               className="inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700 disabled:opacity-50"
             >
               Asignar proveedor
-            </button>
-          </div>
-        </div>
-      </Modal>
-
-      {/* MODAL: Selección Admin Propuestas (Shared) */}
-      {selPropAdminId && (
-        <PropuestasModal
-          open={!!selPropAdminId}
-          onClose={() => setSelPropAdminId(null)}
-          solicitudId={selPropAdminId}
-          showGerenciaSelection={true}
-          showAdminSelection={true}
-          onSelect={
-            (() => {
-              if (!currentSolicitudForModal) return undefined;
-              const seleccion = getPropuestaSeleccion(currentSolicitudForModal.id);
-              return (seleccion?.propuestaIdaAdmin || seleccion?.propuestaVueltaAdmin)
-                ? undefined
-                : handleSelectPropuestaAdminRequest;
-            })()
-          }
-        />
-      )}
-
-      {/* MODAL CONFIRMACIÓN SELECCIÓN ADMIN */}
-      <Modal
-        open={selPropAdminConfirm.open}
-        onClose={() => setSelPropAdminConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null })}
-        title="Confirmar pase de compra"
-        size="sm"
-      >
-        <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            ¿Estás seguro de aprobar{" "}
-            {selPropAdminConfirm.idaId && selPropAdminConfirm.vueltaId ? (
-              <>
-                las propuestas <b>#{selPropAdminConfirm.idaId}</b> (IDA) y{" "}
-                <b>#{selPropAdminConfirm.vueltaId}</b> (VUELTA)
-              </>
-            ) : selPropAdminConfirm.idaId ? (
-              <>
-                la propuesta <b>#{selPropAdminConfirm.idaId}</b> (IDA)
-              </>
-            ) : (
-              <>
-                la propuesta <b>#{selPropAdminConfirm.vueltaId}</b> (VUELTA)
-              </>
-            )}? Se generará el pase de compra.
-          </p>
-          <div className="flex justify-end gap-2">
-            <button
-              onClick={() => setSelPropAdminConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null })}
-              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={confirmSelectPropuestaAdmin}
-              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-            >
-              Confirmar
             </button>
           </div>
         </div>
