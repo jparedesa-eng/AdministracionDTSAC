@@ -10,13 +10,6 @@ import {
 } from "../../store/pasajeStore";
 
 import {
-  getProvidersState,
-  subscribeProviders,
-  seedIfEmpty as seedProvidersIfEmpty,
-  type Provider,
-} from "../../store/providersStore";
-
-import {
   getPersonalState,
   subscribePersonal,
   reloadPersonal,
@@ -24,14 +17,20 @@ import {
 } from "../../store/personalStore";
 
 import { getGerenciasState } from "../../store/gerenciasStore";
+import {
+  loadPropuestasBySolicitud,
+  subscribe as subscribePropuestas,
+} from "../../store/propuestasStore";
+
 
 import { supabase } from "../../supabase/supabaseClient";
 
 import { Modal } from "../../components/ui/Modal";
+import { PropuestasModal } from "../../components/propuestas/PropuestasModal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastType, ToastState } from "../../components/ui/Toast";
 
-import { Plane, Hotel, Eye, EyeOff } from "lucide-react";
+import { Plane, Hotel, Eye, EyeOff, Bus } from "lucide-react";
 
 /* ---------------------------
    Utils
@@ -191,13 +190,6 @@ export default function SolicitarView({
     };
   }, []);
 
-  // store de proveedores
-  const [provVersion, setProvVersion] = useState(0);
-  useEffect(() => {
-    seedProvidersIfEmpty();
-    return subscribeProviders(() => setProvVersion((v) => v + 1));
-  }, []);
-
   // store de personal (para buscar por DNI)
   const [, forcePersonal] = useState(0);
   useEffect(() => {
@@ -246,19 +238,26 @@ export default function SolicitarView({
   const [gerencia, setGerencia] = useState("");
   const [personalFound, setPersonalFound] = useState<Personal | null>(null);
 
+  const [empresa, setEmpresa] = useState("");
+  const [ceco, setCeco] = useState("");
+
   const [tipo, setTipo] = useState<"Pasaje" | "Hospedaje">("Pasaje");
   const [subtipo, setSubtipo] = useState<"Aéreo" | "Terrestre">("Aéreo");
+
+  const [origen, setOrigen] = useState("");
+  const [destino, setDestino] = useState("");
 
   const [salida, setSalida] = useState<Date | null>(null);
   const [retorno, setRetorno] = useState<Date | null>(null);
 
-  const [proveedorPasaje, setProveedorPasaje] = useState("");
   const [lugar, setLugar] = useState("");
   const [inicio, setInicio] = useState<Date | null>(null);
   const [fin, setFin] = useState<Date | null>(null);
 
-  const [traslado, setTraslado] = useState(false);
-  const [alimentacion, setAlimentacion] = useState("");
+  const [fechaNacimiento, setFechaNacimiento] = useState<Date | null>(null);
+  const [telefono, setTelefono] = useState("");
+  const [correo, setCorreo] = useState("");
+
   const [motivo, setMotivo] = useState("");
 
   const [step, setStep] = useState<number>(1);
@@ -267,62 +266,76 @@ export default function SolicitarView({
   const solicitudesCount = getState().solicitudes.length;
 
   /* ---------------------------
+     Estado UI
+  --------------------------- */
+  const [showForm, setShowForm] = useState(false);
+
+  /* ---------------------------
+     Estado Propuestas
+  --------------------------- */
+  const [viewPropuestasId, setViewPropuestasId] = useState<string | null>(null);
+  const [, forcePropuestas] = useState(0);
+
+  useEffect(() => {
+    const unsub = subscribePropuestas(() => forcePropuestas((n) => n + 1));
+    return () => {
+      unsub();
+    };
+  }, []);
+
+  const handleOpenPropuestas = async (ticketId: string) => {
+    setViewPropuestasId(ticketId);
+    try {
+      await loadPropuestasBySolicitud(ticketId);
+    } catch (err) {
+      console.error("Error cargando propuestas", err);
+      showToast("error", "No se pudieron cargar las propuestas.");
+    }
+  };
+
+
+
+  /* ---------------------------
      Tus tickets
+  --------------------------- */
+  /* ---------------------------
+     Tus tickets (Filtrado por Area/Gerencia)
   --------------------------- */
   const tusSolicitudes = useMemo(() => {
     const all = [...getState().solicitudes];
 
-    const filtroDni = (currentUserDni ?? dni).trim();
-    const dniValido = /^\d{8}$/.test(filtroDni);
+    // 1. Identificar mi gerencia
+    let miGerenciaNombre = "";
+    if (currentUserDni && currentUserDni.length === 8) {
+      const { personal } = getPersonalState();
+      const me = personal.find((p) => p.dni === currentUserDni && p.estado === "ACTIVO");
+      if (me) {
+        const gId = (me as any).gerencia_id ?? (me as any).gerenciaId;
+        if (gId) {
+          const { gerencias } = getGerenciasState();
+          const g = gerencias.find((gg) => gg.id === gId);
+          if (g) miGerenciaNombre = g.nombre;
+        }
+      }
+    }
 
+    // 2. Filtrar
     return all
       .filter((e) => {
+        // Filtro base: creado por mí (fallback)
         const byUser = currentUser ? e.createdBy === currentUser.id : false;
-        const byDni = dniValido ? (e.dni ?? "") === filtroDni : false;
-        return byUser || byDni;
+
+        // Filtro principal: mi area (Gerencia)
+        // Si tengo gerencia identificada, veo tickets de esa gerencia.
+        // Si no, veo solo los míos.
+        const byArea = miGerenciaNombre
+          ? (e.gerencia === miGerenciaNombre)
+          : byUser;
+
+        return byArea;
       })
       .sort((a, b) => +b.creado - +a.creado);
-  }, [dni, currentUserDni, solicitudesCount, currentUser]);
-
-  /* ---------------------------
-     Proveedores activos
-  --------------------------- */
-  const allProviders = useMemo(
-    () => getProvidersState().providers,
-    [provVersion]
-  );
-
-  const proveedoresPasaje = useMemo(
-    () => allProviders.filter((p) => p.activo && p.kind === "Pasaje"),
-    [allProviders]
-  );
-
-  const proveedoresHospedaje = useMemo(
-    () => allProviders.filter((p) => p.activo && p.kind === "Hospedaje"),
-    [allProviders]
-  );
-
-  const selectedPasajeProvider: Provider | null = useMemo(
-    () =>
-      proveedoresPasaje.find((p) => p.nombre === proveedorPasaje) ?? null,
-    [proveedorPasaje, proveedoresPasaje]
-  );
-
-  const selectedHospedajeProvider: Provider | null = useMemo(
-    () => proveedoresHospedaje.find((p) => p.nombre === lugar) ?? null,
-    [lugar, proveedoresHospedaje]
-  );
-
-  const providerForServicios =
-    tipo === "Hospedaje" ? selectedHospedajeProvider : null;
-
-  useEffect(() => {
-    if (tipo !== "Hospedaje") return;
-    const prov = providerForServicios;
-    if (!prov) return;
-    if (!prov.traslado && traslado) setTraslado(false);
-    if (!prov.alimentacion && alimentacion === "Sí") setAlimentacion("No");
-  }, [tipo, providerForServicios, traslado, alimentacion]);
+  }, [dni, currentUserDni, solicitudesCount, currentUser, forcePersonal]); // Agregamos forcePersonal para recalcular si cambia personal
 
   /* ---------------------------
      Helpers UI
@@ -331,15 +344,6 @@ export default function SolicitarView({
     const base =
       "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-semibold border transition";
     if (tipo === value) {
-      return base + " bg-slate-900 text-white border-slate-900 shadow-sm";
-    }
-    return base + " bg-white text-slate-700 border-slate-300 hover:bg-slate-50";
-  };
-
-  const getYesNoBtn = (selected: any, value: any) => {
-    const base =
-      "flex-1 inline-flex items-center justify-center rounded-lg border px-3 py-1.5 text-sm font-medium transition";
-    if (selected === value) {
       return base + " bg-slate-900 text-white border-slate-900 shadow-sm";
     }
     return base + " bg-white text-slate-700 border-slate-300 hover:bg-slate-50";
@@ -406,54 +410,85 @@ export default function SolicitarView({
     const now = new Date();
 
     switch (s) {
-      case 1:
+      case 1: {
         if (!/^\d{8}$/.test(dni)) return showError("DNI inválido (8 dígitos).");
         if (!nombre.trim())
           return showError("Ingresa el nombre del beneficiario.");
-        if (!personalFound) {
-          return showError(
-            "El DNI debe existir como personal ACTIVO en el módulo de Personal."
-          );
+        // if (!personalFound) {
+        //   return showError(
+        //     "El DNI debe existir como personal ACTIVO en el módulo de Personal."
+        //   );
+        // }
+        if (!empresa.trim()) {
+          return showError("Ingresa la empresa.");
+        }
+        if (!ceco.trim()) {
+          return showError("Ingresa el CECO (solo números).");
+        }
+        if (!/^\d+$/.test(ceco.trim())) {
+          return showError("El CECO debe contener solo números.");
         }
         return true;
+      }
 
-      case 2:
+      case 2: {
         if (tipo === "Pasaje") {
-          if (!proveedorPasaje)
-            return showError("Selecciona un proveedor de pasaje.");
+          if (!origen.trim())
+            return showError("Ingresa el origen del viaje (ciudad / punto).");
+          if (!destino.trim())
+            return showError("Ingresa el destino del viaje (ciudad / punto).");
           if (!salida || !retorno)
             return showError(
-              "Selecciona la fecha y hora de salida y de retorno."
+              "Selecciona la fecha y hora de viaje y de retorno."
             );
           if (salida < now) {
             return showError(
-              "La fecha y hora de salida no puede ser anterior a la fecha y hora actual."
+              "La fecha y hora de viaje no puede ser anterior a la fecha y hora actual."
             );
           }
           if (retorno < salida) {
             return showError(
-              "La fecha y hora de retorno no puede ser anterior a la fecha y hora de salida."
+              "La fecha y hora de retorno no puede ser anterior a la fecha y hora de viaje."
             );
           }
+
+          // Validaciones adicionales para pasaje aéreo
+          if (subtipo === "Aéreo") {
+            if (!fechaNacimiento) {
+              return showError("Ingresa la fecha de nacimiento.");
+            }
+            if (!telefono.trim()) {
+              return showError("Ingresa el teléfono de contacto.");
+            }
+            if (!correo.trim()) {
+              return showError("Ingresa el correo electrónico.");
+            }
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(correo.trim())) {
+              return showError("Ingresa un correo electrónico válido.");
+            }
+          }
         } else {
-          if (!lugar)
-            return showError("Selecciona el proveedor (lugar) de hospedaje.");
+          // Hospedaje
+          if (!lugar.trim())
+            return showError("Ingresa el lugar de hospedaje.");
           if (!inicio || !fin)
             return showError(
-              "Selecciona la fecha y hora de inicio y de fin del hospedaje."
+              "Selecciona la fecha y hora de ingreso y de salida."
             );
           if (inicio < now) {
             return showError(
-              "La fecha y hora de inicio no puede ser anterior a la fecha y hora actual."
+              "La fecha y hora de ingreso no puede ser anterior a la fecha y hora actual."
             );
           }
           if (fin < inicio) {
             return showError(
-              "La fecha y hora de fin no puede ser anterior a la fecha y hora de inicio."
+              "La fecha y hora de salida no puede ser anterior a la fecha y hora de ingreso."
             );
           }
         }
         return true;
+      }
 
       case 3:
         if (!motivo.trim())
@@ -490,17 +525,26 @@ export default function SolicitarView({
       dni,
       nombre,
       gerencia,
+      empresa,
+      ceco,
       tipo,
       subtipo: tipo === "Pasaje" ? subtipo : undefined,
-      salida,
-      retorno,
-      lugar: tipo === "Hospedaje" ? lugar : undefined,
-      inicio,
-      fin,
-      traslado,
-      alimentacion,
+      origen: tipo === "Pasaje" ? origen || null : null,
+      destino: tipo === "Pasaje" ? destino || null : null,
+      salida: tipo === "Pasaje" ? salida : null,
+      retorno: tipo === "Pasaje" ? retorno : null,
+      lugar: tipo === "Hospedaje" ? lugar || null : null,
+      inicio: tipo === "Hospedaje" ? inicio : null,
+      fin: tipo === "Hospedaje" ? fin : null,
+      fechaNacimiento:
+        tipo === "Pasaje" && subtipo === "Aéreo" ? fechaNacimiento : null,
+      telefono:
+        tipo === "Pasaje" && subtipo === "Aéreo" ? telefono || null : null,
+      correo:
+        tipo === "Pasaje" && subtipo === "Aéreo" ? correo || null : null,
       motivo,
-      proveedor: tipo === "Pasaje" ? proveedorPasaje || null : lugar || null,
+      // proveedor se asignará luego por Administración
+      proveedor: null,
     };
 
     setIsSubmitting(true);
@@ -509,23 +553,28 @@ export default function SolicitarView({
 
       showToast("success", `Ticket ${codigo} registrado correctamente.`);
 
-      // reset mínimo (dejamos DNI/nombre/gerencia para seguir creando tickets)
+      // Reset mínimo (dejamos DNI/nombre/gerencia/empresa/CECO para seguir creando tickets)
       setMotivo("");
-      setAlimentacion("");
-      setTraslado(false);
-      setProveedorPasaje("");
-      setLugar("");
+      setOrigen("");
+      setDestino("");
       setSalida(null);
       setRetorno(null);
+      setLugar("");
       setInicio(null);
       setFin(null);
+      setFechaNacimiento(null);
+      setTelefono("");
+      setCorreo("");
+      setCorreo("");
       setStep(1);
+      setShowForm(false); // Ocultar formulario al terminar
+
     } catch (err: any) {
       console.error("Error al registrar ticket", err);
       showToast(
         "error",
         "No se pudo registrar el ticket.\n\nDetalle técnico: " +
-          (err?.message ?? "Error desconocido")
+        (err?.message ?? "Error desconocido")
       );
     } finally {
       setIsSubmitting(false);
@@ -552,17 +601,18 @@ export default function SolicitarView({
           <section className="space-y-4">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Paso 1 de {totalSteps} · Tipo y colaborador
+                Paso 1 de {totalSteps} · Tipo y datos del colaborador
               </p>
             </div>
 
+            {/* Tipo de ticket */}
             <div className="space-y-2">
               <label className="block text-sm font-medium text-slate-800">
                 Tipo de ticket
               </label>
               <p className="text-xs text-slate-500">
-                Define si este ticket es para un <b>pasaje</b> o un{" "}
-                <b>hospedaje</b>.
+                Define si este ticket es para un <b>pasaje</b> (terrestre o
+                aéreo) o un <b>hospedaje</b>.
               </p>
               <div className="mt-1 inline-flex gap-2 rounded-2xl bg-slate-50 p-1">
                 <button
@@ -570,9 +620,6 @@ export default function SolicitarView({
                   className={getTipoBtn("Pasaje")}
                   onClick={() => {
                     setTipo("Pasaje");
-                    setLugar("");
-                    setTraslado(false);
-                    setAlimentacion("");
                   }}
                 >
                   Pasaje
@@ -582,9 +629,6 @@ export default function SolicitarView({
                   className={getTipoBtn("Hospedaje")}
                   onClick={() => {
                     setTipo("Hospedaje");
-                    setProveedorPasaje("");
-                    setTraslado(false);
-                    setAlimentacion("");
                   }}
                 >
                   Hospedaje
@@ -592,6 +636,7 @@ export default function SolicitarView({
               </div>
             </div>
 
+            {/* Datos del colaborador */}
             <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <label className="block text-sm font-medium">DNI</label>
@@ -624,6 +669,32 @@ export default function SolicitarView({
                 />
               </div>
             </div>
+
+            {/* Empresa y CECO */}
+            <div className="grid gap-3 md:grid-cols-2">
+              <div>
+                <label className="block text-sm font-medium">Empresa</label>
+                <input
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={empresa}
+                  onChange={(e) => setEmpresa(e.target.value)}
+                  placeholder="Ej. DANPER"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium">
+                  CECO (número)
+                </label>
+                <input
+                  className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                  value={ceco}
+                  onChange={(e) =>
+                    setCeco(e.target.value.replace(/[^\d]/g, ""))
+                  }
+                  placeholder="Ej. 123456"
+                />
+              </div>
+            </div>
           </section>
         );
 
@@ -633,15 +704,17 @@ export default function SolicitarView({
           <section className="space-y-5">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                Paso 2 de {totalSteps} · Detalle
+                Paso 2 de {totalSteps} · Detalle del servicio
               </p>
             </div>
 
             {tipo === "Pasaje" ? (
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <h3 className="text-sm font-semibold text-slate-800">
                   Detalle del pasaje
                 </h3>
+
+                {/* Subtipo */}
                 <div className="grid gap-3 md:grid-cols-4">
                   <div>
                     <label className="block text-sm font-medium">Subtipo</label>
@@ -656,38 +729,29 @@ export default function SolicitarView({
                       <option>Terrestre</option>
                     </select>
                   </div>
+
                   <div>
-                    <label className="block text-sm font-medium">
-                      Proveedor (pasaje)
-                    </label>
-                    <select
+                    <label className="block text-sm font-medium">Origen</label>
+                    <input
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
-                      value={proveedorPasaje}
-                      onChange={(e) => setProveedorPasaje(e.target.value)}
-                    >
-                      <option value="">Selecciona proveedor...</option>
-                      {proveedoresPasaje.length === 0 && (
-                        <option disabled>
-                          No hay proveedores configurados (pasaje)
-                        </option>
-                      )}
-                      {proveedoresPasaje.map((p) => (
-                        <option key={p.id} value={p.nombre}>
-                          {p.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedPasajeProvider && (
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Traslado:{" "}
-                        {selectedPasajeProvider.traslado ? "Sí" : "No"} ·
-                        Alimentación:{" "}
-                        {selectedPasajeProvider.alimentacion ? "Sí" : "No"}
-                      </p>
-                    )}
+                      value={origen}
+                      onChange={(e) => setOrigen(e.target.value)}
+                      placeholder="Ciudad / punto de partida"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Salida</label>
+                    <label className="block text-sm font-medium">Destino</label>
+                    <input
+                      className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                      value={destino}
+                      onChange={(e) => setDestino(e.target.value)}
+                      placeholder="Ciudad / punto de llegada"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium">
+                      Fecha de viaje
+                    </label>
                     <input
                       type="datetime-local"
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
@@ -699,7 +763,9 @@ export default function SolicitarView({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Retorno</label>
+                    <label className="block text-sm font-medium">
+                      Fecha de retorno
+                    </label>
                     <input
                       type="datetime-local"
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
@@ -711,6 +777,53 @@ export default function SolicitarView({
                     />
                   </div>
                 </div>
+
+                {/* Datos adicionales solo para pasaje aéreo */}
+                {subtipo === "Aéreo" && (
+                  <div className="space-y-3 border-t border-slate-200 pt-3">
+                    <h3 className="text-sm font-semibold text-slate-800">
+                      Datos del pasajero para pasaje aéreo
+                    </h3>
+                    <div className="grid gap-3 md:grid-cols-3">
+                      <div>
+                        <label className="block text-sm font-medium">
+                          Fecha de nacimiento
+                        </label>
+                        <input
+                          type="date"
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          onChange={(e) =>
+                            setFechaNacimiento(
+                              e.target.value ? new Date(e.target.value) : null
+                            )
+                          }
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">
+                          Teléfono
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          value={telefono}
+                          onChange={(e) => setTelefono(e.target.value)}
+                          placeholder="Teléfono de contacto"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium">
+                          Correo electrónico
+                        </label>
+                        <input
+                          className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
+                          value={correo}
+                          onChange={(e) => setCorreo(e.target.value)}
+                          placeholder="ejemplo@empresa.com"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-4">
@@ -719,37 +832,18 @@ export default function SolicitarView({
                 </h3>
                 <div className="grid gap-3 md:grid-cols-3">
                   <div className="md:col-span-3">
-                    <label className="block text-sm font-medium">
-                      Lugar (proveedor)
-                    </label>
-                    <select
+                    <label className="block text-sm font-medium">Lugar</label>
+                    <input
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
                       value={lugar}
                       onChange={(e) => setLugar(e.target.value)}
-                    >
-                      <option value="">Selecciona proveedor...</option>
-                      {proveedoresHospedaje.length === 0 && (
-                        <option disabled>
-                          No hay proveedores configurados (hospedaje)
-                        </option>
-                      )}
-                      {proveedoresHospedaje.map((p) => (
-                        <option key={p.id} value={p.nombre}>
-                          {p.nombre}
-                        </option>
-                      ))}
-                    </select>
-                    {selectedHospedajeProvider && (
-                      <p className="mt-1 text-[11px] text-slate-500">
-                        Traslado:{" "}
-                        {selectedHospedajeProvider.traslado ? "Sí" : "No"} ·
-                        Alimentación:{" "}
-                        {selectedHospedajeProvider.alimentacion ? "Sí" : "No"}
-                      </p>
-                    )}
+                      placeholder="Ciudad / lugar de hospedaje"
+                    />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Inicio</label>
+                    <label className="block text-sm font-medium">
+                      Fecha de ingreso
+                    </label>
                     <input
                       type="datetime-local"
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
@@ -761,7 +855,9 @@ export default function SolicitarView({
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium">Fin</label>
+                    <label className="block text-sm font-medium">
+                      Fecha de salida
+                    </label>
                     <input
                       type="datetime-local"
                       className="mt-1 w-full rounded-lg border px-3 py-2 text-sm"
@@ -773,87 +869,6 @@ export default function SolicitarView({
                     />
                   </div>
                 </div>
-
-                {providerForServicios && (
-                  <div className="space-y-3 border-t border-slate-200 pt-4">
-                    <h3 className="text-sm font-semibold text-slate-800">
-                      Servicios adicionales
-                    </h3>
-                    <div className="grid gap-3 md:grid-cols-2">
-                      {/* TRASLADO */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-800">
-                          Traslado
-                        </label>
-                        {providerForServicios.traslado ? (
-                          <>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Este proveedor ofrece traslado. Elige si el ticket
-                              lo incluye.
-                            </p>
-                            <div className="mt-2 inline-flex w-full max-w-xs gap-2 rounded-2xl bg-slate-50 p-1">
-                              <button
-                                type="button"
-                                className={getYesNoBtn(traslado, true)}
-                                onClick={() => setTraslado(true)}
-                              >
-                                Sí
-                              </button>
-                              <button
-                                type="button"
-                                className={getYesNoBtn(traslado, false)}
-                                onClick={() => setTraslado(false)}
-                              >
-                                No
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Este proveedor no ofrece traslado. Se registrará
-                            como &quot;No&quot;.
-                          </p>
-                        )}
-                      </div>
-
-                      {/* ALIMENTACIÓN */}
-                      <div>
-                        <label className="block text-sm font-medium text-slate-800">
-                          Alimentación
-                        </label>
-                        {providerForServicios.alimentacion ? (
-                          <>
-                            <p className="mt-1 text-xs text-slate-500">
-                              Este proveedor ofrece alimentación. Elige si el
-                              ticket la incluye.
-                            </p>
-                            <div className="mt-2 inline-flex w-full max-w-xs gap-2 rounded-2xl bg-slate-50 p-1">
-                              <button
-                                type="button"
-                                className={getYesNoBtn(alimentacion, "Sí")}
-                                onClick={() => setAlimentacion("Sí")}
-                              >
-                                Sí
-                              </button>
-                              <button
-                                type="button"
-                                className={getYesNoBtn(alimentacion, "No")}
-                                onClick={() => setAlimentacion("No")}
-                              >
-                                No
-                              </button>
-                            </div>
-                          </>
-                        ) : (
-                          <p className="mt-1 text-xs text-slate-500">
-                            Este proveedor no ofrece alimentación. Se
-                            registrará como &quot;No&quot;.
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </section>
@@ -884,32 +899,50 @@ export default function SolicitarView({
                   <span className="font-semibold">Gerencia:</span> {gerencia}
                 </p>
               )}
+              <p>
+                <span className="font-semibold">Empresa:</span>{" "}
+                {empresa || "—"}{" "}
+                <span className="ml-2 font-semibold">CECO:</span>{" "}
+                {ceco || "—"}
+              </p>
               {tipo === "Pasaje" ? (
                 <>
                   <p>
-                    <span className="font-semibold">Proveedor pasaje:</span>{" "}
-                    {proveedorPasaje || "—"}
+                    <span className="font-semibold">Origen/Destino:</span>{" "}
+                    {origen || "—"} → {destino || "—"}
                   </p>
                   <p>
                     <span className="font-semibold">Fechas:</span> {fmt(salida)}{" "}
                     → {fmt(retorno)}
                   </p>
+                  {subtipo === "Aéreo" && (
+                    <>
+                      <p>
+                        <span className="font-semibold">
+                          Fecha nacimiento:
+                        </span>{" "}
+                        {fechaNacimiento ? fmt(fechaNacimiento) : "—"}
+                      </p>
+                      <p>
+                        <span className="font-semibold">Teléfono:</span>{" "}
+                        {telefono || "—"}{" "}
+                        <span className="ml-2 font-semibold">
+                          Correo:
+                        </span>{" "}
+                        {correo || "—"}
+                      </p>
+                    </>
+                  )}
                 </>
               ) : (
                 <>
                   <p>
-                    <span className="font-semibold">Proveedor hospedaje:</span>{" "}
+                    <span className="font-semibold">Lugar:</span>{" "}
                     {lugar || "—"}
                   </p>
                   <p>
                     <span className="font-semibold">Fechas:</span> {fmt(inicio)}{" "}
                     → {fmt(fin)}
-                  </p>
-                  <p>
-                    <span className="font-semibold">Traslado:</span>{" "}
-                    {traslado ? "Sí" : "No"}{" "}
-                    <span className="ml-2 font-semibold">Alimentación:</span>{" "}
-                    {alimentacion || "No indicado"}
                   </p>
                 </>
               )}
@@ -941,55 +974,96 @@ export default function SolicitarView({
   return (
     <>
       <div className="space-y-6">
-        {/* WIZARD */}
-        <form
-          onSubmit={handlePrepareSubmit}
-          className="space-y-5 rounded-2xl bg-white p-5 shadow-sm"
-        >
-          <header className="space-y-2">
-            <h2 className="text-xl font-bold">Nuevo ticket</h2>
-            <p className="text-sm text-slate-500">
-              Completa la información paso a paso. Puedes volver atrás si
-              necesitas corregir algo.
+        {/* HEADER & TOGGLE */}
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">
+              Solicitudes de Pasajes y Hospedaje
+            </h1>
+            <p className="text-slate-500">
+              Gestiona tus solicitudes y revisa el estado de tus tickets.
             </p>
-            <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100">
-              <div
-                className="h-1.5 rounded-full bg-indigo-600 transition-all"
-                style={{ width: `${(step / totalSteps) * 100}%` }}
-              />
-            </div>
-          </header>
-
-          <div>{renderStep()}</div>
-
-          <div className="flex items-center justify-between pt-1">
-            <button
-              type="button"
-              onClick={goPrev}
-              disabled={step === 1}
-              className="inline-flex items-center rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
-            >
-              ⟵ Anterior
-            </button>
-
-            {step < totalSteps ? (
+          </div>
+          <div>
+            {!showForm && (
               <button
-                type="button"
-                onClick={goNext}
-                className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-indigo-700 transition-all"
               >
-                Siguiente ⟶
-              </button>
-            ) : (
-              <button
-                type="submit"
-                className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
-              >
-                Registrar ticket
+                <span>+ Nuevo Ticket</span>
               </button>
             )}
           </div>
-        </form>
+        </div>
+
+        {/* WIZARD (Condicional) */}
+        {showForm && (
+          <div className="relative">
+            <button
+              onClick={() => setShowForm(false)}
+              className="absolute right-4 top-4 text-slate-400 hover:text-slate-600"
+              title="Cerrar formulario"
+            >
+              ✕
+            </button>
+            <form
+              onSubmit={handlePrepareSubmit}
+              className="space-y-5 rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-100"
+            >
+              <header className="space-y-2 pr-8">
+                <h2 className="text-xl font-bold">Nuevo ticket</h2>
+                <p className="text-sm text-slate-500">
+                  Completa la información paso a paso.
+                </p>
+                <div className="mt-2 h-1.5 w-full rounded-full bg-slate-100">
+                  <div
+                    className="h-1.5 rounded-full bg-indigo-600 transition-all"
+                    style={{ width: `${(step / totalSteps) * 100}%` }}
+                  />
+                </div>
+              </header>
+
+              <div>{renderStep()}</div>
+
+              <div className="flex items-center justify-between pt-1">
+                <button
+                  type="button"
+                  onClick={goPrev}
+                  disabled={step === 1}
+                  className="inline-flex items-center rounded-xl border px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40"
+                >
+                  ⟵ Anterior
+                </button>
+
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowForm(false)}
+                    className="inline-flex items-center rounded-xl px-4 py-2 text-sm font-medium text-slate-500 hover:bg-slate-50"
+                  >
+                    Cancelar
+                  </button>
+                  {step < totalSteps ? (
+                    <button
+                      type="button"
+                      onClick={goNext}
+                      className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                    >
+                      Siguiente ⟶
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      className="inline-flex items-center rounded-xl bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
+                    >
+                      Registrar ticket
+                    </button>
+                  )}
+                </div>
+              </div>
+            </form>
+          </div>
+        )}
 
         {/* LISTA DE TICKETS */}
         <div className="rounded-2xl bg-white p-5 shadow-sm">
@@ -1007,11 +1081,13 @@ export default function SolicitarView({
                 const creador =
                   s.createdByName || s.createdByEmail || "No disponible";
                 const isPasaje = s.tipo === "Pasaje";
-                const icon = isPasaje ? (
-                  <Plane className="h-4 w-4" />
-                ) : (
-                  <Hotel className="h-4 w-4" />
-                );
+                const isAereo = isPasaje && s.subtipo === "Aéreo";
+
+                let icon = <Hotel className="h-4 w-4" />;
+                if (isPasaje) {
+                  if (isAereo) icon = <Plane className="h-4 w-4" />;
+                  else icon = <Bus className="h-4 w-4" />;
+                }
                 const isExpanded = expanded[s.id] ?? false;
                 const meta = getStatusMeta(s.estado);
 
@@ -1042,7 +1118,9 @@ export default function SolicitarView({
                         </div>
                         <p className="truncate text-xs text-slate-500">
                           {isPasaje
-                            ? "Solicitud de Pasaje"
+                            ? s.subtipo === "Aéreo"
+                              ? "Solicitud de Pasaje Aéreo"
+                              : "Solicitud de Pasaje Terrestre"
                             : "Solicitud de Hospedaje"}{" "}
                           · {fmt(s.creado)} · Creado por {creador}
                         </p>
@@ -1054,6 +1132,18 @@ export default function SolicitarView({
                         </span>
                         <div className="flex items-center gap-2">
                           <MiniProgress estado={s.estado} />
+                          {isPasaje && s.subtipo === "Aéreo" && (
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleOpenPropuestas(s.id);
+                              }}
+                              className="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-3 py-1 text-[11px] font-medium text-indigo-700 hover:bg-indigo-100 ring-1 ring-indigo-200"
+                            >
+                              Ver propuestas
+                            </button>
+                          )}
                           <button
                             type="button"
                             onClick={() => toggleExpanded(s.id)}
@@ -1073,19 +1163,33 @@ export default function SolicitarView({
                     {/* Detalle compacto colapsable */}
                     {isExpanded && (
                       <div className="mt-3 space-y-1 border-t border-slate-100 pt-3 text-xs text-slate-600">
+                        <div>
+                          <span className="font-semibold">Empresa:</span>{" "}
+                          {s.empresa || "—"}{" "}
+                          <span className="ml-2 font-semibold">CECO:</span>{" "}
+                          {s.ceco || "—"}
+                        </div>
                         {isPasaje ? (
                           <>
-                            <div>
-                              <span className="font-semibold">Proveedor:</span>{" "}
-                              {s.proveedor || "Proveedor no asignado"}
-                            </div>
                             <div>
                               <span className="font-semibold">Subtipo:</span>{" "}
                               {s.subtipo || "—"}
                             </div>
                             <div>
+                              <span className="font-semibold">
+                                Origen/Destino:
+                              </span>{" "}
+                              {s.origen || "—"} → {s.destino || "—"}
+                            </div>
+                            <div>
                               <span className="font-semibold">Fechas:</span>{" "}
                               {fmt(s.salida)} → {fmt(s.retorno)}
+                            </div>
+                            <div>
+                              <span className="font-semibold">
+                                Proveedor asignado:
+                              </span>{" "}
+                              {s.proveedor || "Pendiente de asignar"}
                             </div>
                           </>
                         ) : (
@@ -1099,12 +1203,10 @@ export default function SolicitarView({
                               {fmt(s.inicio)} → {fmt(s.fin)}
                             </div>
                             <div>
-                              <span className="font-semibold">Traslado:</span>{" "}
-                              {s.traslado ? "Sí" : "No"}{" "}
-                              <span className="ml-2 font-semibold">
-                                Alimentación:
+                              <span className="font-semibold">
+                                Proveedor asignado:
                               </span>{" "}
-                              {s.alimentacion || "No indicado"}
+                              {s.proveedor || "Pendiente de asignar"}
                             </div>
                           </>
                         )}
@@ -1166,6 +1268,16 @@ export default function SolicitarView({
           </div>
         </div>
       </Modal>
+
+      {/* MODAL PROPUESTAS (Shared) */}
+      <PropuestasModal
+        open={!!viewPropuestasId}
+        onClose={() => setViewPropuestasId(null)}
+        solicitudId={viewPropuestasId}
+        showGerenciaSelection={true}
+        showAdminSelection={true}
+        readOnly={true}
+      />
 
       {/* TOAST GLOBAL */}
       <Toast toast={toast} onClose={() => setToast(null)} />

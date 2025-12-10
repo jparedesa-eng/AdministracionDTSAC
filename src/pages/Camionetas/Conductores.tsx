@@ -22,7 +22,7 @@ type DriverRow = {
   nombre: string;
   dni: string;
   licencia: string;
-  licencia_vence: string | null;
+  licencia_vencimiento: string | null;
   telefono: string;
   sede: string;
   activo: boolean;
@@ -35,7 +35,7 @@ function fromRow(r: DriverRow): Driver {
     nombre: r.nombre,
     dni: r.dni,
     licencia: r.licencia,
-    licenciaVence: r.licencia_vence,
+    licenciaVence: r.licencia_vencimiento,
     telefono: r.telefono,
     sede: r.sede,
     activo: r.activo,
@@ -49,7 +49,7 @@ function toRow(d: Partial<Driver>): Partial<DriverRow> {
   if (d.nombre !== undefined) out.nombre = d.nombre;
   if (d.dni !== undefined) out.dni = d.dni;
   if (d.licencia !== undefined) out.licencia = d.licencia;
-  if (d.licenciaVence !== undefined) out.licencia_vence = d.licenciaVence;
+  if (d.licenciaVence !== undefined) out.licencia_vencimiento = d.licenciaVence;
   if (d.telefono !== undefined) out.telefono = d.telefono;
   if (d.sede !== undefined) out.sede = d.sede;
   if (d.activo !== undefined) out.activo = d.activo;
