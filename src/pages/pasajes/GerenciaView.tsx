@@ -1,6 +1,16 @@
+// src/pages/pasajes/GerenciaView.tsx
+
 import { useEffect, useMemo, useState } from "react";
-import { aprobarCosto, getState, subscribe } from "../../store/pasajeStore";
-import type { EstadoSolicitud } from "../../store/pasajeStore";
+import {
+  aprobarCosto,
+  seleccionarPropuestasGerencia,
+  getPropuestaSeleccion,
+  getState,
+  subscribe,
+  loadSolicitudes,
+  type EstadoSolicitud,
+  type Solicitud,
+} from "../../store/pasajeStore";
 import {
   ClipboardList,
   CalendarDays,
@@ -11,9 +21,12 @@ import {
   Filter,
   Eye,
   EyeOff,
+  Files,
+  Bus,
 } from "lucide-react";
 
 import { Modal } from "../../components/ui/Modal";
+import { PropuestasModal } from "../../components/propuestas/PropuestasModal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastType, ToastState } from "../../components/ui/Toast";
 
@@ -60,12 +73,7 @@ function parseInputDate(s: string): Date | null {
   return new Date(y, m - 1, d, 0, 0, 0, 0);
 }
 
-function hasCostoVigente(s: any): boolean {
-  const vence = s.costoVenceEn ? new Date(s.costoVenceEn) : null;
-  return !!(s.costo && vence && new Date() < vence);
-}
-
-function ticketDate(s: any): Date {
+function ticketDate(s: Solicitud): Date {
   if (s.tipo === "Pasaje") return new Date(s.salida ?? s.creado);
   return new Date(s.inicio ?? s.creado);
 }
@@ -83,7 +91,9 @@ function getUserGerencia(): string | null {
       localStorage.getItem("profile.gerencia") ||
       localStorage.getItem("user.gerencia");
     if (ls && typeof ls === "string") return ls;
-  } catch {}
+  } catch {
+    // ignore
+  }
   return null;
 }
 
@@ -175,13 +185,61 @@ type EstadoFiltro =
   | "conFactura"
   | "sinCosto";
 
+
+/* ---------------------------
+   Helpers de negocio
+--------------------------- */
+
+function tieneCosto(s: Solicitud): boolean {
+  return s.costo != null && s.costo > 0;
+}
+
+function esPasajeAereo(s: Solicitud): boolean {
+  return s.tipo === "Pasaje" && s.subtipo === "Aéreo";
+}
+
+function pendienteAprobacionGerencia(s: Solicitud): boolean {
+  // 🔹 Ahora: Gerencia aprueba APENAS se crea el ticket (no importa el costo)
+  // Solo aplica a pasaje terrestre y hospedaje.
+  // PARA AÉREO: Se considera pendiente si no ha seleccionado propuesta.
+  if (esPasajeAereo(s)) {
+    const seleccion = getPropuestaSeleccion(s.id);
+    return (
+      s.estado !== "Cerrado" &&
+      s.estado !== "Rechazado" &&
+      !seleccion?.propuestaIdaGerencia &&
+      !seleccion?.propuestaVueltaGerencia && // Falta selección
+      !s.paseCompra // Aún no tiene pase final
+    );
+  }
+
+  return (
+    !esPasajeAereo(s) &&      // no aéreo
+    s.estado === "Pendiente" && // recién creado / sin visto bueno
+    !s.factura                // por seguridad (no debería tener)
+  );
+}
+
 /* ---------------------------
    Vista principal
 --------------------------- */
 export default function GerenciaView() {
-  // re-render al cambiar el store
+  // re-render al cambiar el store de solicitudes
   const [, force] = useState(0);
-  useEffect(() => subscribe(() => force((x) => x + 1)), []);
+  useEffect(() => {
+    // Load solicitudes on mount
+    loadSolicitudes().catch((err) => {
+      console.error("Error loading solicitudes", err);
+    });
+
+    // Subscribe to changes
+    const unsubscribe = subscribe(() => {
+      force((x) => x + 1);
+    });
+    return () => {
+      unsubscribe();
+    };
+  }, []);
 
   // Toast global
   const [toast, setToast] = useState<ToastState>(null);
@@ -189,17 +247,17 @@ export default function GerenciaView() {
     setToast({ type, message });
   };
 
-  // Defaults rango: hoy -> +7 días
+  // Defaults rango: hoy -> +30 días (1 mes)
   const today = useMemo(() => new Date(), []);
-  const plus7 = useMemo(() => {
+  const plus30 = useMemo(() => {
     const d = new Date();
-    d.setDate(d.getDate() + 7);
+    d.setDate(d.getDate() + 30);
     return d;
   }, []);
 
   const [fromInput, setFromInput] = useState<string>(dateToInput(today));
-  const [toInput, setToInput] = useState<string>(dateToInput(plus7));
-  const [range, setRange] = useState<{ from: Date; to: Date }>({
+  const [toInput, setToInput] = useState<string>(dateToInput(plus30));
+  const [range, setRange] = useState<{ from: Date; to: Date }>(() => ({
     from: new Date(
       today.getFullYear(),
       today.getMonth(),
@@ -210,15 +268,15 @@ export default function GerenciaView() {
       0
     ),
     to: new Date(
-      plus7.getFullYear(),
-      plus7.getMonth(),
-      plus7.getDate(),
+      plus30.getFullYear(),
+      plus30.getMonth(),
+      plus30.getDate(),
       23,
       59,
       59,
       999
     ),
-  });
+  }));
 
   const aplicarRango = () => {
     const f = parseInputDate(fromInput);
@@ -258,31 +316,26 @@ export default function GerenciaView() {
   const myGerencia = getUserGerencia();
   const [soloMiGerencia, setSoloMiGerencia] = useState<boolean>(!!myGerencia);
 
-  // Base: rango + gerencia
-  const base = useMemo(() => {
-    let arr = [...getState().solicitudes].filter((s) => {
+  // Tomamos siempre el estado actual del store
+  const solicitudes = getState().solicitudes;
+
+  // Base: filtro por rango y gerencia (sin useMemo)
+  const base: Solicitud[] = [...solicitudes]
+    .filter((s) => {
       const d = ticketDate(s);
       return d >= range.from && d <= range.to;
-    });
-    if (soloMiGerencia && myGerencia) {
-      arr = arr.filter(
-        (s) => (s.gerencia || "").toLowerCase() === myGerencia.toLowerCase()
-      );
-    }
-    return arr.sort((a, b) => +ticketDate(a) - +ticketDate(b));
-  }, [getState().solicitudes.length, range, soloMiGerencia, myGerencia]);
+    })
+    .filter((s) => {
+      if (!soloMiGerencia || !myGerencia) return true;
+      return (s.gerencia || "").toLowerCase() === myGerencia.toLowerCase();
+    })
+    .sort((a, b) => +ticketDate(a) - +ticketDate(b));
 
-  // Filtro de estado
-  const filtered = useMemo(() => {
+  // Filtro de estado (sin useMemo)
+  const filtered: Solicitud[] = (() => {
     switch (estadoFiltro) {
       case "pendAprob":
-        return base.filter(
-          (s) =>
-            hasCostoVigente(s) &&
-            s.costoAprobado == null &&
-            s.estado !== "Cerrado" &&
-            !s.factura
-        );
+        return base.filter((s) => pendienteAprobacionGerencia(s));
       case "aprobados":
         return base.filter((s) => s.costoAprobado === true);
       case "rechazados":
@@ -293,41 +346,40 @@ export default function GerenciaView() {
         return base.filter((s) => !!s.factura);
       case "sinCosto":
         return base.filter(
-          (s) => !hasCostoVigente(s) && s.estado !== "Cerrado"
+          (s) =>
+            s.estado !== "Cerrado" && !tieneCosto(s) && !esPasajeAereo(s)
         );
       case "todos":
       default:
         return base;
     }
-  }, [base, estadoFiltro]);
+  })();
 
   // Paginación
   const PAGE_SIZE = 10;
   const [page, setPage] = useState(1);
-  useEffect(
-    () => setPage(1),
-    [estadoFiltro, range, soloMiGerencia]
-  );
+  useEffect(() => setPage(1), [estadoFiltro, range, soloMiGerencia]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const start = (page - 1) * PAGE_SIZE;
   const current = filtered.slice(start, start + PAGE_SIZE);
 
-  // Condición para aprobar / rechazar
-  const puedeAprobarRechazar = (s: any) => {
-    const costoVigente = hasCostoVigente(s);
-    const proveedorAsignado = !!s.proveedor;
-    const aprobado = s.costoAprobado;
+  // Condición para aprobar / rechazar costo (no aplica a pasajes aéreos)
+  const puedeAprobarRechazar = (s: Solicitud) => {
     const cerrado = s.estado === "Cerrado";
     const tieneFactura = !!s.factura;
+
+    // 🔹 Habilita los botones inmediatamente después de creado:
+    // - No aéreo
+    // - Estado Pendiente
+    // - No cerrado / no facturado
     return (
-      costoVigente &&
-      proveedorAsignado &&
-      s.costo &&
-      aprobado == null &&
+      !esPasajeAereo(s) &&
+      s.estado === "Pendiente" &&
       !cerrado &&
       !tieneFactura
     );
   };
+
 
   /* ---------------------------
      Estado del modal de confirmación
@@ -373,6 +425,71 @@ export default function GerenciaView() {
         : "Costo rechazado correctamente."
     );
   };
+
+  /* ---------------------------
+     Modal Selección Propuesta (Aéreo)
+  --------------------------- */
+  const [selPropSolicitudId, setSelPropSolicitudId] = useState<string | null>(
+    null
+  );
+
+  // Nuevo estado para la confirmación de selección de propuesta
+  const [selPropConfirm, setSelPropConfirm] = useState<{
+    open: boolean;
+    solicitudId: string | null;
+    idaId: number | null;
+    vueltaId: number | null;
+  }>({ open: false, solicitudId: null, idaId: null, vueltaId: null });
+
+  // 1. Al hacer clic en "Seleccionar" en el modal
+  const handleSelectPropuestaRequest = (idaId: number | null, vueltaId: number | null) => {
+    // Abrir confirmación guardando también el solicitudId
+    setSelPropConfirm({ open: true, solicitudId: selPropSolicitudId, idaId, vueltaId });
+  };
+
+  // 2. Al confirmar en el segundo modal
+  const confirmSelectPropuesta = async () => {
+    console.log("🔵 confirmSelectPropuesta iniciado");
+    const { solicitudId, idaId, vueltaId } = selPropConfirm;
+    console.log("🔵 IDs:", { solicitudId, idaId, vueltaId });
+
+    if (!solicitudId) {
+      console.log("❌ No hay solicitudId en selPropConfirm");
+      return;
+    }
+
+    // Validar que al menos una propuesta esté seleccionada
+    if (!idaId && !vueltaId) {
+      console.log("❌ No hay IDA ni VUELTA seleccionadas");
+      showToast("error", "Debes seleccionar al menos una propuesta (IDA o VUELTA).");
+      return;
+    }
+
+    try {
+      console.log("🔵 Llamando a seleccionarPropuestasGerencia...");
+      const ok = await seleccionarPropuestasGerencia(solicitudId, idaId, vueltaId);
+      console.log("🔵 Resultado:", ok);
+
+      if (ok) {
+        console.log("✅ Selección exitosa");
+        showToast("success", "Propuesta seleccionada correctamente.");
+        setSelPropConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null });
+        setSelPropSolicitudId(null); // Cerrar también el modal de propuestas
+      } else {
+        console.log("❌ seleccionarPropuestasGerencia retornó false");
+        showToast("error", "Error al seleccionar propuesta.");
+      }
+    } catch (error) {
+      console.error("❌ Error en confirmSelectPropuesta:", error);
+      showToast("error", "Error al seleccionar propuesta: " + error);
+    }
+  };
+
+  const currentSolicitudForModal = useMemo(
+    () => solicitudes.find((s) => s.id === selPropSolicitudId),
+    [solicitudes, selPropSolicitudId]
+  );
+
 
   /* ---------------------------
      Expandir / colapsar detalle por ticket
@@ -480,8 +597,14 @@ export default function GerenciaView() {
           </h1>
           <p className="mt-1 text-sm text-gray-600">
             Visualiza el <b>flujo completo</b> de tickets y gestiona la
-            aprobación de costos. Por defecto se muestran los{" "}
-            <b>pendientes de aprobación</b> dentro del rango y tu gerencia.
+            aprobación de costos para pasajes terrestres y hospedajes. Por
+            defecto se muestran los <b>pendientes de aprobación</b> dentro del
+            rango y tu gerencia.
+          </p>
+          <p className="mt-1 text-xs text-gray-500">
+            Los pasajes aéreos se manejarán mediante{" "}
+            <b>propuestas del proveedor</b>. En esta vista solo se aprueban
+            costos directos (no aéreos).
           </p>
         </div>
 
@@ -544,7 +667,7 @@ export default function GerenciaView() {
                 <option value="rechazados">Rechazados</option>
                 <option value="cerrados">Cerrados</option>
                 <option value="conFactura">Con factura</option>
-                <option value="sinCosto">Sin costo vigente</option>
+                <option value="sinCosto">Sin costo (no aéreo)</option>
               </select>
             </label>
 
@@ -583,19 +706,21 @@ export default function GerenciaView() {
           <>
             <div className="space-y-3">
               {current.map((s) => {
-                const idx = getState().solicitudes.indexOf(s);
-                const costoVigente = hasCostoVigente(s);
+                const idx = solicitudes.indexOf(s);
                 const proveedorAsignado = !!s.proveedor;
                 const isPasaje = s.tipo === "Pasaje";
-                const icon = isPasaje ? (
-                  <Plane className="h-4 w-4" />
-                ) : (
-                  <Hotel className="h-4 w-4" />
-                );
+                const isAereo = isPasaje && s.subtipo === "Aéreo";
+                let icon = <Hotel className="h-4 w-4" />;
+
+                if (isPasaje) {
+                  if (isAereo) icon = <Plane className="h-4 w-4" />;
+                  else icon = <Bus className="h-4 w-4" />;
+                }
 
                 const canAct = puedeAprobarRechazar(s);
                 const isExpanded = expanded[s.id] ?? false;
                 const meta = getStatusMeta(s.estado as EstadoSolicitud);
+                const tieneCostoAsignado = tieneCosto(s);
 
                 return (
                   <article
@@ -624,7 +749,9 @@ export default function GerenciaView() {
                         </div>
                         <p className="truncate text-xs text-gray-500">
                           {isPasaje
-                            ? "Solicitud de Pasaje"
+                            ? s.subtipo === "Aéreo"
+                              ? "Solicitud de Pasaje Aéreo"
+                              : "Solicitud de Pasaje Terrestre"
                             : "Solicitud de Hospedaje"}{" "}
                           · {fmt(ticketDate(s))} · {s.gerencia || "Sin gerencia"}
                         </p>
@@ -637,9 +764,9 @@ export default function GerenciaView() {
                           </span>
                         )}
 
-                        {costoVigente && (
+                        {tieneCostoAsignado && !esPasajeAereo(s) && (
                           <span className="hidden rounded-full border border-emerald-100 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 sm:inline">
-                            Costo vigente
+                            Costo cargado
                           </span>
                         )}
 
@@ -666,40 +793,59 @@ export default function GerenciaView() {
                       <MiniProgress estado={s.estado as EstadoSolicitud} />
 
                       <div className="flex flex-wrap gap-2">
-                        <button
-                          disabled={!canAct}
-                          onClick={() =>
-                            askConfirm(
-                              "reject",
-                              idx,
-                              `${s.nombre} (${s.dni}) — ${
-                                s.proveedor ?? "Sin proveedor"
-                              }`
-                            )
-                          }
-                          className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
-                          title="Rechazar costo"
-                        >
-                          <XCircle className="h-4 w-4" />
-                          Rechazar
-                        </button>
-                        <button
-                          disabled={!canAct}
-                          onClick={() =>
-                            askConfirm(
-                              "approve",
-                              idx,
-                              `${s.nombre} (${s.dni}) — ${
-                                s.proveedor ?? "Sin proveedor"
-                              }`
-                            )
-                          }
-                          className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
-                          title="Aprobar costo"
-                        >
-                          <BadgeCheck className="h-4 w-4" />
-                          Aprobar
-                        </button>
+                        {/* Para pasajes aéreos: Ver propuestas */}
+                        {esPasajeAereo(s) && (
+                          <button
+                            onClick={() => setSelPropSolicitudId(s.id)}
+                            className="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-50"
+                          >
+                            <Files className="h-4 w-4" />
+                            {(() => {
+                              const seleccion = getPropuestaSeleccion(s.id);
+                              return (seleccion?.propuestaIdaGerencia || seleccion?.propuestaVueltaGerencia)
+                                ? "Ver selección"
+                                : "Ver propuestas";
+                            })()}
+                          </button>
+                        )}
+
+                        {/* Para pasajes NO aéreos: Aprobar / Rechazar costo */}
+                        {!esPasajeAereo(s) && (
+                          <>
+                            <button
+                              disabled={!canAct}
+                              onClick={() =>
+                                askConfirm(
+                                  "reject",
+                                  idx,
+                                  `${s.nombre} (${s.dni}) — ${s.proveedor ?? "Sin proveedor"
+                                  }`
+                                )
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl border px-3 py-2 text-sm font-semibold text-rose-600 hover:bg-rose-50 disabled:opacity-50"
+                              title="Rechazar costo"
+                            >
+                              <XCircle className="h-4 w-4" />
+                              Rechazar
+                            </button>
+                            <button
+                              disabled={!canAct}
+                              onClick={() =>
+                                askConfirm(
+                                  "approve",
+                                  idx,
+                                  `${s.nombre} (${s.dni}) — ${s.proveedor ?? "Sin proveedor"
+                                  }`
+                                )
+                              }
+                              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-3 py-2 text-sm font-semibold text-white hover:bg-gray-800 disabled:opacity-50"
+                              title="Aprobar costo"
+                            >
+                              <BadgeCheck className="h-4 w-4" />
+                              Aprobar
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
@@ -712,11 +858,7 @@ export default function GerenciaView() {
                           </div>
                           <div>
                             <b>Costo:</b>{" "}
-                            {s.costo ? s.costo.toFixed(2) : "—"}
-                          </div>
-                          <div>
-                            <b>Vigencia costo:</b>{" "}
-                            {s.costoVenceEn ? fmt(s.costoVenceEn) : "—"}
+                            {s.costo != null ? s.costo.toFixed(2) : "—"}
                           </div>
                           <div>
                             <b>Pase compra:</b> {s.paseCompra ? "Sí" : "No"}
@@ -816,13 +958,74 @@ export default function GerenciaView() {
             <button
               type="button"
               onClick={handleConfirmAccion}
-              className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-semibold text-white ${
-                confirmKind === "approve"
-                  ? "bg-emerald-600 hover:bg-emerald-700"
-                  : "bg-rose-600 hover:bg-rose-700"
-              }`}
+              className={`inline-flex items-center rounded-xl px-4 py-2 text-sm font-semibold text-white ${confirmKind === "approve"
+                ? "bg-emerald-600 hover:bg-emerald-700"
+                : "bg-rose-600 hover:bg-rose-700"
+                }`}
             >
               {confirmKind === "approve" ? "Sí, aprobar" : "Sí, rechazar"}
+            </button>
+          </div>
+        </div>
+      </Modal>
+
+      {/* MODAL SELECCIÓN PROPUESTA (Shared) */}
+      {selPropSolicitudId && (
+        <PropuestasModal
+          open={!!selPropSolicitudId}
+          onClose={() => setSelPropSolicitudId(null)}
+          solicitudId={selPropSolicitudId}
+          showGerenciaSelection={true}
+          showAdminSelection={true}
+          onSelect={
+            (() => {
+              if (!currentSolicitudForModal) return undefined;
+              const seleccion = getPropuestaSeleccion(currentSolicitudForModal.id);
+              return (seleccion?.propuestaIdaAdmin || seleccion?.propuestaVueltaAdmin)
+                ? undefined
+                : handleSelectPropuestaRequest;
+            })()
+          }
+        />
+      )}
+
+      {/* MODAL CONFIRMACIÓN SELECCIÓN PROPUESTA */}
+      <Modal
+        open={selPropConfirm.open}
+        onClose={() => setSelPropConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null })}
+        title="Confirmar selección"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <p className="text-sm text-slate-600">
+            ¿Estás seguro de seleccionar{" "}
+            {selPropConfirm.idaId && selPropConfirm.vueltaId ? (
+              <>
+                la opción <b>#{selPropConfirm.idaId}</b> (IDA) y{" "}
+                <b>#{selPropConfirm.vueltaId}</b> (VUELTA)
+              </>
+            ) : selPropConfirm.idaId ? (
+              <>
+                la opción <b>#{selPropConfirm.idaId}</b> (IDA)
+              </>
+            ) : (
+              <>
+                la opción <b>#{selPropConfirm.vueltaId}</b> (VUELTA)
+              </>
+            )}? Esta acción registrará tu elección en el sistema.
+          </p>
+          <div className="flex justify-end gap-2">
+            <button
+              onClick={() => setSelPropConfirm({ open: false, solicitudId: null, idaId: null, vueltaId: null })}
+              className="rounded-lg border px-4 py-2 text-sm font-medium hover:bg-slate-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={confirmSelectPropuesta}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              Confirmar
             </button>
           </div>
         </div>
