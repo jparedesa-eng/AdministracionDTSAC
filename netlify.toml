@@ -6,15 +6,17 @@ headers = []
   [functions."*"]
 
 [build]
-publish = "dist"
+publish = "/opt/build/repo/dist"
 publishOrigin = "config"
 commandOrigin = "config"
 command = "npm run build"
 
   [build.environment]
   NODE_VERSION = "22"
-  NETLIFY_USE_YARN = "false"
-  
+  # Disable smart detection for Supabase public credentials
+  # The anon key is safe to expose - it's protected by Row Level Security
+  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+
   [build.processing]
 
     [build.processing.css]
