@@ -37,8 +37,33 @@ function PersonalDialog({
   loading?: boolean;
 }) {
   const [draft, setDraft] = React.useState<any | null>(initial);
+  const [gerenciaSearch, setGerenciaSearch] = React.useState("");
+  const [showGerenciaOptions, setShowGerenciaOptions] = React.useState(false);
+  const wrapperRef = React.useRef<HTMLDivElement>(null);
 
-  React.useEffect(() => setDraft(initial), [initial]);
+  React.useEffect(() => {
+    setDraft(initial);
+    if (initial?.gerenciaId) {
+      const g = gerencias.find((x) => x.id === initial.gerenciaId);
+      setGerenciaSearch(g?.nombre || "");
+    } else {
+      setGerenciaSearch("");
+    }
+  }, [initial, gerencias]);
+
+  // Click outside to close dropdown
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (
+        wrapperRef.current &&
+        !wrapperRef.current.contains(event.target as Node)
+      ) {
+        setShowGerenciaOptions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   if (!open) return null;
 
@@ -62,6 +87,10 @@ function PersonalDialog({
   };
 
   const estadoValue = draft?.estado ?? "ACTIVO";
+
+  const filteredGerencias = gerencias.filter((g) =>
+    (g.nombre || "").toLowerCase().includes(gerenciaSearch.toLowerCase())
+  );
 
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
@@ -105,22 +134,50 @@ function PersonalDialog({
               />
             </div>
 
-            <div>
+            <div className="relative" ref={wrapperRef}>
               <label className="text-sm font-medium text-gray-700">
                 Gerencia
               </label>
-              <select
-                value={draft?.gerenciaId ?? ""}
-                onChange={(e) => handleChange("gerenciaId", e.target.value)}
+              <input
+                type="text"
+                value={gerenciaSearch}
+                onChange={(e) => {
+                  setGerenciaSearch(e.target.value);
+                  setShowGerenciaOptions(true);
+                  // Clear ID if text changes to force selection
+                  // changing logic: if exact match found we could set it, but safer to force click
+                  if (draft?.gerenciaId) {
+                    handleChange("gerenciaId", "");
+                  }
+                }}
+                onFocus={() => setShowGerenciaOptions(true)}
                 className="mt-1 w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-              >
-                <option value="">Selecciona una gerencia</option>
-                {gerencias.map((g) => (
-                  <option key={g.id} value={g.id}>
-                    {g.nombre}
-                  </option>
-                ))}
-              </select>
+                placeholder="Buscar gerencia..."
+              />
+              {showGerenciaOptions && (
+                <div className="absolute z-10 mt-1 max-h-48 w-full overflow-y-auto rounded-lg border bg-white shadow-lg">
+                  {filteredGerencias.length > 0 ? (
+                    filteredGerencias.map((g) => (
+                      <button
+                        key={g.id}
+                        type="button"
+                        onClick={() => {
+                          handleChange("gerenciaId", g.id);
+                          setGerenciaSearch(g.nombre);
+                          setShowGerenciaOptions(false);
+                        }}
+                        className="block w-full px-3 py-2 text-left text-sm hover:bg-gray-100"
+                      >
+                        {g.nombre}
+                      </button>
+                    ))
+                  ) : (
+                    <div className="px-3 py-2 text-sm text-gray-500">
+                      No se encontraron resultados
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             <div>

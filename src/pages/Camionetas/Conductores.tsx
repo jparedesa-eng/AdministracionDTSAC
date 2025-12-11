@@ -1,7 +1,23 @@
 // src/pages/Camionetas/Conductores.tsx
 import React from "react";
 import { supabase } from "../../supabase/supabaseClient";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Search,
+  Plus,
+  PencilLine,
+  Shuffle,
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  User,
+  AlertCircle,
+} from "lucide-react";
+import { Modal } from "../../components/ui/Modal";
+import { Toast } from "../../components/ui/Toast";
+import type { ToastState } from "../../components/ui/Toast";
 
 /** Modelo en app */
 type Driver = {
@@ -56,13 +72,46 @@ function toRow(d: Partial<Driver>): Partial<DriverRow> {
   return out;
 }
 
+function VencimientoLicencia({ dateStr }: { dateStr: string | null }) {
+  if (!dateStr) return <span className="text-gray-300">-</span>;
+
+  const today = new Date();
+  const target = new Date(dateStr);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  let colorClass = "text-gray-600";
+  let icon = null;
+
+  if (diffDays < 0) {
+    colorClass = "text-rose-600 font-bold";
+    icon = <AlertCircle className="mr-1 h-3 w-3" />;
+  } else if (diffDays < 30) {
+    colorClass = "text-amber-600 font-bold";
+    icon = <AlertTriangle className="mr-1 h-3 w-3" />;
+  }
+
+  const formatted = target.toLocaleDateString("es-PE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+
+  return (
+    <div className={`inline-flex items-center text-xs ${colorClass}`}>
+      {icon}
+      <span>{formatted}</span>
+    </div>
+  );
+}
+
 export default function Conductores() {
   /* =========================
    * Estado local
    * ========================= */
   const [drivers, setDrivers] = React.useState<Driver[]>([]);
   const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
+  const [toast, setToast] = React.useState<ToastState>(null);
 
   // Filtros
   const [query, setQuery] = React.useState("");
@@ -95,7 +144,6 @@ export default function Conductores() {
     (async () => {
       try {
         setLoading(true);
-        setError(null);
         const { data, error } = await supabase
           .from("conductores")
           .select("*")
@@ -103,7 +151,7 @@ export default function Conductores() {
         if (error) throw error;
         setDrivers((data as DriverRow[]).map(fromRow));
       } catch (e: any) {
-        setError(e.message ?? "Error al cargar conductores.");
+        setToast({ type: "error", message: e.message ?? "Error al cargar." });
       } finally {
         setLoading(false);
       }
@@ -134,14 +182,41 @@ export default function Conductores() {
   const end = start + pageSize;
   const pageData = filtered.slice(start, end);
 
-  // Resetear a página 1 si cambian los filtros o la data
   React.useEffect(() => {
     setPage(1);
   }, [query, onlyActive, drivers.length]);
 
   /* =========================
-   * Helpers UI
+   * Helpers UI / Actions
    * ========================= */
+  function Switch({
+    checked,
+    onChange,
+    label,
+  }: {
+    checked: boolean;
+    onChange: (checked: boolean) => void;
+    label?: string;
+  }) {
+    return (
+      <label className="inline-flex cursor-pointer items-center gap-3">
+        <div className="relative">
+          <input
+            type="checkbox"
+            className="peer sr-only"
+            checked={checked}
+            onChange={(e) => onChange(e.target.checked)}
+          />
+          {/* Track */}
+          <div className="h-6 w-11 rounded-full bg-gray-200 transition-colors peer-checked:bg-slate-900 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-slate-500 peer-focus:ring-offset-2"></div>
+          {/* Thumb */}
+          <div className="absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform peer-checked:translate-x-5"></div>
+        </div>
+        {label && <span className="text-sm font-medium text-gray-700">{label}</span>}
+      </label>
+    );
+  }
+
   const resetForm = () =>
     setForm({
       id: "",
@@ -153,6 +228,7 @@ export default function Conductores() {
       sede: "",
       activo: true,
     });
+  // ... (rest of simple logic unchanged)
 
   const handleCreate = () => {
     setEditing(null);
@@ -177,28 +253,25 @@ export default function Conductores() {
       setDrivers((prev) =>
         prev.map((x) => (x.id === d.id ? { ...x, activo: next } : x))
       );
+      setToast({
+        type: "success",
+        message: `Conductor ${next ? "activado" : "desactivado"}.`,
+      });
     } catch (e: any) {
-      alert(e.message ?? "No se pudo actualizar el estado.");
+      setToast({ type: "error", message: "Error al actualizar estado." });
     }
   };
 
   const handleSubmit: React.FormEventHandler<HTMLFormElement> = async (e) => {
     e.preventDefault();
     if (!form.nombre.trim() || !form.dni.trim()) {
-      alert("Nombre y DNI son obligatorios.");
+      setToast({ type: "error", message: "Nombre y DNI obligatorios." });
       return;
     }
     try {
       if (editing) {
-        const payload = toRow({
-          nombre: form.nombre,
-          dni: form.dni,
-          licencia: form.licencia,
-          licenciaVence: form.licenciaVence,
-          telefono: form.telefono,
-          sede: form.sede,
-          activo: form.activo,
-        });
+        // Update
+        const payload = toRow({ ...form, id: editing.id });
         const { data, error } = await supabase
           .from("conductores")
           .update(payload)
@@ -207,17 +280,13 @@ export default function Conductores() {
           .single();
         if (error) throw error;
         const updated = fromRow(data as DriverRow);
-        setDrivers((prev) => prev.map((x) => (x.id === editing.id ? updated : x)));
+        setDrivers((prev) =>
+          prev.map((x) => (x.id === editing.id ? updated : x))
+        );
+        setToast({ type: "success", message: "Conductor actualizado." });
       } else {
-        const payload = toRow({
-          nombre: form.nombre,
-          dni: form.dni,
-          licencia: form.licencia,
-          licenciaVence: form.licenciaVence,
-          telefono: form.telefono,
-          sede: form.sede,
-          activo: form.activo,
-        });
+        // Create
+        const payload = toRow(form);
         const { data, error } = await supabase
           .from("conductores")
           .insert([payload])
@@ -226,176 +295,190 @@ export default function Conductores() {
         if (error) throw error;
         const inserted = fromRow(data as DriverRow);
         setDrivers((prev) => [inserted, ...prev]);
+        setToast({ type: "success", message: "Conductor creado." });
       }
 
       setOpenModal(false);
       setEditing(null);
       resetForm();
     } catch (e: any) {
-      alert(e.message ?? "No se pudo guardar el conductor.");
+      setToast({ type: "error", message: e.message || "Error al guardar." });
     }
   };
 
-  const formatVence = (s: string | null) => {
-    if (!s) return "—";
-    try {
-      const d = new Date(s);
-      return d.toLocaleDateString();
-    } catch {
-      return s;
-    }
-  };
+  // KPIs
+  const totalCount = drivers.length;
+  const activeCount = drivers.filter((d) => d.activo).length;
+  const inactiveCount = totalCount - activeCount;
 
-  const Pagination = () => (
-    <div className="flex items-center justify-between px-6 py-4">
-      <p className="text-sm text-gray-600">
-        Mostrando <span className="font-medium">{filtered.length === 0 ? 0 : start + 1}</span>–
-        <span className="font-medium">{Math.min(end, filtered.length)}</span> de{" "}
-        <span className="font-medium">{filtered.length}</span> registros
-      </p>
-      <div className="flex items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setPage((p) => Math.max(1, p - 1))}
-          disabled={safePage === 1}
-          className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-        >
-          <ChevronLeft className="h-4 w-4" />
-          Anterior
-        </button>
-        <span className="text-sm text-gray-700">
-          Página <span className="font-semibold">{safePage}</span> de{" "}
-          <span className="font-semibold">{totalPages}</span>
-        </span>
-        <button
-          type="button"
-          onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-          disabled={safePage === totalPages}
-          className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-        >
-          Siguiente
-          <ChevronRight className="h-4 w-4" />
-        </button>
-      </div>
-    </div>
-  );
-
-  /* =========================
-   * Render
-   * ========================= */
   return (
     <div className="space-y-6">
-      {/* Título + subtítulo */}
-      <div className="pt-1">
-        <h1 className="text-2xl font-bold tracking-tight">Conductores</h1>
-        <p className="mt-1 text-sm text-gray-600">
-          Administra la base de conductores (crear, editar, activar/desactivar).
+      <Toast toast={toast} onClose={() => setToast(null)} />
+
+      {/* Header */}
+      <div className="px-1">
+        <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+          Conductores
+        </h1>
+        <p className="mt-1 text-sm text-gray-500">
+          Gestión de choferes, licencias y estados.
         </p>
       </div>
 
-      {/* Filtros */}
-      <section className="rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="grid gap-3 md:grid-cols-3">
-          <div className="relative">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Buscar por nombre, DNI, licencia, teléfono o sede"
-              className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent placeholder:text-gray-400 focus:ring-gray-300"
-            />
-          </div>
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <input
-              type="checkbox"
-              className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
-              checked={onlyActive}
-              onChange={(e) => setOnlyActive(e.target.checked)}
-            />
-            Solo activos
-          </label>
-          <div className="md:text-right">
-            <button
-              type="button"
-              onClick={handleCreate}
-              className="inline-flex items-center justify-center rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
-            >
-              Nuevo conductor
-            </button>
+      {/* KPI Cards */}
+      <div className="grid gap-4 md:grid-cols-3">
+        {/* Total */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Total</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{totalCount}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-gray-100 text-gray-600">
+              <User className="h-5 w-5" />
+            </div>
           </div>
         </div>
-      </section>
 
-      {/* Tabla en tarjeta */}
-      <section className="rounded-2xl border bg-white p-0 shadow-sm overflow-hidden">
-        <div className="px-6 py-5">
-          <h2 className="text-lg font-semibold">Lista de conductores</h2>
-          <p className="mt-1 text-sm text-gray-600">
-            Total: {filtered.length} {filtered.length === 1 ? "registro" : "registros"}
-          </p>
+        {/* Activos */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Activos</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{activeCount}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
         </div>
 
-        {/* Tabla */}
+        {/* Inactivos */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Inactivos</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">
+                {inactiveCount}
+              </p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+              <XCircle className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Filtros + Acciones */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        {/* Search */}
+        <div className="relative flex-1 max-w-lg">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Buscar por nombre, DNI, licencia..."
+            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
+          />
+        </div>
+
+        {/* Filters/Buttons */}
+        <div className="flex items-center gap-3">
+          <Switch
+            checked={onlyActive}
+            onChange={setOnlyActive}
+            label="Solo activos"
+          />
+
+          <button
+            type="button"
+            onClick={handleCreate}
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+          >
+            <Plus className="h-4 w-4" />
+            <span>Nuevo</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Tabla */}
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="min-w-full border-t">
-            <thead className="bg-gray-50 text-left text-sm text-gray-600">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <tr>
-                <th className="px-6 py-3">Nombre</th>
-                <th className="px-6 py-3">DNI</th>
+                <th className="px-6 py-3">Nombre / DNI</th>
                 <th className="px-6 py-3">Licencia</th>
-                <th className="px-6 py-3">Vence</th>
+                <th className="px-6 py-3">Vencimiento</th>
                 <th className="px-6 py-3">Teléfono</th>
                 <th className="px-6 py-3">Sede</th>
                 <th className="px-6 py-3">Estado</th>
                 <th className="px-6 py-3 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y text-sm">
+            <tbody className="divide-y divide-gray-100 bg-white">
               {loading && (
                 <tr>
-                  <td className="px-6 py-8 text-center text-sm text-gray-500" colSpan={8}>
-                    Cargando...
+                  <td
+                    colSpan={7}
+                    className="px-6 py-10 text-center text-sm text-gray-500"
+                  >
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando...
+                    </div>
                   </td>
                 </tr>
               )}
 
               {!loading && pageData.map((d) => (
-                <tr key={d.id} className="hover:bg-gray-50/60">
-                  <td className="px-6 py-3 font-medium text-gray-900">{d.nombre}</td>
-                  <td className="px-6 py-3">{d.dni}</td>
-                  <td className="px-6 py-3">{d.licencia}</td>
-                  <td className="px-6 py-3">{formatVence(d.licenciaVence)}</td>
-                  <td className="px-6 py-3">{d.telefono}</td>
-                  <td className="px-6 py-3">{d.sede}</td>
+                <tr key={d.id} className="hover:bg-gray-50 transition-colors">
+                  <td className="px-6 py-3">
+                    <div className="flex flex-col">
+                      <span className="text-base font-bold text-gray-900">
+                        {d.nombre}
+                      </span>
+                      <span className="text-xs text-gray-500 font-mono">
+                        {d.dni}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-3 font-medium text-gray-700">
+                    {d.licencia}
+                  </td>
+                  <td className="px-6 py-3">
+                    <VencimientoLicencia dateStr={d.licenciaVence} />
+                  </td>
+                  <td className="px-6 py-3 text-gray-600">
+                    {d.telefono || "-"}
+                  </td>
+                  <td className="px-6 py-3 text-gray-600">{d.sede || "-"}</td>
                   <td className="px-6 py-3">
                     <span
-                      className={
-                        "inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 " +
-                        (d.activo
-                          ? "bg-teal-100 text-teal-800 ring-teal-200"
-                          : "bg-gray-200 text-gray-700 ring-gray-300")
-                      }
+                      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${d.activo
+                        ? "bg-emerald-50 text-emerald-700 ring-emerald-600/20"
+                        : "bg-gray-100 text-gray-600 ring-gray-500/10"
+                        }`}
                     >
                       {d.activo ? "Activo" : "Inactivo"}
                     </span>
                   </td>
                   <td className="px-6 py-3 text-right">
-                    <div className="inline-flex gap-2">
+                    <div className="flex items-center justify-end gap-1">
                       <button
-                        type="button"
                         onClick={() => toggleActivo(d)}
-                        className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50"
+                        className="rounded-lg border p-2 hover:bg-gray-50"
                         title={d.activo ? "Desactivar" : "Activar"}
                       >
-                        {d.activo ? "Desactivar" : "Activar"}
+                        <Shuffle className="h-4 w-4 text-gray-500" />
                       </button>
                       <button
-                        type="button"
                         onClick={() => handleEdit(d)}
-                        className="rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50"
+                        className="rounded-lg border p-2 hover:bg-gray-50"
+                        title="Editar"
                       >
-                        Editar
+                        <PencilLine className="h-4 w-4 text-gray-700" />
                       </button>
-                      {/* Sin botón Eliminar (según solicitud previa) */}
                     </div>
                   </td>
                 </tr>
@@ -403,8 +486,11 @@ export default function Conductores() {
 
               {!loading && pageData.length === 0 && (
                 <tr>
-                  <td className="px-6 py-8 text-center text-sm text-gray-500" colSpan={8}>
-                    {error ? `Error: ${error}` : "No hay conductores que coincidan con el filtro."}
+                  <td
+                    colSpan={7}
+                    className="px-6 py-10 text-center text-sm text-gray-500"
+                  >
+                    No se encontraron conductores.
                   </td>
                 </tr>
               )}
@@ -413,120 +499,163 @@ export default function Conductores() {
         </div>
 
         {/* Paginación */}
-        <Pagination />
-      </section>
-
-      {/* Modal Crear/Editar */}
-      {openModal && (
-        <div className="fixed inset-0 z-40 grid place-items-center bg-black/30 p-4">
-          <div className="w-full max-w-lg rounded-2xl border bg-white p-6 shadow-xl">
-            <div className="mb-4">
-              <h3 className="text-lg font-semibold">
-                {editing ? "Editar conductor" : "Nuevo conductor"}
-              </h3>
-              <p className="mt-1 text-sm text-gray-600">
-                Completa los datos y guarda los cambios.
-              </p>
-            </div>
-
-            <form onSubmit={handleSubmit} className="grid gap-3">
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Nombre</label>
-                <input
-                  value={form.nombre}
-                  onChange={(e) => setForm((f) => ({ ...f, nombre: e.target.value }))}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                  placeholder="Nombres y apellidos"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">DNI</label>
-                  <input
-                    value={form.dni}
-                    onChange={(e) => setForm((f) => ({ ...f, dni: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                    placeholder="Ej. 12345678"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">Licencia</label>
-                  <input
-                    value={form.licencia}
-                    onChange={(e) => setForm((f) => ({ ...f, licencia: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                    placeholder="Ej. A-I, A-IIb"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">Vence</label>
-                  <input
-                    type="date"
-                    value={form.licenciaVence ?? ""}
-                    onChange={(e) =>
-                      setForm((f) => ({ ...f, licenciaVence: e.target.value || null }))
-                    }
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                  />
-                </div>
-                <div className="grid gap-2">
-                  <label className="text-sm font-medium">Teléfono</label>
-                  <input
-                    value={form.telefono}
-                    onChange={(e) => setForm((f) => ({ ...f, telefono: e.target.value }))}
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                    placeholder="Ej. 999-111-222"
-                  />
-                </div>
-              </div>
-
-              <div className="grid gap-2">
-                <label className="text-sm font-medium">Sede</label>
-                <input
-                  value={form.sede}
-                  onChange={(e) => setForm((f) => ({ ...f, sede: e.target.value }))}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-                  placeholder="Ej. Lima"
-                />
-              </div>
-
-              <label className="mt-1 inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.activo}
-                  onChange={(e) => setForm((f) => ({ ...f, activo: e.target.checked }))}
-                  className="h-4 w-4 rounded border-gray-300 text-gray-900 focus:ring-gray-400"
-                />
-                Activo
-              </label>
-
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setOpenModal(false);
-                    setEditing(null);
-                    resetForm();
-                  }}
-                  className="rounded-xl border px-4 py-2.5 text-sm hover:bg-gray-50"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="submit"
-                  className="rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800"
-                >
-                  Guardar
-                </button>
-              </div>
-            </form>
+        <div className="flex items-center justify-between border-t bg-white px-6 py-3 text-sm text-gray-600">
+          <div>
+            Mostrando <span className="font-medium">{filtered.length === 0 ? 0 : start + 1}</span> a{" "}
+            <span className="font-medium">{Math.min(end, filtered.length)}</span> de{" "}
+            <span className="font-medium">{filtered.length}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage <= 1}
+              className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+            >
+              <ChevronLeft className="h-4 w-4" />
+              Anterior
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage >= totalPages}
+              className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Siguiente
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Modal */}
+      <Modal
+        open={openModal}
+        title={editing ? "Editar Conductor" : "Nuevo Conductor"}
+        onClose={() => setOpenModal(false)}
+        size="lg"
+      >
+        <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
+          {/* Row 1: Nombre */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              Nombre Completo <span className="text-rose-500">*</span>
+            </label>
+            <input
+              required
+              value={form.nombre}
+              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
+              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              placeholder="Ej. Juan Pérez"
+            />
+          </div>
+
+          {/* Row 2: DNI, Teléfono */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                DNI <span className="text-rose-500">*</span>
+              </label>
+              <input
+                required
+                maxLength={8}
+                value={form.dni}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    dni: e.target.value.replace(/\D/g, "").slice(0, 8),
+                  })
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                placeholder="8 dígitos"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Teléfono
+              </label>
+              <input
+                value={form.telefono}
+                onChange={(e) => setForm({ ...form, telefono: e.target.value })}
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                placeholder="Ej. 999 000 000"
+              />
+            </div>
+          </div>
+
+          {/* Row 3: Licencia (Select), Vence */}
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Licencia
+              </label>
+              <select
+                value={form.licencia}
+                onChange={(e) => setForm({ ...form, licencia: e.target.value })}
+                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              >
+                <option value="">Seleccione...</option>
+                <option value="A-I">A-I</option>
+                <option value="A-IIA">A-IIA</option>
+                <option value="A-IIB">A-IIB</option>
+                <option value="A-IIIA">A-IIIA</option>
+                <option value="A-IIIB">A-IIIB</option>
+                <option value="A-IIIC">A-IIIC</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Vencimiento Licencia
+              </label>
+              <input
+                type="date"
+                min={new Date().toISOString().split("T")[0]}
+                value={form.licenciaVence ?? ""}
+                onChange={(e) =>
+                  setForm({ ...form, licenciaVence: e.target.value || null })
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              />
+            </div>
+          </div>
+
+          {/* Row 4: Sede */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">Sede</label>
+            <select
+              value={form.sede}
+              onChange={(e) => setForm({ ...form, sede: e.target.value })}
+              className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+            >
+              <option value="">Seleccione...</option>
+              <option value="Trujillo">Trujillo</option>
+              <option value="Arequipa">Arequipa</option>
+            </select>
+          </div>
+
+          <div className="pt-2">
+            <Switch
+              checked={form.activo}
+              onChange={(val) => setForm({ ...form, activo: val })}
+              label="Conductor activo"
+            />
+          </div>
+
+          <div className="mt-4 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setOpenModal(false)}
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+            >
+              {editing ? "Guardar Cambios" : "Crear Conductor"}
+            </button>
+          </div>
+        </form>
+      </Modal>
     </div>
   );
 }

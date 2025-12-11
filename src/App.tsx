@@ -50,25 +50,17 @@ function ProtectedLayout() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
       {/* Top bar (móvil) */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b bg-white px-3 py-2 md:hidden">
+      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-100 bg-white px-3 py-2 md:hidden">
         <button
           type="button"
           aria-label="Abrir menú"
           onClick={() => setIsOpen(true)}
-          className="
-            inline-flex h-10 w-10 items-center justify-center
-            rounded-full
-            bg-transparent
-            border border-transparent
-            transition-colors
-            hover:border-gray-300 hover:bg-gray-50
-            active:bg-gray-100
-          "
+          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition-colors hover:bg-gray-100 active:bg-gray-200"
         >
-          <Menu className="h-5 w-5 text-gray-800" />
+          <Menu className="h-6 w-6" />
         </button>
 
-        <span className="font-semibold">Administración</span>
+        <span className="text-lg font-medium text-gray-700">Administración</span>
       </header>
 
       {/* Sidebar + contenido */}

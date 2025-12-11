@@ -10,6 +10,10 @@ import {
   ChevronRight,
   Loader2,
   RefreshCw,
+  CheckCircle2,
+  AlertTriangle,
+  XCircle,
+  AlertCircle,
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
 import { Modal } from "../../components/ui/Modal";
@@ -34,11 +38,12 @@ type Vehiculo = {
   traccion: "4x2" | "4x4";
   color: string;
   responsable: string;
+  dniResponsable: string; // NUEVO
   proveedor: string;
   revTecnica: string; // YYYY-MM-DD
   soat: string; // YYYY-MM-DD
   estado: EstadoVehiculoDB;
-  volante: VolanteTipo; // NUEVO
+  volante: VolanteTipo;
 };
 
 /* Mapas DB <-> UI */
@@ -50,6 +55,7 @@ const fromDb = (r: any): Vehiculo => ({
   traccion: r.traccion,
   color: r.color,
   responsable: r.responsable ?? "",
+  dniResponsable: r.dni_responsable ?? "",
   proveedor: r.proveedor ?? "",
   revTecnica: r.rev_tecnica,
   soat: r.soat,
@@ -69,6 +75,7 @@ const toDb = (v: Vehiculo) => ({
   traccion: v.traccion,
   color: v.color,
   responsable: v.responsable || null,
+  dni_responsable: v.dniResponsable || null,
   proveedor: v.proveedor || null,
   rev_tecnica: v.revTecnica,
   soat: v.soat,
@@ -93,12 +100,48 @@ function EstadoBadge({ estado }: { estado: EstadoVehiculoDB }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${
-        styles[estado] || "bg-gray-100 text-gray-700 ring-gray-200"
-      }`}
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${styles[estado] || "bg-gray-100 text-gray-700 ring-gray-200"
+        }`}
     >
       {estado}
     </span>
+  );
+}
+
+function FechaVencimiento({ dateStr }: { dateStr: string }) {
+  if (!dateStr) return <span className="text-gray-400">-</span>;
+
+  const today = new Date();
+  const target = new Date(dateStr);
+  const diffTime = target.getTime() - today.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+  // Lógica de alerta
+  // Vencido: < 0
+  // Por vencer: < 30 días
+  let colorClass = "text-gray-600";
+  let icon = null;
+
+  if (diffDays < 0) {
+    colorClass = "text-rose-600 font-bold";
+    icon = <AlertCircle className="mr-1 h-3 w-3" />;
+  } else if (diffDays < 30) {
+    colorClass = "text-amber-600 font-bold";
+    icon = <AlertTriangle className="mr-1 h-3 w-3" />;
+  }
+
+  // Formato compacto DD/MM/YY
+  const formatted = target.toLocaleDateString("es-PE", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "2-digit",
+  });
+
+  return (
+    <div className={`inline-flex items-center text-xs ${colorClass}`}>
+      {icon}
+      <span>{formatted}</span>
+    </div>
   );
 }
 
@@ -128,7 +171,7 @@ async function apiFetchVehiculos({
   if (q.trim()) {
     const term = q.trim();
     query = query.or(
-      `placa.ilike.%${term}%,marca.ilike.%${term}%,modelo.ilike.%${term}%,responsable.ilike.%${term}%,proveedor.ilike.%${term}%`
+      `placa.ilike.%${term}%,marca.ilike.%${term}%,modelo.ilike.%${term}%,responsable.ilike.%${term}%,dni_responsable.ilike.%${term}%,proveedor.ilike.%${term}%`
     );
   }
   if (estado !== "Todos") {
@@ -240,6 +283,7 @@ export default function Inventario() {
     traccion: "4x2",
     color: "",
     responsable: "",
+    dniResponsable: "",
     proveedor: "",
     revTecnica: "",
     soat: "",
@@ -378,6 +422,7 @@ export default function Inventario() {
       traccion: "4x2",
       color: "",
       responsable: "",
+      dniResponsable: "",
       proveedor: "",
       revTecnica: "",
       soat: "",
@@ -466,83 +511,107 @@ export default function Inventario() {
         </p>
       </div>
 
-      {/* KPIs (sin "En uso") */}
+      {/* KPIs Simplificados */}
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Disponibles</p>
-          <p className="mt-1 text-2xl font-semibold">{disponibles}</p>
+        {/* Disponibles */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Disponibles</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">
+                {disponibles}
+              </p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+              <CheckCircle2 className="h-5 w-5" />
+            </div>
+          </div>
         </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Mantenimiento</p>
-          <p className="mt-1 text-2xl font-semibold">{mantenimiento}</p>
+
+        {/* Mantenimiento */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">
+                Mantenimiento
+              </p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">
+                {mantenimiento}
+              </p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-amber-50 text-amber-600">
+              <AlertTriangle className="h-5 w-5" />
+            </div>
+          </div>
         </div>
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
-          <p className="text-sm text-gray-500">Inactivos</p>
-          <p className="mt-1 text-2xl font-semibold">{inactivos}</p>
+
+        {/* Inactivos */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Inactivos</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{inactivos}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+              <XCircle className="h-5 w-5" />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Filtros / Acciones */}
-      <div className="rounded-2xl border bg-white p-4 shadow-sm">
-        <div className="grid gap-3 lg:grid-cols-3">
-          <div className="lg:col-span-2">
-            <div className="relative">
-              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
-              <input
-                value={q}
-                onChange={(e) => setQ(e.target.value.toUpperCase())}
-                placeholder="Buscar por placa (6 alfanuméricos), marca, modelo, responsable o proveedor"
-                className="w-full rounded-xl border px-10 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
-              />
-            </div>
-          </div>
-
-          <div className="flex items-center justify-start lg:justify-end">
-            <div className="inline-flex rounded-xl border bg-gray-50 p-1">
-              {(
-                ["Todos", "Disponible", "Mantenimiento", "Inactivo"] as (
-                  | EstadoVehiculoUI
-                  | "Todos"
-                )[]
-              ).map((opt) => (
-                <button
-                  key={opt}
-                  type="button"
-                  onClick={() => setEstadoFiltro(opt)}
-                  className={`px-3 py-1.5 text-xs rounded-lg transition ${
-                    estadoFiltro === opt
-                      ? "bg-white shadow-sm border"
-                      : "text-gray-600"
-                  }`}
-                >
-                  {opt}
-                </button>
-              ))}
-            </div>
-          </div>
+      {/* Filtros / Acciones - Diseño Limpio */}
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="relative flex-1 max-w-lg">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value.toUpperCase())}
+            placeholder="Buscar vehículo..."
+            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
+          />
         </div>
 
-        <div className="mt-3 flex items-center justify-end">
+        <div className="flex flex-wrap items-center gap-3">
+          <div className="flex rounded-lg border border-gray-200 bg-white p-1">
+            {(
+              ["Todos", "Disponible", "Mantenimiento", "Inactivo"] as (
+                | EstadoVehiculoUI
+                | "Todos"
+              )[]
+            ).map((opt) => (
+              <button
+                key={opt}
+                type="button"
+                onClick={() => setEstadoFiltro(opt)}
+                className={`px-3 py-1.5 text-xs font-medium rounded-md transition-colors ${estadoFiltro === opt
+                  ? "bg-gray-100 text-gray-900"
+                  : "text-gray-500 hover:text-gray-700"
+                  }`}
+              >
+                {opt}
+              </button>
+            ))}
+          </div>
+
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white shadow-sm hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
           >
             <Plus className="h-4 w-4" />
-            Añadir camioneta
+            <span>Nuevo</span>
           </button>
         </div>
       </div>
 
       {/* Tabla */}
-      <section className="rounded-2xl border bg-white p-0 shadow-sm overflow-hidden">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
-            <thead className="bg-gray-50 text-xs uppercase text-gray-500">
+            <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <tr>
                 <th className="px-4 py-3">Placa</th>
-                <th className="px-4 py-3">Marca</th>
-                <th className="px-4 py-3">Modelo</th>
+                <th className="px-4 py-3">Marca / Modelo</th>
                 <th className="px-4 py-3">Tracción</th>
                 <th className="px-4 py-3">Volante</th>
                 <th className="px-4 py-3">Color</th>
@@ -554,14 +623,17 @@ export default function Inventario() {
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
-            <tbody className="divide-y bg-white">
+            <tbody className="divide-y divide-gray-100 bg-white">
               {loading && (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
-                    Cargando...
+                    <div className="flex items-center justify-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      Cargando inventario...
+                    </div>
                   </td>
                 </tr>
               )}
@@ -569,37 +641,63 @@ export default function Inventario() {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={12}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
-                    {errMsg ?? "Sin resultados."}
+                    {errMsg ?? "No se encontraron vehículos."}
                   </td>
                 </tr>
               )}
 
               {!loading &&
                 rows.map((v) => (
-                  <tr key={v.id} className="hover:bg-gray-50/60">
-                    <td className="px-4 py-3 font-medium">{v.placa}</td>
-                    <td className="px-4 py-3">{v.marca}</td>
-                    <td className="px-4 py-3">{v.modelo}</td>
-                    <td className="px-4 py-3">{v.traccion}</td>
+                  <tr
+                    key={v.id}
+                    className="group hover:bg-gray-50/80 transition-colors"
+                  >
                     <td className="px-4 py-3">
+                      <span className="font-bold text-gray-900 text-base">
+                        {v.placa}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-gray-800">
+                          {v.marca}
+                        </span>
+                        <span className="text-xs text-gray-500">{v.modelo}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{v.traccion}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">
                       {v.volante === "Si" ? "Sí" : "No"}
                     </td>
-                    <td className="px-4 py-3">{v.color}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">{v.color}</td>
                     <td className="px-4 py-3">
-                      {v.responsable || (
-                        <span className="text-gray-400">—</span>
+                      {v.responsable ? (
+                        <div className="flex flex-col">
+                          <span className="text-sm font-medium text-gray-900">
+                            {v.responsable}
+                          </span>
+                          {v.dniResponsable && (
+                            <span className="text-xs text-gray-400 font-mono">
+                              DNI: {v.dniResponsable}
+                            </span>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-gray-300 text-xs italic">- Sin asignar -</span>
                       )}
                     </td>
-                    <td className="px-4 py-3">
-                      {v.proveedor || (
-                        <span className="text-gray-400">—</span>
-                      )}
+                    <td className="px-4 py-3 text-gray-600 text-xs">
+                      {v.proveedor || <span className="text-gray-300">-</span>}
                     </td>
-                    <td className="px-4 py-3">{v.revTecnica}</td>
-                    <td className="px-4 py-3">{v.soat}</td>
+                    <td className="px-4 py-3">
+                      <FechaVencimiento dateStr={v.revTecnica} />
+                    </td>
+                    <td className="px-4 py-3">
+                      <FechaVencimiento dateStr={v.soat} />
+                    </td>
                     <td className="px-4 py-3">
                       <EstadoBadge estado={v.estado} />
                     </td>
@@ -679,7 +777,7 @@ export default function Inventario() {
             </button>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* Modal Editar */}
       <Modal
@@ -795,8 +893,23 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("responsable", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="Juan Pérez"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  DNI Responsable
+                </label>
+                <input
+                  value={editDraft.dniResponsable}
+                  maxLength={8}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                    handleEditChange("dniResponsable", val);
+                  }}
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  placeholder="12345678"
                 />
               </div>
               <div>
@@ -1052,8 +1165,23 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("responsable", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="Juan Pérez"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                DNI Responsable
+              </label>
+              <input
+                value={createDraft.dniResponsable}
+                maxLength={8}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                  handleCreateChange("dniResponsable", val);
+                }}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                placeholder="12345678"
               />
             </div>
             <div>

@@ -50,19 +50,19 @@ function ToastHost({
   onClose: (id: string) => void;
 }) {
   const color = (k: ToastKind = "success") =>
-    ({
-      success: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
-      info: "bg-blue-50 text-blue-800 ring-1 ring-blue-200",
-      warn: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
-      error: "bg-rose-50 text-rose-800 ring-1 ring-rose-200",
-    }[k]);
+  ({
+    success: "bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200",
+    info: "bg-blue-50 text-blue-800 ring-1 ring-blue-200",
+    warn: "bg-amber-50 text-amber-800 ring-1 ring-amber-200",
+    error: "bg-rose-50 text-rose-800 ring-1 ring-rose-200",
+  }[k]);
   const iconBg = (k: ToastKind = "success") =>
-    ({
-      success: "bg-emerald-500",
-      info: "bg-blue-500",
-      warn: "bg-amber-500",
-      error: "bg-rose-500",
-    }[k]);
+  ({
+    success: "bg-emerald-500",
+    info: "bg-blue-500",
+    warn: "bg-amber-500",
+    error: "bg-rose-500",
+  }[k]);
   return (
     <div className="pointer-events-none fixed right-4 top-4 z-[1000] flex w-[min(92vw,420px)] flex-col gap-3">
       {toasts.map((t) => (
@@ -346,9 +346,8 @@ export default function RegistrosIncidentes({
     setIncidentes(rows);
     pushToast({
       title: "Filtros aplicados",
-      message: `Rango ${uiDesde} a ${uiHasta}${
-        uiPlaca !== "Todas" ? ` · Placa ${uiPlaca}` : ""
-      }`,
+      message: `Rango ${uiDesde} a ${uiHasta}${uiPlaca !== "Todas" ? ` · Placa ${uiPlaca}` : ""
+        }`,
       kind: "info",
     });
   };
@@ -720,7 +719,7 @@ export default function RegistrosIncidentes({
       (e.currentTarget as HTMLDivElement).releasePointerCapture(
         e.pointerId
       );
-    } catch {}
+    } catch { }
   };
 
   /* -------- Exportar Excel con datos mostrados (dataFiltrada) -------- */
@@ -760,9 +759,8 @@ export default function RegistrosIncidentes({
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, sheet, "Incidentes");
 
-      const filename = `Incidentes_${fDesde}_a_${fHasta}${
-        fPlaca !== "Todas" ? `_placa_${fPlaca}` : ""
-      }${fSoloPendientes ? `_solo_pendientes` : ""}.xlsx`;
+      const filename = `Incidentes_${fDesde}_a_${fHasta}${fPlaca !== "Todas" ? `_placa_${fPlaca}` : ""
+        }${fSoloPendientes ? `_solo_pendientes` : ""}.xlsx`;
 
       XLSX.writeFile(workbook, filename);
       pushToast({
@@ -825,7 +823,7 @@ export default function RegistrosIncidentes({
       </div>
 
       {/* Filtros */}
-      <div className="rounded-2xl border bg-white px-6 py-4 shadow-sm">
+      <div className="rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
             <Filter className="h-4 w-4 text-gray-400" />
@@ -947,10 +945,10 @@ export default function RegistrosIncidentes({
 
       {/* Lista – scroll solo interno (x/y) */}
       <section
-        className="max-w-full rounded-2xl border bg-white shadow-sm"
+        className="max-w-full rounded-2xl border border-gray-100 bg-white shadow-sm"
         style={{ contain: "inline-size" }}
       >
-        <div className="border-b px-6 py-5">
+        <div className="border-b border-gray-100 px-6 py-5">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-gray-400" />
             <div>
@@ -975,7 +973,7 @@ export default function RegistrosIncidentes({
           onPointerLeave={endDrag}
           className="relative max-h-[72vh] overflow-y-auto overflow-x-auto overscroll-x-contain rounded-b-2xl cursor-grab"
         >
-          <table className="min-w-[1200px] w-full table-auto text-left text-sm">
+          <table className="w-full text-left text-sm">
             <thead className="sticky top-0 z-10 bg-white">
               <tr className="bg-gray-50 text-gray-600">
                 <th className="w-28 px-6 py-3 font-medium">Fecha</th>
@@ -1012,11 +1010,10 @@ export default function RegistrosIncidentes({
                 return (
                   <tr
                     key={g.id}
-                    className={`border-t ${
-                      i % 2 ? "bg-gray-50/40" : "bg-white"
-                    }`}
+                    className={`border-t border-gray-100 ${i % 2 ? "bg-gray-50/40" : "bg-white"
+                      }`}
                   >
-                    <td className="px-6 py-3 whitespace-nowrap">
+                    <td className="px-6 py-3">
                       <div className="inline-flex items-center gap-2">
                         <Calendar className="h-4 w-4 text-gray-400" />{" "}
                         {g.fecha}
@@ -1101,11 +1098,10 @@ export default function RegistrosIncidentes({
                         <button
                           type="button"
                           onClick={() => onAbrirCosto(g)}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            locked
-                              ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${locked
+                            ? "border-gray-100 text-gray-300 cursor-not-allowed"
+                            : "border-gray-200 hover:bg-gray-50"
+                            }`}
                           title="Agregar monto"
                           aria-label="Agregar monto"
                           disabled={locked}
@@ -1115,11 +1111,10 @@ export default function RegistrosIncidentes({
                         <button
                           type="button"
                           onClick={() => abrirEditar(g)}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            locked
-                              ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${locked
+                            ? "border-gray-100 text-gray-300 cursor-not-allowed"
+                            : "border-gray-200 hover:bg-gray-50"
+                            }`}
                           title="Editar"
                           aria-label="Editar"
                           disabled={locked}
@@ -1129,11 +1124,10 @@ export default function RegistrosIncidentes({
                         <button
                           type="button"
                           onClick={() => pedirConfirmNotificar(g)}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            g.estado === "Pendiente"
-                              ? "border-gray-200 hover:bg-gray-50"
-                              : "border-gray-100 text-gray-300 cursor-not-allowed"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${g.estado === "Pendiente"
+                            ? "border-gray-200 hover:bg-gray-50"
+                            : "border-gray-100 text-gray-300 cursor-not-allowed"
+                            }`}
                           title="Notificar"
                           aria-label="Notificar"
                           disabled={g.estado !== "Pendiente"}
@@ -1143,11 +1137,10 @@ export default function RegistrosIncidentes({
                         <button
                           type="button"
                           onClick={() => abrirFacturar(g)}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            canFacturar
-                              ? "border-gray-200 hover:bg-gray-50"
-                              : "border-gray-100 text-gray-300 cursor-not-allowed"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${canFacturar
+                            ? "border-gray-200 hover:bg-gray-50"
+                            : "border-gray-100 text-gray-300 cursor-not-allowed"
+                            }`}
                           title="Facturar"
                           aria-label="Facturar"
                           disabled={!canFacturar}
@@ -1159,11 +1152,10 @@ export default function RegistrosIncidentes({
                           onClick={() => {
                             if (!locked) setOpenDesestimar(g);
                           }}
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            locked
-                              ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${locked
+                            ? "border-gray-100 text-gray-300 cursor-not-allowed"
+                            : "border-gray-200 hover:bg-gray-50"
+                            }`}
                           title="Desestimar"
                           aria-label="Desestimar"
                           disabled={locked}
@@ -1175,11 +1167,10 @@ export default function RegistrosIncidentes({
                           onClick={() =>
                             eliminarIncidente(g.id, g.estado)
                           }
-                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${
-                            locked
-                              ? "border-gray-100 text-gray-300 cursor-not-allowed"
-                              : "border-gray-200 hover:bg-gray-50"
-                          }`}
+                          className={`inline-flex h-8 w-8 items-center justify-center rounded-lg border ${locked
+                            ? "border-gray-100 text-gray-300 cursor-not-allowed"
+                            : "border-gray-200 hover:bg-gray-50"
+                            }`}
                           title="Eliminar"
                           aria-label="Eliminar"
                           disabled={locked}
@@ -1187,6 +1178,7 @@ export default function RegistrosIncidentes({
                           <Trash2 className="h-4 w-4" />
                         </button>
                       </div>
+
                     </td>
                   </tr>
                 );
@@ -1206,74 +1198,52 @@ export default function RegistrosIncidentes({
               )}
             </tbody>
           </table>
+        </div>
 
-          {/* Paginación sticky dentro del área scrolleable */}
-          <div className="sticky bottom-0 z-10 border-t bg-white/95 px-6 py-3 text-sm backdrop-blur">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="text-gray-500">
-                Mostrando{" "}
-                <strong>{total === 0 ? 0 : startIdx + 1}</strong>–
-                <strong>{endIdx}</strong> de <strong>{total}</strong>
-              </div>
-              <div className="flex items-center gap-3">
-                <label className="text-gray-600">Filas:</label>
-                <select
-                  className="rounded-lg border border-gray-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200"
-                  value={pageSize}
-                  onChange={(e) => {
-                    setPageSize(Number(e.currentTarget.value));
-                    setPage(1);
-                  }}
-                >
-                  {[10, 25, 50, 100].map((n) => (
-                    <option key={n} value={n}>
-                      {n}
-                    </option>
-                  ))}
-                </select>
-                <div className="flex items-center gap-1">
+        {/* Paginación (fuera del scroll) */}
+        <div className="border-t border-gray-100 bg-white px-6 py-3 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="text-gray-500">
+              Mostrando{" "}
+              <strong>{total === 0 ? 0 : startIdx + 1}</strong>–
+              <strong>{endIdx}</strong> de <strong>{total}</strong>
+            </div>
+            <div className="flex items-center gap-3">
+              <label className="text-gray-600">Filas:</label>
+              <select
+                className="rounded-lg border border-gray-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200"
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.currentTarget.value));
+                  setPage(1);
+                }}
+              >
+                {[10, 25, 50, 100].map((n) => (
+                  <option key={n} value={n}>
+                    {n}
+                  </option>
+                ))}
+              </select>
+              <div className="flex items-center gap-2">
+                <span className="text-gray-600 text-sm">
+                  Página {pageSafe} de {totalPages}
+                </span>
+                <div className="flex items-center rounded-lg border bg-white shadow-sm">
                   <button
                     type="button"
-                    onClick={() => setPage(1)}
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
                     disabled={pageSafe === 1}
-                    className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 px-2 disabled:opacity-40"
-                    title="Primera"
+                    className="px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 border-r"
                   >
-                    «
+                    Anterior
                   </button>
                   <button
                     type="button"
-                    onClick={() =>
-                      setPage((p) => Math.max(1, p - 1))
-                    }
-                    disabled={pageSafe === 1}
-                    className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 px-2 disabled:opacity-40"
-                    title="Anterior"
-                  >
-                    ‹
-                  </button>
-                  <span className="px-2 text-gray-600">
-                    {pageSafe} / {totalPages}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setPage((p) => Math.min(totalPages, p + 1))
-                    }
+                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                     disabled={pageSafe === totalPages}
-                    className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 px-2 disabled:opacity-40"
-                    title="Siguiente"
+                    className="px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
                   >
-                    ›
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPage(totalPages)}
-                    disabled={pageSafe === totalPages}
-                    className="inline-flex h-8 min-w-8 items-center justify-center rounded-lg border border-gray-200 px-2 disabled:opacity-40"
-                    title="Última"
-                  >
-                    »
+                    Siguiente
                   </button>
                 </div>
               </div>
@@ -1283,47 +1253,242 @@ export default function RegistrosIncidentes({
       </section>
 
       {/* MODAL: Nuevo (con FECHA) */}
-      {openNew && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setOpenNew(false)}
-            aria-hidden
-          />
-          <div className="absolute inset-0 grid place-items-center p-4">
-            <div className="w-full max-w-3xl rounded-2xl border bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b px-5 py-4">
-                <h3 className="text-lg font-semibold">
-                  Nuevo incidente
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenNew(false)}
-                  className="rounded-lg p-1 hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
+      {
+        openNew && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setOpenNew(false)}
+              aria-hidden
+            />
+            <div className="absolute inset-0 grid place-items-center p-4">
+              <div className="w-full max-w-3xl rounded-2xl border bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                  <h3 className="text-lg font-semibold">
+                    Nuevo incidente
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenNew(false)}
+                    className="rounded-lg p-1 hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+
+                <div className="px-5 py-4">
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <AnimatedInput
+                      label="Fecha del incidente"
+                      type="date"
+                      value={inc.fecha}
+                      onChange={(e) =>
+                        setI("fecha", (e.target as HTMLInputElement).value)
+                      }
+                    />
+
+                    <AnimatedSelect
+                      label="Categoría"
+                      value={inc.categoria ?? ""}
+                      onChange={(e) =>
+                        setI(
+                          "categoria",
+                          ((e.target as HTMLSelectElement).value ||
+                            null) as any
+                        )
+                      }
+                    >
+                      <option value="">—</option>
+                      {CATEGORIAS.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </AnimatedSelect>
+                    <AnimatedSelect
+                      label="Criticidad"
+                      value={inc.criticidad ?? ""}
+                      onChange={(e) =>
+                        setI(
+                          "criticidad",
+                          ((e.target as HTMLSelectElement).value ||
+                            null) as any
+                        )
+                      }
+                    >
+                      <option value="">—</option>
+                      {CRITICIDADES.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                    </AnimatedSelect>
+
+                    <AnimatedSelect
+                      label="Tipo (base)"
+                      value={inc.tipo}
+                      onChange={(e) =>
+                        setI(
+                          "tipo",
+                          (e.target as HTMLSelectElement)
+                            .value as TipoIncidente
+                        )
+                      }
+                    >
+                      {TIPOS_BASE.map((t) => (
+                        <option key={t}>{t}</option>
+                      ))}
+                    </AnimatedSelect>
+                    <AnimatedSelect
+                      label="Sub tipo"
+                      value={inc.tipoActualizado ?? ""}
+                      onChange={(e) => {
+                        const v = (e.target as HTMLSelectElement)
+                          .value as any;
+                        setI("tipoActualizado", v);
+                        setI("subTipo", v || null);
+                      }}
+                    >
+                      <option value="">—</option>
+                      {SUB_TIPOS.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </AnimatedSelect>
+
+                    <AnimatedSelect
+                      label="Vehículo/Placa"
+                      value={inc.vehiculo}
+                      onChange={(e) =>
+                        setI("vehiculo", (e.target as HTMLSelectElement).value)
+                      }
+                    >
+                      <option value="" disabled hidden>
+                        Selecciona placa
+                      </option>
+                      {opcionesPlacas.map((p) => (
+                        <option key={p} value={p}>
+                          {p}
+                        </option>
+                      ))}
+                    </AnimatedSelect>
+                    <AnimatedInput
+                      label="Responsable"
+                      value={inc.responsable ?? ""}
+                      onChange={(e) =>
+                        setI(
+                          "responsable",
+                          (e.target as HTMLInputElement).value
+                        )
+                      }
+                      placeholder="Nombre o código"
+                    />
+
+                    <AnimatedInput
+                      label="Monto"
+                      type="number"
+                      inputMode="decimal"
+                      value={String(inc.monto ?? "")}
+                      onChange={(e) =>
+                        setI(
+                          "monto",
+                          (e.target as HTMLInputElement).value === ""
+                            ? null
+                            : Number(
+                              (e.target as HTMLInputElement).value
+                            )
+                        )
+                      }
+                      placeholder="0.00"
+                    />
+                    <AnimatedSelect
+                      label="Moneda"
+                      value={inc.moneda ?? "PEN"}
+                      onChange={(e) =>
+                        setI(
+                          "moneda",
+                          (e.target as HTMLSelectElement)
+                            .value as Moneda
+                        )
+                      }
+                    >
+                      {MONEDAS.map((m) => (
+                        <option key={m} value={m}>
+                          {m}
+                        </option>
+                      ))}
+                    </AnimatedSelect>
+
+                    <div className="sm:col-span-2">
+                      <AnimatedTextArea
+                        label="Descripción"
+                        rows={3}
+                        value={inc.descripcion ?? ""}
+                        onChange={(e) =>
+                          setI(
+                            "descripcion",
+                            (e.target as HTMLTextAreaElement).value
+                          )
+                        }
+                        placeholder="Detalle del incidente (opcional)"
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenNew(false)}
+                    className="btn-outline"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={guardarIncidente}
+                    className="btn-brand"
+                  >
+                    Guardar
+                  </button>
+                </div>
               </div>
+            </div>
+          </div>
+        )
+      }
 
-              <div className="px-5 py-4">
-                <div className="grid gap-4 sm:grid-cols-2">
-                  <AnimatedInput
-                    label="Fecha del incidente"
-                    type="date"
-                    value={inc.fecha}
-                    onChange={(e) =>
-                      setI("fecha", (e.target as HTMLInputElement).value)
-                    }
-                  />
-
+      {/* MODAL: Editar */}
+      {
+        openEdit && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setOpenEdit(null)}
+              aria-hidden
+            />
+            <div className="absolute inset-0 grid place-items-center p-4">
+              <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                  <h3 className="text-lg font-semibold">
+                    Editar registro
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenEdit(null)}
+                    className="rounded-lg p-1 hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
                   <AnimatedSelect
                     label="Categoría"
-                    value={inc.categoria ?? ""}
+                    value={eCat}
                     onChange={(e) =>
-                      setI(
-                        "categoria",
-                        ((e.target as HTMLSelectElement).value ||
-                          null) as any
+                      setECat(
+                        (e.target as HTMLSelectElement).value as any
                       )
                     }
                   >
@@ -1336,12 +1501,10 @@ export default function RegistrosIncidentes({
                   </AnimatedSelect>
                   <AnimatedSelect
                     label="Criticidad"
-                    value={inc.criticidad ?? ""}
+                    value={eCri}
                     onChange={(e) =>
-                      setI(
-                        "criticidad",
-                        ((e.target as HTMLSelectElement).value ||
-                          null) as any
+                      setECri(
+                        (e.target as HTMLSelectElement).value as any
                       )
                     }
                   >
@@ -1352,15 +1515,12 @@ export default function RegistrosIncidentes({
                       </option>
                     ))}
                   </AnimatedSelect>
-
                   <AnimatedSelect
                     label="Tipo (base)"
-                    value={inc.tipo}
+                    value={eTipo}
                     onChange={(e) =>
-                      setI(
-                        "tipo",
-                        (e.target as HTMLSelectElement)
-                          .value as TipoIncidente
+                      setETipo(
+                        (e.target as HTMLSelectElement).value as any
                       )
                     }
                   >
@@ -1370,13 +1530,12 @@ export default function RegistrosIncidentes({
                   </AnimatedSelect>
                   <AnimatedSelect
                     label="Sub tipo"
-                    value={inc.tipoActualizado ?? ""}
-                    onChange={(e) => {
-                      const v = (e.target as HTMLSelectElement)
-                        .value as any;
-                      setI("tipoActualizado", v);
-                      setI("subTipo", v || null);
-                    }}
+                    value={eSub}
+                    onChange={(e) =>
+                      setESub(
+                        (e.target as HTMLSelectElement).value as any
+                      )
+                    }
                   >
                     <option value="">—</option>
                     {SUB_TIPOS.map((t) => (
@@ -1385,17 +1544,15 @@ export default function RegistrosIncidentes({
                       </option>
                     ))}
                   </AnimatedSelect>
-
                   <AnimatedSelect
                     label="Vehículo/Placa"
-                    value={inc.vehiculo}
+                    value={eVehiculo}
                     onChange={(e) =>
-                      setI("vehiculo", (e.target as HTMLSelectElement).value)
+                      setEVehiculo(
+                        (e.target as HTMLSelectElement).value
+                      )
                     }
                   >
-                    <option value="" disabled hidden>
-                      Selecciona placa
-                    </option>
                     {opcionesPlacas.map((p) => (
                       <option key={p} value={p}>
                         {p}
@@ -1404,39 +1561,87 @@ export default function RegistrosIncidentes({
                   </AnimatedSelect>
                   <AnimatedInput
                     label="Responsable"
-                    value={inc.responsable ?? ""}
+                    value={eResp}
                     onChange={(e) =>
-                      setI(
-                        "responsable",
-                        (e.target as HTMLInputElement).value
-                      )
+                      setEResp((e.target as HTMLInputElement).value)
                     }
-                    placeholder="Nombre o código"
                   />
+                  <div className="sm:col-span-2">
+                    <AnimatedTextArea
+                      label="Descripción"
+                      rows={3}
+                      value={eDesc}
+                      onChange={(e) =>
+                        setEDesc(
+                          (e.target as HTMLTextAreaElement).value
+                        )
+                      }
+                    />
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenEdit(null)}
+                    className="btn-outline"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={guardarEdicion}
+                    className="btn-brand"
+                  >
+                    Guardar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )
+      }
 
+      {/* MODAL: Costo */}
+      {
+        openCosto && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setOpenCosto(null)}
+              aria-hidden
+            />
+            <div className="absolute inset-0 grid place-items-center p-4">
+              <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                  <h3 className="text-lg font-semibold">
+                    Asignar costo
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenCosto(null)}
+                    className="rounded-lg p-1 hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="grid gap-4 px-5 py-4">
                   <AnimatedInput
                     label="Monto"
                     type="number"
                     inputMode="decimal"
-                    value={String(inc.monto ?? "")}
+                    placeholder="0.00"
+                    value={montoTmp}
                     onChange={(e) =>
-                      setI(
-                        "monto",
-                        (e.target as HTMLInputElement).value === ""
-                          ? null
-                          : Number(
-                              (e.target as HTMLInputElement).value
-                            )
+                      setMontoTmp(
+                        (e.target as HTMLInputElement).value
                       )
                     }
-                    placeholder="0.00"
                   />
                   <AnimatedSelect
                     label="Moneda"
-                    value={inc.moneda ?? "PEN"}
+                    value={monedaTmp}
                     onChange={(e) =>
-                      setI(
-                        "moneda",
+                      setMonedaTmp(
                         (e.target as HTMLSelectElement)
                           .value as Moneda
                       )
@@ -1448,316 +1653,89 @@ export default function RegistrosIncidentes({
                       </option>
                     ))}
                   </AnimatedSelect>
-
-                  <div className="sm:col-span-2">
-                    <AnimatedTextArea
-                      label="Descripción"
-                      rows={3}
-                      value={inc.descripcion ?? ""}
-                      onChange={(e) =>
-                        setI(
-                          "descripcion",
-                          (e.target as HTMLTextAreaElement).value
-                        )
-                      }
-                      placeholder="Detalle del incidente (opcional)"
-                    />
-                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenCosto(null)}
+                    className="btn-outline"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={guardarCosto}
+                    className="btn-brand"
+                  >
+                    Guardar
+                  </button>
                 </div>
               </div>
-
-              <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => setOpenNew(false)}
-                  className="btn-outline"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={guardarIncidente}
-                  className="btn-brand"
-                >
-                  Guardar
-                </button>
-              </div>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* MODAL: Editar */}
-      {openEdit && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setOpenEdit(null)}
-            aria-hidden
-          />
-          <div className="absolute inset-0 grid place-items-center p-4">
-            <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b px-5 py-4">
-                <h3 className="text-lg font-semibold">
-                  Editar registro
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenEdit(null)}
-                  className="rounded-lg p-1 hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="grid gap-4 px-5 py-4 sm:grid-cols-2">
-                <AnimatedSelect
-                  label="Categoría"
-                  value={eCat}
-                  onChange={(e) =>
-                    setECat(
-                      (e.target as HTMLSelectElement).value as any
-                    )
-                  }
-                >
-                  <option value="">—</option>
-                  {CATEGORIAS.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </AnimatedSelect>
-                <AnimatedSelect
-                  label="Criticidad"
-                  value={eCri}
-                  onChange={(e) =>
-                    setECri(
-                      (e.target as HTMLSelectElement).value as any
-                    )
-                  }
-                >
-                  <option value="">—</option>
-                  {CRITICIDADES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
-                </AnimatedSelect>
-                <AnimatedSelect
-                  label="Tipo (base)"
-                  value={eTipo}
-                  onChange={(e) =>
-                    setETipo(
-                      (e.target as HTMLSelectElement).value as any
-                    )
-                  }
-                >
-                  {TIPOS_BASE.map((t) => (
-                    <option key={t}>{t}</option>
-                  ))}
-                </AnimatedSelect>
-                <AnimatedSelect
-                  label="Sub tipo"
-                  value={eSub}
-                  onChange={(e) =>
-                    setESub(
-                      (e.target as HTMLSelectElement).value as any
-                    )
-                  }
-                >
-                  <option value="">—</option>
-                  {SUB_TIPOS.map((t) => (
-                    <option key={t} value={t}>
-                      {t}
-                    </option>
-                  ))}
-                </AnimatedSelect>
-                <AnimatedSelect
-                  label="Vehículo/Placa"
-                  value={eVehiculo}
-                  onChange={(e) =>
-                    setEVehiculo(
-                      (e.target as HTMLSelectElement).value
-                    )
-                  }
-                >
-                  {opcionesPlacas.map((p) => (
-                    <option key={p} value={p}>
-                      {p}
-                    </option>
-                  ))}
-                </AnimatedSelect>
-                <AnimatedInput
-                  label="Responsable"
-                  value={eResp}
-                  onChange={(e) =>
-                    setEResp((e.target as HTMLInputElement).value)
-                  }
-                />
-                <div className="sm:col-span-2">
-                  <AnimatedTextArea
-                    label="Descripción"
-                    rows={3}
-                    value={eDesc}
-                    onChange={(e) =>
-                      setEDesc(
-                        (e.target as HTMLTextAreaElement).value
-                      )
-                    }
-                  />
-                </div>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => setOpenEdit(null)}
-                  className="btn-outline"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={guardarEdicion}
-                  className="btn-brand"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Costo */}
-      {openCosto && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setOpenCosto(null)}
-            aria-hidden
-          />
-          <div className="absolute inset-0 grid place-items-center p-4">
-            <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b px-5 py-4">
-                <h3 className="text-lg font-semibold">
-                  Asignar costo
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenCosto(null)}
-                  className="rounded-lg p-1 hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="grid gap-4 px-5 py-4">
-                <AnimatedInput
-                  label="Monto"
-                  type="number"
-                  inputMode="decimal"
-                  placeholder="0.00"
-                  value={montoTmp}
-                  onChange={(e) =>
-                    setMontoTmp(
-                      (e.target as HTMLInputElement).value
-                    )
-                  }
-                />
-                <AnimatedSelect
-                  label="Moneda"
-                  value={monedaTmp}
-                  onChange={(e) =>
-                    setMonedaTmp(
-                      (e.target as HTMLSelectElement)
-                        .value as Moneda
-                    )
-                  }
-                >
-                  {MONEDAS.map((m) => (
-                    <option key={m} value={m}>
-                      {m}
-                    </option>
-                  ))}
-                </AnimatedSelect>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => setOpenCosto(null)}
-                  className="btn-outline"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={guardarCosto}
-                  className="btn-brand"
-                >
-                  Guardar
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+        )
+      }
 
       {/* MODAL: Facturar */}
-      {openFacturar && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setOpenFacturar(null)}
-            aria-hidden
-          />
-          <div className="absolute inset-0 grid place-items-center p-4">
-            <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b px-5 py-4">
-                <h3 className="text-lg font-semibold">
-                  Facturar caso
-                </h3>
-                <button
-                  type="button"
-                  onClick={() => setOpenFacturar(null)}
-                  className="rounded-lg p-1 hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-              <div className="grid gap-4 px-5 py-4">
-                <AnimatedInput
-                  label="N° de factura"
-                  value={nroFacturaTmp}
-                  onChange={(e) =>
-                    setNroFacturaTmp(
-                      (e.target as HTMLInputElement).value
-                    )
-                  }
-                  placeholder="F001-000123"
-                />
-                <p className="text-xs text-gray-500">
-                  Requiere <strong>responsable</strong> y{" "}
-                  <strong>monto</strong> asignados.
-                </p>
-              </div>
-              <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
-                <button
-                  type="button"
-                  onClick={() => setOpenFacturar(null)}
-                  className="btn-outline"
-                >
-                  Cancelar
-                </button>
-                <button
-                  type="button"
-                  onClick={facturar}
-                  className="btn-brand"
-                >
-                  Facturar
-                </button>
+      {
+        openFacturar && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setOpenFacturar(null)}
+              aria-hidden
+            />
+            <div className="absolute inset-0 grid place-items-center p-4">
+              <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b px-5 py-4">
+                  <h3 className="text-lg font-semibold">
+                    Facturar caso
+                  </h3>
+                  <button
+                    type="button"
+                    onClick={() => setOpenFacturar(null)}
+                    className="rounded-lg p-1 hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="grid gap-4 px-5 py-4">
+                  <AnimatedInput
+                    label="N° de factura"
+                    value={nroFacturaTmp}
+                    onChange={(e) =>
+                      setNroFacturaTmp(
+                        (e.target as HTMLInputElement).value
+                      )
+                    }
+                    placeholder="F001-000123"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Requiere <strong>responsable</strong> y{" "}
+                    <strong>monto</strong> asignados.
+                  </p>
+                </div>
+                <div className="flex items-center justify-end gap-2 border-t px-5 py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenFacturar(null)}
+                    className="btn-outline"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={facturar}
+                    className="btn-brand"
+                  >
+                    Facturar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* CONFIRM: Desestimar */}
       <ConfirmDialog
@@ -1778,6 +1756,6 @@ export default function RegistrosIncidentes({
         onConfirm={confirmarNotificar}
         confirmText="Sí, notificar"
       />
-    </div>
+    </div >
   );
 }

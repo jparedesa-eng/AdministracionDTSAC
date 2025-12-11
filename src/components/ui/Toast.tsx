@@ -24,43 +24,56 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
   if (!toast) return null;
 
   let Icon = Info;
-  let bg = "bg-slate-900";
-  let border = "border-slate-700";
-  let text = "text-white";
+  // Estilos base "surface" (fondo blanco, borde sutil)
+  let containerClass = "bg-white border ring-1 shadow-lg";
+  let iconClass = "text-gray-500";
+  let textClass = "text-gray-700";
 
   switch (toast.type) {
     case "success":
       Icon = CheckCircle2;
-      bg = "bg-emerald-600";
-      border = "border-emerald-500";
+      containerClass = "bg-white border-emerald-100 ring-emerald-500/10";
+      iconClass = "text-emerald-500 effect-shine"; // Opción de efecto
+      textClass = "text-gray-800";
       break;
     case "error":
       Icon = AlertTriangle;
-      bg = "bg-rose-600";
-      border = "border-rose-500";
+      containerClass = "bg-white border-rose-100 ring-rose-500/10";
+      iconClass = "text-rose-500";
+      textClass = "text-gray-800";
       break;
     case "info":
     default:
       Icon = Info;
-      bg = "bg-slate-900";
-      border = "border-slate-700";
+      containerClass = "bg-white border-gray-100 ring-gray-900/5";
+      iconClass = "text-gray-500";
+      textClass = "text-gray-800";
       break;
   }
 
   return (
-    <div className="pointer-events-none fixed inset-0 z-50 flex items-start justify-end px-4 py-6 sm:items-start">
+    <div className="pointer-events-none fixed inset-0 z-[60] flex items-start justify-end px-4 py-6 sm:items-start">
       <div className="flex w-full max-w-sm transform flex-col items-end space-y-4">
         <div
-          className={`pointer-events-auto flex w-full items-center gap-3 rounded-2xl border ${border} ${bg} px-4 py-3 shadow-lg`}
+          className={`pointer-events-auto flex w-full items-center gap-3 rounded-xl px-4 py-3 ${containerClass}`}
         >
-          <Icon className={`h-5 w-5 ${text}`} />
-          <p className={`flex-1 text-sm ${text}`}>{toast.message}</p>
+          <Icon className={`h-5 w-5 ${iconClass}`} />
+          <p className={`flex-1 text-sm font-medium ${textClass}`}>{toast.message}</p>
           <button
             type="button"
             onClick={onClose}
-            className="ml-2 text-sm font-medium text-white/80 hover:text-white"
+            className="ml-2 rounded-md p-1 text-gray-400 hover:bg-gray-50 hover:text-gray-600 focus:outline-none focus:ring-2 focus:ring-gray-300"
           >
-            Cerrar
+            <span className="sr-only">Cerrar</span>
+            <svg
+              className="h-4 w-4"
+              fill="none"
+              viewBox="0 0 24 24"
+              strokeWidth="2"
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
           </button>
         </div>
       </div>

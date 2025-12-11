@@ -59,6 +59,8 @@ type ChecklistRow = {
 
   // Ítems embebidos (JSONB)
   grupos?: any;
+  tipo?: "entrega" | "regular";
+  codigo?: string; // Editado a string
 };
 
 type ChecklistItemRow = {
@@ -163,7 +165,9 @@ function useSignaturePad(open: boolean) {
 
     const setupSize = () => {
       const width = w.clientWidth || 400;
-      const height = 180;
+      // Ajuste de altura dinámica (más alto en mobile si se desea, pero el usuario pidió más grande)
+      // Vamos a usar una altura mayor por defecto para mejorar la experiencia en móvil
+      const height = window.innerWidth < 640 ? 300 : 200; // Más alto en móvil
 
       c.width = width;
       c.height = height;
@@ -266,7 +270,7 @@ function useSignaturePad(open: boolean) {
 }
 
 /* =============== Constantes =============== */
-const PAGE_SIZE = 10;
+
 
 /* =============== Utilidades =============== */
 function formatFechaHoraLocal(valor?: string | null, fallback?: string): string {
@@ -287,10 +291,10 @@ function normalizeGruposFromRow(row: ChecklistRow): Grupo[] | null {
       titulo: String(g.title ?? g.titulo ?? "OTROS"),
       items: Array.isArray(g.items)
         ? g.items.map((it: any) => ({
-            name: String(it.name ?? ""),
-            ok: Boolean(it.ok),
-            ...(it.ok ? {} : { nota: it.nota ? String(it.nota) : "" }),
-          }))
+          name: String(it.name ?? ""),
+          ok: Boolean(it.ok),
+          ...(it.ok ? {} : { nota: it.nota ? String(it.nota) : "" }),
+        }))
         : [],
     }));
     return grupos;
@@ -326,17 +330,20 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
       />
       <div>
         <div style="font-weight:700; font-size:20px; letter-spacing:0.03em; text-transform:uppercase;">
-          Checklist de entrega de vehículo
+          Checklist del vehículo
         </div>
         <div style="color:#6B7280; font-size:11px; margin-top:2px;">
           Registro de inspección de unidad
         </div>
         <div style="color:#9CA3AF; font-size:10px; margin-top:4px;">
-          ID: ${row.id}
+          N°: ${row.codigo ?? row.id.slice(0, 8)}
         </div>
       </div>
     </div>
     <div style="text-align:right; font-size:11px; color:#6B7280;">
+      <div style="color:#4A5159; font-size:10px; margin-top:4px;">
+        ${row.tipo ? row.tipo.toUpperCase() : "REGULAR"}
+      </div>
       <div style="font-weight:600;">${row.placa ?? ""}</div>
       <div>${new Date(row.created_at).toLocaleString()}</div>
     </div>
@@ -359,19 +366,18 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
   <div style="font-size:13px; font-weight:700; margin: 12px 0 6px;">Firma de usuario</div>
   <div style="border:1px solid #E5E7EB; border-radius:10px; padding:10px;">
     <div style="border:1px dashed #D1D5DB; border-radius:10px; padding:10px; text-align:center; min-height:80px; display:flex; align-items:center; justify-content:center;">
-      ${
-        firma
-          ? `<img src="${firma}" alt="Firma" style="height:70px;" />`
-          : `<span style="color:#9CA3AF; font-size:12px;">Sin firma registrada</span>`
-      }
+      ${firma
+      ? `<img src="${firma}" alt="Firma" style="height:70px;" />`
+      : `<span style="color:#9CA3AF; font-size:12px;">Sin firma registrada</span>`
+    }
     </div>
   </div>
 
   <!-- Ítems del vehículo -->
   <div style="font-size:14px; font-weight:700; margin: 18px 0 8px;">Ítems del vehículo</div>
   ${grupos
-    .map(
-      (g) => `
+      .map(
+        (g) => `
       <div style="border:1px solid #E5E7EB; border-radius:12px; margin-bottom:10px; overflow:hidden;">
         <div style="background:#F9FAFB; padding:8px 10px; font-weight:700; font-size:12px; border-bottom:1px solid #E5E7EB;">
           ${g.titulo}
@@ -380,31 +386,27 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
           ${g.items
             .map(
               (it) => `
-              <div style="border:1px solid ${
-                it.ok ? "#6EE7B7" : "#FCA5A5"
-              }; border-radius:8px; padding:8px; font-size:12px; display:flex; justify-content:space-between; align-items:flex-start; background:${
-                it.ok ? "#ECFDF5" : "#FEF2F2"
-              };">
+              <div style="border:1px solid ${it.ok ? "#6EE7B7" : "#FCA5A5"
+                }; border-radius:8px; padding:8px; font-size:12px; display:flex; justify-content:space-between; align-items:flex-start; background:${it.ok ? "#ECFDF5" : "#FEF2F2"
+                };">
                 <div style="max-width:55%;">
                   ${it.name}
                 </div>
                 <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; max-width:45%;">
-                  <span style="font-weight:700; font-size:11px; ${
-                    it.ok ? "color:#15803D" : "color:#B91C1C"
-                  }">${it.ok ? "OK" : "NO"}</span>
-                  ${
-                    !it.ok && it.nota
-                      ? `<span style="color:#6B7280; font-size:11px; text-align:right;">${it.nota}</span>`
-                      : ""
-                  }
+                  <span style="font-weight:700; font-size:11px; ${it.ok ? "color:#15803D" : "color:#B91C1C"
+                }">${it.ok ? "OK" : "NO"}</span>
+                  ${!it.ok && it.nota
+                  ? `<span style="color:#6B7280; font-size:11px; text-align:right;">${it.nota}</span>`
+                  : ""
+                }
                 </div>
               </div>`
             )
             .join("")}
         </div>
       </div>`
-    )
-    .join("")}
+      )
+      .join("")}
 
   <!-- Observaciones -->
   <div style="font-size:14px; font-weight:700; margin: 18px 0 8px;">Observaciones generales</div>
@@ -498,12 +500,15 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   const { profile } = useAuth();
   const sig = useSignaturePad(open);
 
+  const [tipo, setTipo] = React.useState<"entrega" | "regular">("regular"); // NUEVO ESTADO
+
   const [fecha, setFecha] = React.useState<string>(
     new Date().toISOString().slice(0, 16)
   );
   const [sede, setSede] = React.useState("Trujillo");
   const [placa, setPlaca] = React.useState("");
   const [km, setKm] = React.useState<string>("");
+  const [lastKm, setLastKm] = React.useState<number | null>(null); // Nuevo estado para validación
   const [responsable, setResponsable] = React.useState("");
   const [uDni, setUDni] = React.useState("");
   const [uNombre, setUNombre] = React.useState("");
@@ -584,9 +589,9 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         idx !== gi
           ? g
           : {
-              ...g,
-              items: g.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)),
-            }
+            ...g,
+            items: g.items.map((it, j) => (j === ii ? { ...it, ...patch } : it)),
+          }
       )
     );
   };
@@ -597,16 +602,158 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         idx !== gi
           ? g
           : {
-              ...g,
-              items: g.items.map((it) => ({
-                ...it,
-                ok,
-                nota: ok ? undefined : it.nota,
-              })),
-            }
+            ...g,
+            items: g.items.map((it) => ({
+              ...it,
+              ok,
+              nota: ok ? undefined : it.nota,
+            })),
+          }
       )
     );
   };
+
+  // Filtrar ítems de OTROS según el último checklist (checklist de entrega)
+  // Filtrar ítems de OTROS según el último checklist (checklist de entrega)
+  React.useEffect(() => {
+    // Si es tipo ENTREGA, mostramos TODOS los items siempre (para definir el inventario)
+    if (tipo === "entrega") {
+      setGrupos(
+        GRUPOS.map((g) => ({
+          title: g.title,
+          items: g.items.map((i) => ({ ...i })),
+        }))
+      );
+      return;
+    }
+
+    // Si es REGULAR, aplicamos el filtro basado en la última entrega
+    // Si no hay placa, restauramos los grupos originales
+    if (!placa) {
+      setGrupos(
+        GRUPOS.map((g) => ({
+          title: g.title,
+          items: g.items.map((i) => ({ ...i })),
+        }))
+      );
+      return;
+    }
+
+    let active = true;
+    (async () => {
+      try {
+        // Buscar el último checklist DE ENTREGA de esta placa
+        const { data, error } = await supabase
+          .from("checklists")
+          .select("grupos")
+          .eq("placa", placa)
+          .eq("tipo", "entrega") // SOLO CHECKLISTS DE ENTREGA
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (!active) return;
+        if (error) {
+          console.error("Error buscando checklist de entrega anterior:", error);
+          return;
+        }
+
+        // Si no existe checklist de entrega previo, mostramos todo (fallback)
+        if (!data || !data.grupos) {
+          setGrupos(
+            GRUPOS.map((g) => ({
+              title: g.title,
+              items: g.items.map((i) => ({ ...i })),
+            }))
+          );
+          return;
+        }
+
+        // Si existe, filtramos el grupo "OTROS"
+        const prevGrupos = Array.isArray(data.grupos) ? (data.grupos as any[]) : [];
+        const prevOtros = prevGrupos.find(
+          (pg) => String(pg.title || pg.titulo) === "OTROS"
+        );
+
+        if (!prevOtros || !Array.isArray(prevOtros.items)) {
+          return;
+        }
+
+        // Obtenemos los nombres de ítems que NO fueron marcados como "NO ENTREGADO"
+        const allowedItems = new Set<string>();
+        prevOtros.items.forEach((it: any) => {
+          const esNoCuenta = !it.ok && (it.nota === "NO CUENTA" || it.nota === "NO ENTREGADO");
+          if (!esNoCuenta) {
+            allowedItems.add(String(it.name));
+          }
+        });
+
+        // Actualizamos el estado
+        setGrupos((currentGrupos) => {
+          return currentGrupos.map((g) => {
+            if (g.title === "OTROS") {
+              const baseItems = GRUPOS.find((x) => x.title === "OTROS")?.items || [];
+              const newItems = baseItems
+                .filter((baseItem) => allowedItems.has(baseItem.name))
+                .map((baseItem) => ({ ...baseItem }));
+
+              return {
+                ...g,
+                items: newItems,
+              };
+            }
+            const baseG = GRUPOS.find((x) => x.title === g.title);
+            if (baseG) {
+              return {
+                title: baseG.title,
+                items: baseG.items.map(i => ({ ...i }))
+              };
+            }
+            return g;
+          });
+        });
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+
+    return () => {
+      active = false;
+    };
+  }, [placa, tipo]);
+
+  // Nuevo efecto para obtener el último kilometraje
+  React.useEffect(() => {
+    if (!placa) {
+      setLastKm(null);
+      return;
+    }
+
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("checklists")
+          .select("kilometraje")
+          .eq("placa", placa)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (error) {
+          console.error("Error fetching last km:", error);
+          return;
+        }
+
+        if (data && data.kilometraje) {
+          setLastKm(data.kilometraje);
+        } else {
+          setLastKm(null);
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+  }, [placa]);
 
   const aprobado = React.useMemo(
     () => grupos.every((g) => g.items.every((it) => it.ok)),
@@ -662,6 +809,16 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
       return;
     }
 
+    const valKm = km ? Number(km) : 0;
+    if (valKm < 0) {
+      alert("El kilometraje no puede ser negativo.");
+      return;
+    }
+    if (lastKm !== null && valKm < lastKm) {
+      alert(`El kilometraje ingresado (${valKm}) no puede ser menor al último registrado (${lastKm}).`);
+      return;
+    }
+
     try {
       setSaving(true);
       const firma = sig.toDataURL();
@@ -670,13 +827,14 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         placa: placa.trim().toUpperCase(),
         fecha,
         sede: sede || null,
-        kilometraje: km ? Number(km) : null,
+        kilometraje: valKm || null,
         responsable_inspeccion: responsable.trim(),
         usuario_dni: uDni.trim(),
         usuario_nombre: uNombre.trim(),
         firma_base64: firma,
         grupos,
         aprobado,
+        tipo, // Enviamos el tipo
       });
 
       await onSaved();
@@ -729,8 +887,8 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                   <input
                     type="datetime-local"
                     value={fecha}
-                    onChange={(e) => setFecha(e.target.value)}
-                    className="w-full rounded-xl border px-10 py-2.5 text-sm shadow-sm outline-none"
+                    readOnly
+                    className="w-full rounded-xl border px-10 py-2.5 text-sm shadow-sm outline-none bg-gray-100 text-gray-500 cursor-not-allowed"
                   />
                 </div>
               </div>
@@ -747,68 +905,94 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                 </select>
               </div>
 
+              <div className="grid gap-1">
+                <label className="text-sm font-medium">Tipo de Checklist</label>
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setTipo("regular")}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${tipo === "regular"
+                      ? "bg-gray-900 text-white border-gray-900"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                      }`}
+                  >
+                    Regular / Diario
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTipo("entrega")}
+                    className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${tipo === "entrega"
+                      ? "bg-emerald-600 text-white border-emerald-600"
+                      : "bg-white text-gray-700 hover:bg-gray-50"
+                      }`}
+                  >
+                    Entrega
+                  </button>
+                </div>
+              </div>
+
               {/* Combobox de placa */}
-              <div className="grid gap-1" ref={placaRef}>
+              <div className="relative grid gap-1" ref={placaRef}>
                 <label className="text-sm font-medium">Placa</label>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPlacaOpen((o) => !o);
-                    setPlacaSearch("");
-                  }}
-                  className="flex w-full items-center justify-between rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none hover:border-gray-400"
-                >
-                  <span className={placa ? "text-gray-900" : "text-gray-400"}>
-                    {placa || "Selecciona placa"}
-                  </span>
-                  <ChevronDown className="h-4 w-4 text-gray-500" />
-                </button>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={placa}
+                    onChange={(e) => {
+                      setPlaca(e.target.value.toUpperCase());
+                      setPlacaSearch(e.target.value);
+                      setPlacaOpen(true);
+                    }}
+                    onFocus={() => {
+                      setPlacaSearch(placa);
+                      setPlacaOpen(true);
+                    }}
+                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none focus:ring-1 focus:ring-gray-300 placeholder:text-gray-400"
+                    placeholder="Buscar placa..."
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                    <ChevronDown className="h-4 w-4 text-gray-400" />
+                  </div>
+                </div>
 
                 {placaOpen && (
-                  <div className="absolute z-50 mt-1 w-[min(18rem,calc(100%-2.5rem))] rounded-xl border bg-white shadow-lg sm:w-64">
-                    <div className="border-b px-3 py-2">
-                      <input
-                        autoFocus
-                        value={placaSearch}
-                        onChange={(e) => setPlacaSearch(e.target.value)}
-                        placeholder="Buscar placa..."
-                        className="w-full rounded-lg border px-2 py-1 text-xs outline-none placeholder:text-gray-400"
-                      />
-                    </div>
-                    <div className="max-h-60 overflow-y-auto py-1 text-sm">
-                      {filteredPlacas.length === 0 && (
-                        <div className="px-3 py-2 text-xs text-gray-400">
-                          Sin resultados
-                        </div>
-                      )}
-                      {filteredPlacas.map((p) => (
-                        <button
-                          key={p}
-                          type="button"
-                          onClick={() => {
-                            setPlaca(p);
-                            setPlacaOpen(false);
-                          }}
-                          className={`flex w-full items-center justify-between px-3 py-1.5 text-left hover:bg-gray-50 ${
-                            p === placa ? "bg-gray-100 font-medium" : ""
+                  <div className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg overflow-hidden max-h-60 overflow-y-auto top-full">
+                    {filteredPlacas.length === 0 && (
+                      <div className="px-3 py-2 text-xs text-gray-400">
+                        Sin resultados
+                      </div>
+                    )}
+                    {filteredPlacas.map((p) => (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          setPlaca(p);
+                          setPlacaSearch(p);
+                          setPlacaOpen(false);
+                        }}
+                        className={`flex w-full items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${p === placa ? "bg-gray-100 font-medium" : ""
                           }`}
-                        >
-                          <span>{p}</span>
-                          {p === placa && (
-                            <span className="text-[10px] text-gray-500">
-                              seleccionado
-                            </span>
-                          )}
-                        </button>
-                      ))}
-                    </div>
+                      >
+                        <span>{p}</span>
+                        {p === placa && (
+                          <span className="text-[10px] text-gray-500">
+                            seleccionado
+                          </span>
+                        )}
+                      </button>
+                    ))}
                   </div>
                 )}
               </div>
 
               <div className="grid gap-1">
-                <label className="text-sm font-medium">Kilometraje</label>
+                <label className="text-sm font-medium">
+                  Kilometraje
+                  {lastKm !== null && <span className="ml-1 text-xs font-normal text-gray-500">(Último: {lastKm})</span>}
+                </label>
                 <input
+                  type="number"
                   value={km}
                   onChange={(e) => setKm(e.target.value)}
                   className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
@@ -875,7 +1059,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                     onTouchMove={sig.move}
                     onTouchEnd={sig.end}
                     className="block w-full touch-none select-none"
-                    style={{ height: 180 }}
+                  // style={{ height: 180 }} // Height handled in hook logic now
                   />
                 </div>
               </div>
@@ -909,40 +1093,80 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                     {g.items.map((it, ii) => (
                       <div
                         key={it.name}
-                        className={`rounded-lg border p-3 transition ${
-                          it.ok
-                            ? "border-emerald-300 bg-emerald-50"
-                            : "border-rose-300 bg-rose-50"
-                        }`}
+                        className={`rounded-lg border p-3 transition ${it.ok
+                          ? "border-emerald-300 bg-emerald-50"
+                          : "border-rose-300 bg-rose-50"
+                          }`}
                       >
                         <div className="flex items-center justify-between gap-3">
                           <span className="text-sm">{it.name}</span>
-                          <div className="flex items-center gap-2">
-                            <span
-                              className={`text-xs font-semibold ${
-                                it.ok ? "text-emerald-700" : "text-rose-700"
-                              }`}
-                            >
-                              {it.ok ? "OK" : "NO"}
-                            </span>
-                            <label className="relative inline-flex cursor-pointer items-center select-none">
-                              <input
-                                type="checkbox"
-                                className="peer sr-only"
-                                checked={it.ok}
-                                onChange={(e) =>
-                                  setItem(gi, ii, {
-                                    ok: (e.target as HTMLInputElement).checked,
-                                    ...((e.target as HTMLInputElement).checked
-                                      ? { nota: undefined }
-                                      : {}),
-                                  })
+                          {/* Renderizado condicional según tipo */}
+                          {tipo === "entrega" && g.title === "OTROS" ? (
+                            <div className="flex gap-2">
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setItem(gi, ii, { ok: true, nota: undefined })
                                 }
-                              />
-                              <div className="h-5 w-9 rounded-full bg-rose-200 transition peer-checked:bg-emerald-500" />
-                              <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                            </label>
-                          </div>
+                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${it.ok
+                                  ? "bg-emerald-600 text-white"
+                                  : "bg-white text-gray-500 border hover:bg-gray-50"
+                                  }`}
+                              >
+                                OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setItem(gi, ii, { ok: false, nota: "Malo" })
+                                }
+                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${!it.ok && it.nota !== "NO ENTREGADO" && it.nota !== "NO CUENTA"
+                                  ? "bg-rose-600 text-white"
+                                  : "bg-white text-gray-500 border hover:bg-gray-50"
+                                  }`}
+                              >
+                                NO OK
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() =>
+                                  setItem(gi, ii, { ok: false, nota: "NO ENTREGADO" })
+                                }
+                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${!it.ok && it.nota === "NO ENTREGADO"
+                                  ? "bg-gray-600 text-white"
+                                  : "bg-white text-gray-500 border hover:bg-gray-50"
+                                  }`}
+                              >
+                                NO ENTREGADO
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-2">
+                              <span
+                                className={`text-xs font-semibold ${it.ok ? "text-emerald-700" : "text-rose-700"
+                                  }`}
+                              >
+                                {it.ok ? "OK" : "NO"}
+                              </span>
+                              <label className="relative inline-flex cursor-pointer items-center select-none">
+                                <input
+                                  type="checkbox"
+                                  className="peer sr-only"
+                                  checked={it.ok}
+                                  onChange={(e) =>
+                                    setItem(gi, ii, {
+                                      ok: (e.target as HTMLInputElement).checked,
+                                      ...((e.target as HTMLInputElement).checked
+                                        ? { nota: undefined }
+                                        : {}),
+                                    })
+                                  }
+                                />
+                                <div className="h-5 w-9 rounded-full bg-rose-200 transition peer-checked:bg-emerald-500" />
+                                <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
+                              </label>
+                            </div>
+                          )}
                         </div>
 
                         {!it.ok && (
@@ -980,7 +1204,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
               type="button"
               onClick={guardar}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
             >
               <CheckCircle className="h-4 w-4" />
               {saving ? "Guardando..." : "Guardar checklist"}
@@ -997,6 +1221,7 @@ export default function RegistrosChecklist() {
   const [rows, setRows] = React.useState<ChecklistRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
+  const [pageSize, setPageSize] = React.useState(10);
   const [loading, setLoading] = React.useState(false);
 
   const today = new Date().toISOString().slice(0, 10);
@@ -1005,6 +1230,7 @@ export default function RegistrosChecklist() {
 
   const [placasInventario, setPlacasInventario] = React.useState<string[]>([]);
   const [placaFilter, setPlacaFilter] = React.useState<string>("");
+  const [tipoFilter, setTipoFilter] = React.useState<string>(""); // NUEVO FILTRO
 
   const [exportingExcel, setExportingExcel] = React.useState(false);
 
@@ -1015,7 +1241,7 @@ export default function RegistrosChecklist() {
 
   const [openCreate, setOpenCreate] = React.useState(false);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const canPrev = page > 1;
   const canNext = page < totalPages;
 
@@ -1043,8 +1269,8 @@ export default function RegistrosChecklist() {
         const usePage = opts?.page ?? page;
         const fromISO = new Date(`${fromDate}T00:00:00`).toISOString();
         const toISO = new Date(`${toDate}T23:59:59`).toISOString();
-        const from = (usePage - 1) * PAGE_SIZE;
-        const to = from + PAGE_SIZE - 1;
+        const from = (usePage - 1) * pageSize;
+        const to = from + pageSize - 1;
 
         let query = supabase
           .from("checklists")
@@ -1055,6 +1281,9 @@ export default function RegistrosChecklist() {
 
         if (placaFilter) {
           query = query.eq("placa", placaFilter);
+        }
+        if (tipoFilter) {
+          query = query.eq("tipo", tipoFilter);
         }
 
         const { data, error, count } = await query.range(from, to);
@@ -1068,7 +1297,7 @@ export default function RegistrosChecklist() {
         if (!opts?.silent) setLoading(false);
       }
     },
-    [fromDate, toDate, page, placaFilter]
+    [fromDate, toDate, page, pageSize, placaFilter, tipoFilter]
   );
 
   React.useEffect(() => {
@@ -1079,7 +1308,7 @@ export default function RegistrosChecklist() {
   React.useEffect(() => {
     fetchChecklists({ silent: false });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [page]);
+  }, [page, pageSize]);
 
   const exportExcel = async () => {
     try {
@@ -1099,6 +1328,9 @@ export default function RegistrosChecklist() {
       if (placaFilter) {
         query = query.eq("placa", placaFilter);
       }
+      if (tipoFilter) {
+        query = query.eq("tipo", tipoFilter);
+      }
 
       const { data, error } = await query;
       if (error) throw error;
@@ -1113,6 +1345,8 @@ export default function RegistrosChecklist() {
       // ===== Hoja 1: resumen por checklist =====
       const exportData = allRows.map((r) => ({
         ID: r.id,
+        Codigo: r.codigo ?? "",
+        Tipo: r.tipo ?? "REGULAR",
         Fecha: formatFechaHoraLocal(r.fecha, r.created_at),
         Sede: r.sede ?? "",
         Placa: r.placa ?? "",
@@ -1162,9 +1396,8 @@ export default function RegistrosChecklist() {
       XLSX.utils.book_append_sheet(workbook, sheetResumen, "Checklists");
       XLSX.utils.book_append_sheet(workbook, sheetItems, "Items");
 
-      const filename = `Checklists_${fromDate}_a_${toDate}${
-        placaFilter ? `_placa_${placaFilter}` : ""
-      }.xlsx`;
+      const filename = `Checklists_${fromDate}_a_${toDate}${placaFilter ? `_placa_${placaFilter}` : ""
+        }.xlsx`;
       XLSX.writeFile(workbook, filename);
     } catch (e: any) {
       console.error(e);
@@ -1236,22 +1469,22 @@ export default function RegistrosChecklist() {
             Historial con paginación y filtro por fecha y placa.
           </p>
         </div>
-        <div className="flex flex-col items-end gap-2">
+        <div className="flex w-full sm:w-auto flex-col items-center sm:items-end gap-2">
           <button
             type="button"
             onClick={() => setOpenCreate(true)}
-            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-gray-800 active:scale-[.99]"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-gray-800 active:scale-[.99]"
           >
             <PlusCircle className="h-4 w-4" />
-            Nuevo checklist
+            <span>Nuevo checklist</span>
           </button>
         </div>
       </div>
 
       {/* Filtros */}
-      <section className="rounded-2xl border bg-white px-5 py-4 shadow-sm">
-        <div className="flex flex-wrap items-end gap-3">
-          <div className="grid gap-1">
+      <section className="rounded-2xl px-5 py-4 bg-white shadow-sm">
+        <div className="flex flex-col sm:flex-row flex-wrap sm:items-end gap-3">
+          <div className="grid gap-1 w-full sm:w-auto">
             <label className="text-xs font-medium text-gray-600">Desde</label>
             <input
               type="date"
@@ -1259,10 +1492,10 @@ export default function RegistrosChecklist() {
               onChange={(e) => {
                 setFromDate(e.target.value);
               }}
-              className="w-[180px] rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
             />
           </div>
-          <div className="grid gap-1">
+          <div className="grid gap-1 w-full sm:w-auto">
             <label className="text-xs font-medium text-gray-600">Hasta</label>
             <input
               type="date"
@@ -1270,16 +1503,16 @@ export default function RegistrosChecklist() {
               onChange={(e) => {
                 setToDate(e.target.value);
               }}
-              className="w-[180px] rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
             />
           </div>
 
-          <div className="grid gap-1">
+          <div className="grid gap-1 w-full sm:w-auto">
             <label className="text-xs font-medium text-gray-600">Placa</label>
             <select
               value={placaFilter}
               onChange={(e) => setPlacaFilter(e.target.value)}
-              className="w-[180px] rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
             >
               <option value="">Todas</option>
               {placasInventario.map((p) => (
@@ -1290,24 +1523,37 @@ export default function RegistrosChecklist() {
             </select>
           </div>
 
+          <div className="grid gap-1 w-full sm:w-auto">
+            <label className="text-xs font-medium text-gray-600">Tipo</label>
+            <select
+              value={tipoFilter}
+              onChange={(e) => setTipoFilter(e.target.value)}
+              className="w-full sm:w-[140px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+            >
+              <option value="">Todos</option>
+              <option value="entrega">Entrega</option>
+              <option value="regular">Regular</option>
+            </select>
+          </div>
+
           <button
             type="button"
             onClick={() => {
               setPage(1);
               fetchChecklists({ page: 1 });
             }}
-            className="inline-flex items-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm shadow-sm hover:bg-gray-50"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
             title="Aplicar filtros"
           >
             <Filter className="h-4 w-4" />
-            Aplicar
+            <span>Aplicar</span>
           </button>
 
           <button
             type="button"
             onClick={exportExcel}
             disabled={exportingExcel}
-            className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
             title="Exportar a Excel todos los registros filtrados"
           >
             {exportingExcel ? (
@@ -1315,7 +1561,7 @@ export default function RegistrosChecklist() {
             ) : (
               <FileSpreadsheet className="h-4 w-4" />
             )}
-            {exportingExcel ? "Exportando..." : "Excel"}
+            <span>{exportingExcel ? "Exportando..." : "Excel"}</span>
           </button>
 
           {loading && (
@@ -1327,8 +1573,8 @@ export default function RegistrosChecklist() {
       </section>
 
       {/* Tabla */}
-      <section className="rounded-2xl border bg-white shadow-sm">
-        <div className="border-b px-6 py-5">
+      <section className="overflow-hidden rounded-2xl bg-white shadow-sm">
+        <div className="border-b border-gray-100 px-6 py-5">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-600" />
             <div>
@@ -1343,10 +1589,12 @@ export default function RegistrosChecklist() {
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full text-left text-sm">
+          <table className="min-w-full text-left text-sm">
             <thead>
               <tr className="bg-gray-50 text-gray-600">
-                <th className="px-6 py-3 font-medium">Fecha/Hora registro</th>
+                <th className="px-6 py-3 font-medium">Cód</th>
+                <th className="px-6 py-3 font-medium">Fecha/Hora</th>
+                <th className="px-6 py-3 font-medium">Tipo</th>
                 <th className="px-6 py-3 font-medium">Placa</th>
                 <th className="px-6 py-3 font-medium">DNI usuario</th>
                 <th className="px-6 py-3 font-medium">Nombre usuario</th>
@@ -1358,13 +1606,22 @@ export default function RegistrosChecklist() {
               {rows.map((c, i) => (
                 <tr
                   key={c.id}
-                  className={`border-t ${i % 2 ? "bg-gray-50/40" : "bg-white"}`}
+                  className={`border-t border-gray-100 ${i % 2 ? "bg-gray-50/40" : "bg-white"}`}
                 >
+                  <td className="px-6 py-3 font-medium text-gray-900">
+                    {c.codigo ?? "—"}
+                  </td>
                   <td className="px-6 py-3 whitespace-nowrap">
                     <div className="inline-flex items-center gap-2">
                       <Calendar className="h-4 w-4 text-gray-400" />
                       {new Date(c.created_at).toLocaleString()}
                     </div>
+                  </td>
+                  <td className="px-6 py-3">
+                    <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ring-1 ring-inset ${c.tipo === "entrega" ? "bg-purple-50 text-purple-700 ring-purple-600/20" : "bg-gray-50 text-gray-600 ring-gray-500/10"
+                      }`}>
+                      {c.tipo ? c.tipo.toUpperCase() : "REGULAR"}
+                    </span>
                   </td>
                   <td className="px-6 py-3">{c.placa || "—"}</td>
                   <td className="px-6 py-3">{getDni(c)}</td>
@@ -1374,7 +1631,7 @@ export default function RegistrosChecklist() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
                         onClick={() => openDetails(c)}
                       >
                         <Eye className="h-4 w-4" />
@@ -1382,7 +1639,7 @@ export default function RegistrosChecklist() {
                       </button>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
+                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
                         onClick={() => exportPdf(c)}
                         title="Exportar PDF"
                       >
@@ -1418,7 +1675,7 @@ export default function RegistrosChecklist() {
         </div>
 
         {/* Paginación */}
-        <div className="flex items-center justify-between gap-3 border-t px-6 py-4 text-sm">
+        <div className="flex items-center justify-between gap-3 border-t border-gray-100 px-6 py-4 text-sm">
           <div className="text-gray-600">
             Página {page} de {totalPages} ({total} registros)
           </div>
@@ -1442,156 +1699,175 @@ export default function RegistrosChecklist() {
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
+          <div className="flex items-center gap-2 ml-4">
+            <span className="text-gray-600">Filas:</span>
+            <select
+              className="rounded-lg border border-gray-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200"
+              value={pageSize}
+              onChange={(e) => {
+                setPageSize(Number(e.currentTarget.value));
+                setPage(1);
+              }}
+            >
+              {[10, 25, 50, 100].map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </section>
 
       {/* MODAL: Ver detalle */}
-      {openView && viewRow && (
-        <div className="fixed inset-0 z-50">
-          <div
-            className="absolute inset-0 bg-black/30"
-            onClick={() => setOpenView(false)}
-            aria-hidden
-          />
-          <div className="absolute inset-0 grid place-items-center p-2 sm:p-4">
-            <div className="w-full max-w-5xl overflow-hidden rounded-2xl border bg-white shadow-xl">
-              <div className="flex items-center justify-between border-b px-4 sm:px-5 py-3 sm:py-4">
-                <div>
-                  <h3 className="text-base sm:text-lg font-semibold">
-                    Detalle de checklist
-                  </h3>
-                  <p className="text-xs text-gray-500">
-                    Registrado: {new Date(viewRow.created_at).toLocaleString()}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setOpenView(false)}
-                  className="rounded-lg p-1 hover:bg-gray-100"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="px-4 sm:px-5 py-4 max-h-[80vh] overflow-y-auto">
-                {/* Datos generales */}
-                <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                  Datos generales
-                </h4>
-                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                  {[
-                    ["Fecha", formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)],
-                    ["Sede", viewRow.sede ?? "—"],
-                    ["Placa", viewRow.placa ?? "—"],
-                    ["Kilometraje", viewRow.kilometraje?.toString() ?? "—"],
-                    ["Resp. Inspección", viewRow.responsable_inspeccion ?? "—"],
-                    ["DNI Usuario", getDni(viewRow)],
-                    ["Nombre Usuario", getNombre(viewRow)],
-                    ["Correo Usuario", getCorreo(viewRow)],
-                  ].map(([label, val]) => (
-                    <div
-                      key={label as string}
-                      className="rounded-lg border px-3 py-2"
-                    >
-                      <span className="text-sm">
-                        <span className="font-medium">{label}: </span>
-                        {val as string}
-                      </span>
-                    </div>
-                  ))}
-
-                  <div className="rounded-lg border px-3 py-2 sm:col-span-2 lg:col-span-3">
-                    <span className="text-sm font-medium block mb-2">
-                      Firma de usuario
-                    </span>
-                    {getFirma(viewRow) ? (
-                      <img
-                        src={getFirma(viewRow)!}
-                        alt="Firma del usuario"
-                        className="h-24 w-auto rounded border bg-white md:h-24 lg:h-28"
-                      />
-                    ) : (
-                      <span className="text-xs text-gray-500">Sin firma</span>
-                    )}
+      {
+        openView && viewRow && (
+          <div className="fixed inset-0 z-50">
+            <div
+              className="absolute inset-0 bg-black/30"
+              onClick={() => setOpenView(false)}
+              aria-hidden
+            />
+            <div className="absolute inset-0 grid place-items-center p-2 sm:p-4">
+              <div className="w-full max-w-5xl overflow-hidden rounded-2xl border bg-white shadow-xl">
+                <div className="flex items-center justify-between border-b px-4 sm:px-5 py-3 sm:py-4">
+                  <div>
+                    <h3 className="text-base sm:text-lg font-semibold">
+                      Detalle de checklist
+                    </h3>
+                    <p className="text-xs text-gray-500">
+                      Registrado: {new Date(viewRow.created_at).toLocaleString()}
+                    </p>
                   </div>
+                  <button
+                    type="button"
+                    onClick={() => setOpenView(false)}
+                    className="rounded-lg p-1 hover:bg-gray-100"
+                  >
+                    <X className="h-5 w-5" />
+                  </button>
                 </div>
 
-                {/* Estado y observaciones */}
-                <div className="mt-3 flex flex-wrap items-center gap-3">
-                  {estadoPill(!!viewRow.aprobado)}
-                  <span className="text-sm text-gray-600">
-                    <span className="font-medium">Observaciones: </span>
-                    {viewRow.observaciones?.trim() || "—"}
-                  </span>
-                </div>
-
-                {/* Ítems */}
-                <h4 className="mt-6 mb-2 text-sm font-semibold text-gray-700">
-                  Ítems del vehículo
-                </h4>
-
-                {loadingView && (
-                  <div className="flex items-center gap-2 text-sm text-gray-600">
-                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando ítems…
-                  </div>
-                )}
-
-                {!loadingView && (
-                  <div className="grid gap-4">
-                    {viewGrupos.map((g) => (
-                      <div key={g.titulo} className="rounded-2xl border">
-                        <div className="border-b bg-gray-50 px-3 py-2 text-sm font-semibold">
-                          {g.titulo}
-                        </div>
-                        <div className="grid gap-2 p-3 sm:grid-cols-2">
-                          {g.items.map((it) => (
-                            <div
-                              key={it.name}
-                              className="flex items-center justify-between rounded-lg border px-3 py-2"
-                            >
-                              <span className="text-sm">{it.name}</span>
-                              <div className="flex items-center gap-3">
-                                <span
-                                  className={`text-xs font-medium ${
-                                    it.ok ? "text-emerald-600" : "text-rose-600"
-                                  }`}
-                                >
-                                  {it.ok ? "OK" : "NO"}
-                                </span>
-                                {!it.ok && it.nota && (
-                                  <span className="text-xs text-gray-500 max-w-[220px] truncate">
-                                    {it.nota}
-                                  </span>
-                                )}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
+                <div className="px-4 sm:px-5 py-4 max-h-[80vh] overflow-y-auto">
+                  {/* Datos generales */}
+                  <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                    Datos generales
+                  </h4>
+                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      ["Fecha", formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)],
+                      ["Sede", viewRow.sede ?? "—"],
+                      ["Placa", viewRow.placa ?? "—"],
+                      ["Kilometraje", viewRow.kilometraje?.toString() ?? "—"],
+                      ["Resp. Inspección", viewRow.responsable_inspeccion ?? "—"],
+                      ["DNI Usuario", getDni(viewRow)],
+                      ["Nombre Usuario", getNombre(viewRow)],
+                      ["Correo Usuario", getCorreo(viewRow)],
+                      ["Tipo", viewRow.tipo ? viewRow.tipo.toUpperCase() : "REGULAR"], // Mostrar tipo
+                    ].map(([label, val]) => (
+                      <div
+                        key={label as string}
+                        className="rounded-lg border px-3 py-2"
+                      >
+                        <span className="text-sm">
+                          <span className="font-medium">{label}: </span>
+                          {val as string}
+                        </span>
                       </div>
                     ))}
 
-                    {viewGrupos.length === 0 && (
-                      <div className="text-sm text-gray-500">
-                        Sin ítems registrados.
-                      </div>
-                    )}
+                    <div className="rounded-lg border px-3 py-2 sm:col-span-2 lg:col-span-3">
+                      <span className="text-sm font-medium block mb-2">
+                        Firma de usuario
+                      </span>
+                      {getFirma(viewRow) ? (
+                        <img
+                          src={getFirma(viewRow)!}
+                          alt="Firma del usuario"
+                          className="h-24 w-auto rounded border bg-white md:h-24 lg:h-28"
+                        />
+                      ) : (
+                        <span className="text-xs text-gray-500">Sin firma</span>
+                      )}
+                    </div>
                   </div>
-                )}
-              </div>
 
-              <div className="flex items-center justify-end gap-2 border-t px-4 sm:px-5 py-3 sm:py-4">
-                <button
-                  type="button"
-                  onClick={() => setOpenView(false)}
-                  className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
-                >
-                  Cerrar
-                </button>
+                  {/* Estado y observaciones */}
+                  <div className="mt-3 flex flex-wrap items-center gap-3">
+                    {estadoPill(!!viewRow.aprobado)}
+                    <span className="text-sm text-gray-600">
+                      <span className="font-medium">Observaciones: </span>
+                      {viewRow.observaciones?.trim() || "—"}
+                    </span>
+                  </div>
+
+                  {/* Ítems */}
+                  <h4 className="mt-6 mb-2 text-sm font-semibold text-gray-700">
+                    Ítems del vehículo
+                  </h4>
+
+                  {loadingView && (
+                    <div className="flex items-center gap-2 text-sm text-gray-600">
+                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando ítems…
+                    </div>
+                  )}
+
+                  {!loadingView && (
+                    <div className="grid gap-4">
+                      {viewGrupos.map((g) => (
+                        <div key={g.titulo} className="rounded-2xl border">
+                          <div className="border-b bg-gray-50 px-3 py-2 text-sm font-semibold">
+                            {g.titulo}
+                          </div>
+                          <div className="grid gap-2 p-3 sm:grid-cols-2">
+                            {g.items.map((it) => (
+                              <div
+                                key={it.name}
+                                className="flex items-center justify-between rounded-lg border px-3 py-2"
+                              >
+                                <span className="text-sm">{it.name}</span>
+                                <div className="flex items-center gap-3">
+                                  <span
+                                    className={`text-xs font-medium ${it.ok ? "text-emerald-600" : "text-rose-600"
+                                      }`}
+                                  >
+                                    {it.ok ? "OK" : "NO"}
+                                  </span>
+                                  {!it.ok && it.nota && (
+                                    <span className="text-xs text-gray-500 max-w-[220px] truncate">
+                                      {it.nota}
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+
+                      {viewGrupos.length === 0 && (
+                        <div className="text-sm text-gray-500">
+                          Sin ítems registrados.
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-end gap-2 border-t px-4 sm:px-5 py-3 sm:py-4">
+                  <button
+                    type="button"
+                    onClick={() => setOpenView(false)}
+                    className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
+                  >
+                    Cerrar
+                  </button>
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )
+      }
 
       {/* MODAL: Crear checklist */}
       <ChecklistCreateModal
@@ -1602,6 +1878,6 @@ export default function RegistrosChecklist() {
           await fetchChecklists({ page: 1 });
         }}
       />
-    </div>
+    </div >
   );
 }

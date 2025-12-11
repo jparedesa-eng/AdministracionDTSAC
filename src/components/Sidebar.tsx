@@ -7,7 +7,6 @@ import {
   HelpCircle,
   X,
   LogOut,
-  User,
   ChevronRight,
   ChevronDown,
   FilePlus2,
@@ -18,6 +17,7 @@ import {
   Users,
   Plane,
   CalendarDays,
+  MoreVertical,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -34,7 +34,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const { logout, profile } = useAuth();
 
   // ======= PERMISOS desde profiles.allowed_views =======
-//
+  //
   const isAdmin = profile?.rol === "admin";
   const views = Array.isArray(profile?.allowed_views)
     ? (profile!.allowed_views as string[])
@@ -91,7 +91,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   );
   const [openConfigMenu, setOpenConfigMenu] = React.useState(
     location.pathname.startsWith("/config") ||
-      location.pathname.startsWith("/configuracion")
+    location.pathname.startsWith("/configuracion")
   );
 
   React.useEffect(() => {
@@ -106,21 +106,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     setOpenConfigMenu(inConfig);
   }, [location.pathname]);
 
+  const [showUserMenu, setShowUserMenu] = React.useState(false);
+
   // ======= Estilos =======
 
   const baseItem =
     "group mb-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 font-medium";
-  const activeClass = "bg-gray-900 text-white";
-  const idleClass = "text-gray-700 hover:bg-gray-100";
+  const activeClass = "bg-gray-600/10 text-gray-700";
+  const idleClass = "text-gray-600 hover:bg-gray-100";
 
   const submenuItem = (isActive: boolean) =>
     [
       "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
-      isActive ? "bg-white text-gray-900" : "text-gray-700 hover:bg-white",
+      isActive ? "bg-gray-600/10 text-gray-700 font-medium" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
     ].join(" ");
 
-  const iconIdle = "h-5 w-5 text-gray-600 group-hover:text-gray-900";
-  const iconActive = "h-5 w-5 text-white";
+  const iconIdle = "h-5 w-5 text-gray-500 group-hover:text-gray-700";
+  const iconActive = "h-5 w-5 text-gray-700";
 
   const handleLogout = () => {
     logout();
@@ -143,14 +145,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const SidebarBody = (
     <div className="flex h-full w-72 flex-col bg-white">
       {/* Brand */}
-      <div className="flex items-center justify-between border-b px-4 py-3 md:justify-center">
+      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-4 md:justify-center">
         <div className="flex items-center gap-2">
-          <div className="grid h-8 w-8 place-items-center rounded-xl bg-gray-900 text-white">
-            <span className="text-sm font-bold">D</span>
-          </div>
-          <span className="text-sm font-semibold tracking-tight">
-            Administración
-          </span>
+          <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
         </div>
 
         {/* Cerrar (móvil) */}
@@ -221,145 +218,145 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           "/camionetas/mantenimiento",
           "/camionetas/garita" // 👈 NUEVO
         ) && (
-          <>
-            <button
-              type="button"
-              onClick={() => setOpenCamionetas((v) => !v)}
-              className={[
-                baseItem,
-                location.pathname.startsWith("/camionetas")
-                  ? activeClass
-                  : idleClass,
-              ].join(" ")}
-              aria-expanded={openCamionetas}
-              aria-controls="submenu-camionetas"
-            >
-              <Truck
-                className={
+            <>
+              <button
+                type="button"
+                onClick={() => setOpenCamionetas((v) => !v)}
+                className={[
+                  baseItem,
                   location.pathname.startsWith("/camionetas")
-                    ? iconActive
-                    : iconIdle
-                }
-              />
-              <span className="font-medium">Camionetas</span>
-              <span className="ml-auto transition-transform">
-                {openCamionetas ? (
-                  <ChevronDown
-                    className={
-                      location.pathname.startsWith("/camionetas")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                ) : (
-                  <ChevronRight
-                    className={
-                      location.pathname.startsWith("/camionetas")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
+                    ? activeClass
+                    : idleClass,
+                ].join(" ")}
+                aria-expanded={openCamionetas}
+                aria-controls="submenu-camionetas"
+              >
+                <Truck
+                  className={
+                    location.pathname.startsWith("/camionetas")
+                      ? iconActive
+                      : iconIdle
+                  }
+                />
+                <span className="font-medium">Camionetas</span>
+                <span className="ml-auto transition-transform">
+                  {openCamionetas ? (
+                    <ChevronDown
+                      className={
+                        location.pathname.startsWith("/camionetas")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  ) : (
+                    <ChevronRight
+                      className={
+                        location.pathname.startsWith("/camionetas")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  )}
+                </span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {openCamionetas && (
+                  <motion.div
+                    id="submenu-camionetas"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                  >
+                    {canSeeCam_Solicitar && (
+                      <NavLink
+                        to="/camionetas/solicitar"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <FilePlus2 className="h-4 w-4 text-gray-600" />
+                        Solicitar (Creación de ticket)
+                      </NavLink>
+                    )}
+                    {canSeeCam_Admin && (
+                      <NavLink
+                        to="/camionetas/administrar"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ListChecks className="h-4 w-4 text-gray-600" />
+                        Administrar solicitudes
+                      </NavLink>
+                    )}
+
+                    {/* 👇 NUEVO ENLACE GARITA */}
+                    {canSeeCam_Garita && (
+                      <NavLink
+                        to="/camionetas/garita"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ClipboardList className="h-4 w-4 text-gray-600" />
+                        Garita (Control QR)
+                      </NavLink>
+                    )}
+
+                    {canSeeCam_Inventario && (
+                      <NavLink
+                        to="/camionetas/inventario"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Wrench className="h-4 w-4 text-gray-600" />
+                        Inventario Flota
+                      </NavLink>
+                    )}
+                    {canSeeCam_Conductores && (
+                      <NavLink
+                        to="/camionetas/conductores"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Users className="h-4 w-4 text-gray-600" />
+                        Conductores
+                      </NavLink>
+                    )}
+                    {canSeeCam_RegGastos && (
+                      <NavLink
+                        to="/camionetas/registros/gastos"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <DollarSign className="h-4 w-4 text-gray-600" />
+                        Registros Gastos
+                      </NavLink>
+                    )}
+                    {canSeeCam_RegChecklist && (
+                      <NavLink
+                        to="/camionetas/registros/checklist"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ClipboardList className="h-4 w-4 text-gray-600" />
+                        Registros Checklist
+                      </NavLink>
+                    )}
+                    {canSeeCam_Mantenimiento && (
+                      <NavLink
+                        to="/camionetas/mantenimiento"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <CalendarDays className="h-4 w-4 text-gray-600" />
+                        Programación mantenimiento
+                      </NavLink>
+                    )}
+                  </motion.div>
                 )}
-              </span>
-            </button>
-
-            <AnimatePresence initial={false}>
-              {openCamionetas && (
-                <motion.div
-                  id="submenu-camionetas"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                >
-                  {canSeeCam_Solicitar && (
-                    <NavLink
-                      to="/camionetas/solicitar"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <FilePlus2 className="h-4 w-4 text-gray-600" />
-                      Solicitar (Creación de ticket)
-                    </NavLink>
-                  )}
-                  {canSeeCam_Admin && (
-                    <NavLink
-                      to="/camionetas/administrar"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <ListChecks className="h-4 w-4 text-gray-600" />
-                      Administrar solicitudes
-                    </NavLink>
-                  )}
-
-                  {/* 👇 NUEVO ENLACE GARITA */}
-                  {canSeeCam_Garita && (
-                    <NavLink
-                      to="/camionetas/garita"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <ClipboardList className="h-4 w-4 text-gray-600" />
-                      Garita (Control QR)
-                    </NavLink>
-                  )}
-
-                  {canSeeCam_Inventario && (
-                    <NavLink
-                      to="/camionetas/inventario"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Wrench className="h-4 w-4 text-gray-600" />
-                      Inventario
-                    </NavLink>
-                  )}
-                  {canSeeCam_Conductores && (
-                    <NavLink
-                      to="/camionetas/conductores"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Users className="h-4 w-4 text-gray-600" />
-                      Conductores
-                    </NavLink>
-                  )}
-                  {canSeeCam_RegGastos && (
-                    <NavLink
-                      to="/camionetas/registros/gastos"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <DollarSign className="h-4 w-4 text-gray-600" />
-                      Registros Gastos
-                    </NavLink>
-                  )}
-                  {canSeeCam_RegChecklist && (
-                    <NavLink
-                      to="/camionetas/registros/checklist"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <ClipboardList className="h-4 w-4 text-gray-600" />
-                      Registros Checklist
-                    </NavLink>
-                  )}
-                  {canSeeCam_Mantenimiento && (
-                    <NavLink
-                      to="/camionetas/mantenimiento"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <CalendarDays className="h-4 w-4 text-gray-600" />
-                      Programación mantenimiento
-                    </NavLink>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
+              </AnimatePresence>
+            </>
+          )}
 
         {/* Pasajes & Hospedaje */}
         {showAny(
@@ -370,113 +367,113 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           "/pasajes/gestion",
           "/pasajes/proveedores"
         ) && (
-          <>
-            <button
-              type="button"
-              onClick={() => setOpenPasajes((v) => !v)}
-              className={[
-                baseItem,
-                location.pathname.startsWith("/pasajes")
-                  ? activeClass
-                  : idleClass,
-                "mt-1",
-              ].join(" ")}
-              aria-expanded={openPasajes}
-              aria-controls="submenu-pasajes"
-            >
-              <Plane
-                className={
+            <>
+              <button
+                type="button"
+                onClick={() => setOpenPasajes((v) => !v)}
+                className={[
+                  baseItem,
                   location.pathname.startsWith("/pasajes")
-                    ? iconActive
-                    : iconIdle
-                }
-              />
-              <span className="font-medium">Pasajes &amp; Hospedaje</span>
-              <span className="ml-auto transition-transform">
-                {openPasajes ? (
-                  <ChevronDown
-                    className={
-                      location.pathname.startsWith("/pasajes")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                ) : (
-                  <ChevronRight
-                    className={
-                      location.pathname.startsWith("/pasajes")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                )}
-              </span>
-            </button>
+                    ? activeClass
+                    : idleClass,
+                  "mt-1",
+                ].join(" ")}
+                aria-expanded={openPasajes}
+                aria-controls="submenu-pasajes"
+              >
+                <Plane
+                  className={
+                    location.pathname.startsWith("/pasajes")
+                      ? iconActive
+                      : iconIdle
+                  }
+                />
+                <span className="font-medium">Pasajes &amp; Hospedaje</span>
+                <span className="ml-auto transition-transform">
+                  {openPasajes ? (
+                    <ChevronDown
+                      className={
+                        location.pathname.startsWith("/pasajes")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  ) : (
+                    <ChevronRight
+                      className={
+                        location.pathname.startsWith("/pasajes")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  )}
+                </span>
+              </button>
 
-            <AnimatePresence initial={false}>
-              {openPasajes && (
-                <motion.div
-                  id="submenu-pasajes"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                >
-                  {canSeePas_Solicitar && (
-                    <NavLink
-                      to="/pasajes/solicitar"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <FilePlus2 className="h-4 w-4 text-gray-600" />
-                      Solicitar
-                    </NavLink>
-                  )}
-                  {canSeePas_Proveedor && (
-                    <NavLink
-                      to="/pasajes/proveedor"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <DollarSign className="h-4 w-4 text-gray-600" />
-                      Proveedor
-                    </NavLink>
-                  )}
-                  {canSeePas_Gerencia && (
-                    <NavLink
-                      to="/pasajes/gerencia"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <ListChecks className="h-4 w-4 text-gray-600" />
-                      Gerencia (Aprobación)
-                    </NavLink>
-                  )}
-                  {canSeePas_Gestion && (
-                    <NavLink
-                      to="/pasajes/gestion"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Wrench className="h-4 w-4 text-gray-600" />
-                      Gestión
-                    </NavLink>
-                  )}
-                  {canSeePas_Proveedores && (
-                    <NavLink
-                      to="/pasajes/proveedores"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Users className="h-4 w-4 text-gray-600" />
-                      Proveedores
-                    </NavLink>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
+              <AnimatePresence initial={false}>
+                {openPasajes && (
+                  <motion.div
+                    id="submenu-pasajes"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                  >
+                    {canSeePas_Solicitar && (
+                      <NavLink
+                        to="/pasajes/solicitar"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <FilePlus2 className="h-4 w-4 text-gray-600" />
+                        Solicitar
+                      </NavLink>
+                    )}
+                    {canSeePas_Proveedor && (
+                      <NavLink
+                        to="/pasajes/proveedor"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <DollarSign className="h-4 w-4 text-gray-600" />
+                        Proveedor
+                      </NavLink>
+                    )}
+                    {canSeePas_Gerencia && (
+                      <NavLink
+                        to="/pasajes/gerencia"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ListChecks className="h-4 w-4 text-gray-600" />
+                        Gerencia (Aprobación)
+                      </NavLink>
+                    )}
+                    {canSeePas_Gestion && (
+                      <NavLink
+                        to="/pasajes/gestion"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Wrench className="h-4 w-4 text-gray-600" />
+                        Gestión
+                      </NavLink>
+                    )}
+                    {canSeePas_Proveedores && (
+                      <NavLink
+                        to="/pasajes/proveedores"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Users className="h-4 w-4 text-gray-600" />
+                        Proveedores
+                      </NavLink>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
 
         {/* Preferencias / Configuración (agrupado) */}
         {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias) && (
@@ -583,28 +580,52 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
       </nav>
 
       {/* Usuario / footer */}
-      <div className="border-t p-3">
-        <div className="flex items-center gap-3 rounded-xl p-2">
-          <div className="grid h-9 w-9 place-items-center rounded-full bg-gray-200">
-            <User className="h-5 w-5 text-gray-700" />
+      <div className="border-t border-gray-100 p-3">
+        <div className="relative flex items-center gap-3 rounded-xl p-2 hover:bg-gray-50 transition-colors">
+          <div className="grid h-10 w-10 place-items-center rounded-full bg-[#ff0000] text-white font-bold text-lg flex-shrink-0">
+            {profile?.nombre ? profile.nombre.charAt(0).toUpperCase() : "U"}
           </div>
-          <div className="min-w-0">
-            <p className="truncate text-sm font-medium">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-semibold text-gray-900">
               {profile?.nombre ?? "Usuario"}
             </p>
-            <p className="truncate text-xs text-gray-500">
+            <p className="truncate text-xs text-gray-500 font-medium">
               {profile?.area ?? "—"}
             </p>
           </div>
           <button
             type="button"
-            onClick={handleLogout}
-            aria-label="Cerrar sesión"
-            title="Cerrar sesión"
-            className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg hover:bg-gray-100"
+            onClick={() => setShowUserMenu(!showUserMenu)}
+            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-white hover:shadow-sm hover:text-gray-900 transition-all"
           >
-            <LogOut className="h-5 w-5 text-gray-700" />
+            <MoreVertical className="h-4 w-4" />
           </button>
+
+          {/* Menú desplegable "3 puntos" */}
+          <AnimatePresence>
+            {showUserMenu && (
+              <>
+                <div
+                  className="fixed inset-0 z-10"
+                  onClick={() => setShowUserMenu(false)}
+                />
+                <motion.div
+                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
+                  className="absolute bottom-full right-2 mb-2 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl"
+                >
+                  <button
+                    onClick={handleLogout}
+                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    Cerrar sesión
+                  </button>
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </div>
     </div>
@@ -613,7 +634,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   return (
     <>
       {/* Desktop */}
-      <aside className="fixed left-0 top-0 hidden h-screen w-72 border-r bg-white md:block z-30">
+      <aside className="fixed left-0 top-0 hidden h-screen w-72 border-r border-gray-100 bg-white md:block z-30">
         {SidebarBody}
       </aside>
 

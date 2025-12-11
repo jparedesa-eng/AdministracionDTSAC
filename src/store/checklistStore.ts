@@ -18,6 +18,7 @@ export type SaveChecklistInput = {
   firma_base64: string | null;
   grupos: CkGroup[];
   aprobado: boolean;
+  tipo: "entrega" | "regular"; // NUEVO CAMPO
 };
 
 export async function guardarChecklist(input: SaveChecklistInput) {
@@ -34,6 +35,7 @@ export async function guardarChecklist(input: SaveChecklistInput) {
     firma_base64: input.firma_base64,
     grupos: input.grupos, // jsonb en la BD
     aprobado: input.aprobado,
+    tipo: input.tipo, // Guardamos el tipo
   };
 
   if (input.usuario_correo) {

@@ -1,7 +1,6 @@
-// src/pages/Camionetas/Garita.tsx
 import React from "react";
 import { Calendar, Car, Loader2 } from "lucide-react";
-import { Html5QrcodeScanner } from "html5-qrcode";
+import { Html5QrcodeScanner, Html5QrcodeScanType } from "html5-qrcode";
 import { supabase } from "../../supabase/supabaseClient";
 import { camionetasStore } from "../../store/camionetasStore";
 import { Toast } from "../../components/ui/Toast";
@@ -77,6 +76,7 @@ export default function Garita() {
           fps: 10,
           qrbox: { width: 250, height: 250 },
           aspectRatio: 1,
+          supportedScanTypes: [Html5QrcodeScanType.SCAN_TYPE_CAMERA],
         },
         false // verbose off
       );
@@ -85,13 +85,9 @@ export default function Garita() {
         (decodedText) => {
           // ✅ Éxito: obtuve texto del QR
           handleScanId(decodedText);
-          // Detengo el escáner para que no siga leyendo
-          scanner
-            ?.clear()
-            .then(() => {
-              scanner = null;
-            })
-            .catch((err) => console.error("Error limpiando scanner:", err));
+          // NO llamamos a scanner.clear() aquí explícitamente.
+          // Al actualizar el estado (scanActive=false), el componente se desmonta
+          // y el cleanup del effect se encargará de limpiar.
         },
         (_error) => {
           // Errores continuos de lectura (NotFoundException) -> se ignoran
@@ -123,10 +119,7 @@ export default function Garita() {
       if (scanner) {
         scanner
           .clear()
-          .then(() => {
-            scanner = null;
-          })
-          .catch((err) => console.error("Error al limpiar scanner:", err));
+          .catch((err) => console.warn("Error al limpiar scanner (cleanup):", err));
       }
     };
   }, [scanActive, handleScanId]);
@@ -306,129 +299,113 @@ export default function Garita() {
 
         {/* Datos del ticket */}
         {ticket && (
-          <section className="rounded-2xl bg-white p-4 shadow-sm">
-            {/* Cabecera placa + estado */}
-            <div className="flex items-start gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-sky-700 text-white">
-                <Car className="h-5 w-5" />
+          <section className="rounded-2xl bg-white p-6 shadow-sm">
+            <div className="flex flex-col items-center text-center">
+              {/* Icono grande y Estado */}
+              <div className="mb-4 flex flex-col items-center gap-3">
+                <div className="flex h-16 w-16 items-center justify-center rounded-full bg-sky-100 text-sky-700">
+                  <Car className="h-8 w-8" />
+                </div>
+                <span
+                  className={`inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold ring-1 ${estadoPill}`}
+                >
+                  <span className={`h-2.5 w-2.5 rounded-full ${estadoDot}`} />
+                  {estadoActual || "—"}
+                </span>
               </div>
 
-              <div className="flex-1 space-y-1">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-base font-semibold text-gray-900">
-                      {ticket.vehiculo ?? "—"}
-                    </p>
-                    {ticket.origen && ticket.destino && (
-                      <p className="mt-0.5 inline-flex items-center rounded-full bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 ring-1 ring-gray-100">
-                        {ticket.origen}
-                        <span className="mx-1 text-gray-400">→</span>
-                        {ticket.destino}
-                      </p>
-                    )}
-                  </div>
-
-                  <span
-                    className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${estadoPill}`}
-                  >
-                    <span className={`h-2 w-2 rounded-full ${estadoDot}`} />
-                    {estadoActual || "—"}
-                  </span>
-                </div>
-
-                {ticket.nombre && (
-                  <p className="text-[11px] text-gray-600">
-                    Conductor{" "}
-                    <span className="font-semibold text-gray-800">
-                      {ticket.nombre}
-                    </span>
+              {/* Info Vehículo */}
+              <div className="mb-6 space-y-1">
+                <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+                  {ticket.vehiculo ?? "—"}
+                </h2>
+                {ticket.origen && ticket.destino && (
+                  <p className="inline-flex items-center rounded-lg bg-gray-50 px-3 py-1 text-sm font-medium text-gray-700 ring-1 ring-gray-100">
+                    {ticket.origen} <span className="mx-2 text-gray-400">→</span> {ticket.destino}
                   </p>
                 )}
               </div>
-            </div>
 
-            {/* Horario planificado + tiempos en garita */}
-            <div className="mt-3 border-t border-dashed border-gray-200 pt-2 text-[11px] text-gray-600">
-              <p className="mb-0.5 font-semibold text-gray-800">
-                Fecha y horario de uso
-              </p>
-              {inicio && fin ? (
-                <p>
-                  {inicio.toLocaleDateString()} ·{" "}
-                  {inicio.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}{" "}
-                  –{" "}
-                  {fin.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
+              {/* Info Conductor (Más grande) */}
+              <div className="mb-6 w-full rounded-xl bg-gray-50 p-4 ring-1 ring-gray-100">
+                <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
+                  Conductor Autorizado
                 </p>
-              ) : (
-                <p>—</p>
-              )}
+                <div className="space-y-0.5">
+                  <p className="text-xl font-bold text-gray-900">
+                    {ticket.nombre || "Sin nombre"}
+                  </p>
+                  <p className="text-lg font-medium text-gray-600">
+                    DNI: {ticket.dni || "—"}
+                  </p>
+                </div>
+              </div>
 
-              {entregaGarita && (
-                <p className="mt-1">
-                  <span className="font-semibold">Entregada en garita:</span>{" "}
-                  {entregaGarita.toLocaleDateString()} ·{" "}
-                  {entregaGarita.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              )}
-              {terminoUsoGarita && (
-                <p className="mt-0.5">
-                  <span className="font-semibold">Término de uso:</span>{" "}
-                  {terminoUsoGarita.toLocaleDateString()} ·{" "}
-                  {terminoUsoGarita.toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              )}
-            </div>
+              {/* Tiempos */}
+              <div className="w-full space-y-2 border-t border-dashed border-gray-200 pt-4 text-sm text-gray-600">
+                <div className="flex justify-between">
+                  <span className="font-medium">Inicio:</span>
+                  <span>{inicio ? inicio.toLocaleString() : "—"}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Fin:</span>
+                  <span>{fin ? fin.toLocaleString() : "—"}</span>
+                </div>
+                {entregaGarita && (
+                  <div className="flex justify-between text-emerald-700">
+                    <span className="font-medium">Entregada:</span>
+                    <span>{entregaGarita.toLocaleString()}</span>
+                  </div>
+                )}
+                {terminoUsoGarita && (
+                  <div className="flex justify-between text-sky-700">
+                    <span className="font-medium">Término:</span>
+                    <span>{terminoUsoGarita.toLocaleString()}</span>
+                  </div>
+                )}
+              </div>
 
-            {/* Acciones de estado */}
-            <div className="mt-4 space-y-2">
-              {siguienteEstado ? (
+              {/* Acciones */}
+              <div className="mt-8 w-full space-y-3">
+                {siguienteEstado ? (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmOpen(true)}
+                    disabled={updating}
+                    className={`inline-flex w-full items-center justify-center rounded-xl px-4 py-4 text-base font-bold text-white shadow-lg transition-all active:scale-95 ${puedePasarAEnUso
+                      ? "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-200"
+                      : "bg-sky-600 hover:bg-sky-700 shadow-sky-200"
+                      } disabled:opacity-60 disabled:shadow-none`}
+                  >
+                    {updating ? (
+                      <>
+                        <Loader2 className="mr-2 h-5 w-5 animate-spin" />
+                        Actualizando...
+                      </>
+                    ) : (
+                      etiquetaAccion
+                    )}
+                  </button>
+                ) : (
+                  <div className="rounded-lg bg-gray-100 p-3">
+                    <p className="text-sm font-medium text-gray-500">
+                      Ticket en estado final o no modificable
+                    </p>
+                  </div>
+                )}
+
                 <button
                   type="button"
-                  onClick={() => setConfirmOpen(true)}
-                  disabled={updating}
-                  className={`inline-flex w-full items-center justify-center rounded-full px-4 py-2.5 text-sm font-semibold text-white shadow-sm ${puedePasarAEnUso
-                    ? "bg-emerald-600 hover:bg-emerald-700"
-                    : "bg-sky-600 hover:bg-sky-700"
-                    } disabled:opacity-60`}
+                  onClick={() => {
+                    setTicket(null);
+                    setTicketId(null);
+                    setScanActive(true);
+                  }}
+                  className="inline-flex w-full items-center justify-center rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-700 hover:bg-gray-50 active:scale-95"
                 >
-                  {updating ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Actualizando estado…
-                    </>
-                  ) : (
-                    etiquetaAccion
-                  )}
+                  Escanear otro ticket
                 </button>
-              ) : (
-                <p className="text-xs text-gray-500">
-                  Este ticket no puede cambiar de estado desde garita.
-                </p>
-              )}
-
-              <button
-                type="button"
-                onClick={() => {
-                  setTicket(null);
-                  setTicketId(null);
-                  setScanActive(true);
-                }}
-                className="inline-flex w-full items-center justify-center rounded-full border border-gray-200 bg-white px-4 py-2 text-xs font-medium text-gray-700 hover:bg-gray-50"
-              >
-                Escanear otro ticket
-              </button>
+              </div>
             </div>
           </section>
         )}
@@ -442,22 +419,22 @@ export default function Garita() {
           }}
           size="sm"
         >
-          <p className="text-sm text-slate-700">
-            Vas a <span className="font-semibold">{etiquetaAccion}</span>{" "}
-            para la camioneta{" "}
-            <span className="font-semibold">{ticket?.vehiculo ?? "—"}</span>.
-          </p>
-          <p className="mt-2 text-xs text-slate-500">
-            Confirma únicamente cuando la camioneta esté físicamente entregada o
-            haya terminado realmente su uso.
-          </p>
+          <div className="text-center">
+            <p className="text-base text-gray-600">
+              ¿Confirmas que deseas <span className="font-bold text-gray-900">{etiquetaAccion.toLowerCase()}</span>?
+            </p>
+            <div className="mt-2 rounded-lg bg-gray-50 p-3">
+              <p className="text-sm font-medium text-gray-900">{ticket?.vehiculo}</p>
+              <p className="text-xs text-gray-500">{ticket?.nombre}</p>
+            </div>
+          </div>
 
-          <div className="mt-4 flex justify-end gap-2">
+          <div className="mt-6 flex gap-3">
             <button
               type="button"
               onClick={() => setConfirmOpen(false)}
               disabled={updating}
-              className="rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+              className="flex-1 rounded-lg border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50"
             >
               Cancelar
             </button>
@@ -468,12 +445,9 @@ export default function Garita() {
                 setConfirmOpen(false);
                 await aplicarCambioEstado();
               }}
-              className="inline-flex items-center rounded-full bg-emerald-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+              className="flex-1 rounded-lg bg-emerald-600 px-4 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-emerald-700"
             >
-              {updating && (
-                <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
-              )}
-              Confirmar
+              {updating ? <Loader2 className="mx-auto h-5 w-5 animate-spin" /> : "Confirmar"}
             </button>
           </div>
         </Modal>

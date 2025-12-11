@@ -8,6 +8,7 @@ import {
   Loader2,
   Plus,
   Car,
+  X,
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
 import { useAuth } from "../../auth/AuthContext";
@@ -67,19 +68,19 @@ export default function Solicitar() {
   const [showForm, setShowForm] = React.useState(false);
 
   function defaultDateTimeLocal(hours: number, minutes: number) {
-  const d = new Date();
-  d.setHours(hours, minutes, 0, 0);
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
+    const d = new Date();
+    d.setHours(hours, minutes, 0, 0);
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  }
 
-const [usoInicioLocal, setUsoInicioLocal] = React.useState<string>(() =>
-  defaultDateTimeLocal(8, 0) // 08:00
-);
+  const [usoInicioLocal, setUsoInicioLocal] = React.useState<string>(() =>
+    defaultDateTimeLocal(8, 0) // 08:00
+  );
 
-const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
-  defaultDateTimeLocal(20, 0) // 10:00
-);
+  const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
+    defaultDateTimeLocal(20, 0) // 10:00
+  );
 
   // disponibilidad
   const [checking, setChecking] = React.useState(false);
@@ -537,7 +538,7 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-gray-800"
+              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors"
             >
               <Plus className="h-4 w-4" />
               Nuevo ticket
@@ -548,11 +549,10 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
         {/* Estado / mensajes */}
         {msg && (
           <div
-            className={`mb-4 rounded-xl border px-4 py-3 text-sm ${
-              msg.type === "ok"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-800"
-                : "border-rose-200 bg-rose-50 text-rose-800"
-            }`}
+            className={`mb-4 rounded-xl border px-4 py-3 text-sm ${msg.type === "ok"
+              ? "border-emerald-200 bg-emerald-50 text-emerald-800"
+              : "border-rose-200 bg-rose-50 text-rose-800"
+              }`}
           >
             {msg.type === "ok" ? (
               <span className="inline-flex items-center gap-2">
@@ -649,8 +649,8 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
                   {checking
                     ? "Verificando disponibilidad…"
                     : (availableCount ?? 0) > 0
-                    ? "— Selecciona una placa —"
-                    : "Sin disponibilidad en el rango"}
+                      ? "— Selecciona una placa —"
+                      : "Sin disponibilidad en el rango"}
                 </option>
                 {availablePlacas.map((p) => (
                   <option key={p} value={p}>
@@ -736,10 +736,14 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
                   className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
                 >
                   <option value="">— Selecciona destino —</option>
-                  <option value="AGROMORIN">AGROMORIN</option>
-                  <option value="COMPOSITAN">COMPOSITAN</option>
-                  <option value="CASA VERDE">CASA VERDE</option>
-                  <option value="FUNDO MUCHIK">FUNDO MUCHIK</option>
+                  <option value="F. AGROMORIN">F. AGROMORIN</option>
+                  <option value="F. COMPOSITAN">F. COMPOSITAN</option>
+                  <option value="F. CASA VERDE">F. CASA VERDE</option>
+                  <option value="F. MUCHIK">F. MUCHIK</option>
+                  <option value="F. SAN PEDRO">F. SAN PEDRO</option>
+                  <option value="F. PALMAR">F. PALMAR</option>
+                  <option value="F. MARIA DEL ROSARIO">F. MARIA DEL ROSARIO</option>
+                  <option value="F. SANTO DOMINGO">F. SANTO DOMINGO</option>
                 </select>
               </div>
 
@@ -757,7 +761,15 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
               </div>
             </div>
 
-            <div className="pt-1">
+            <div className="pt-1 flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setShowForm(false)}
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+              >
+                <X className="h-4 w-4" />
+                Cancelar
+              </button>
               <button
                 type="submit"
                 disabled={submitting || checking || !selectedPlaca}
@@ -784,7 +796,7 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                {dniValido ? "Tus tickets" : "Tickets del área"}
+                {dniValido ? "Tus tickets" : "Tickets tu área"}
               </h2>
               <p className="mt-1 text-xs text-gray-500">
                 Lista de tickets recientes. Usa el filtro para ver sólo
@@ -1004,14 +1016,14 @@ const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
                         <div className="flex flex-col items-end gap-1.5">
                           {(estadoLower.startsWith("reserv") ||
                             estadoLower === "en uso") && (
-                            <button
-                              type="button"
-                              onClick={() => handleOpenQr(s)}
-                              className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 active:bg-sky-800"
-                            >
-                              Ver QR
-                            </button>
-                          )}
+                              <button
+                                type="button"
+                                onClick={() => handleOpenQr(s)}
+                                className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 active:bg-sky-800"
+                              >
+                                Ver QR
+                              </button>
+                            )}
                           {puedeCancelar(s.estado) && (
                             <button
                               type="button"

@@ -1,3 +1,5 @@
+headersOrigin = "config"
+redirectsOrigin = "config"
 plugins = []
 headers = []
 
@@ -13,9 +15,7 @@ command = "npm run build"
 
   [build.environment]
   NODE_VERSION = "22"
-  # Disable smart detection for Supabase public credentials
-  # The anon key is safe to expose - it's protected by Row Level Security
-  SECRETS_SCAN_SMART_DETECTION_ENABLED = "false"
+  SECRETS_SCAN_OMIT_KEYS = "VITE_SUPABASE_ANON_KEY,VITE_SUPABASE_URL"
 
   [build.processing]
 
