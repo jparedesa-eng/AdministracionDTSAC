@@ -65,7 +65,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const canSeeCam_RegGastos = hasAccess("/camionetas/registros/gastos");
   const canSeeCam_RegChecklist = hasAccess("/camionetas/registros/checklist");
   const canSeeCam_Mantenimiento = hasAccess("/camionetas/mantenimiento");
-  const canSeeCam_Garita = hasAccess("/camionetas/garita"); // 👈 NUEVO
+  const canSeeCam_Garita = hasAccess("/camionetas/garita");
+  const canSeeCam_MiCamioneta = hasAccess("/camionetas/mi-camioneta"); // 👈 NUEVO
 
   // Pasajes & Hospedaje
   const canSeePas_Solicitar = hasAccess("/pasajes/solicitar");
@@ -195,7 +196,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           "/camionetas/registros/gastos",
           "/camionetas/registros/checklist",
           "/camionetas/mantenimiento",
-          "/camionetas/garita" // 👈 NUEVO
+          "/camionetas/garita", // 👈 NUEVO
+          "/camionetas/mi-camioneta" // 👈 NUEVO
         ) ||
           showAny(
             "/pasajes/*",
@@ -216,7 +218,8 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           "/camionetas/registros/gastos",
           "/camionetas/registros/checklist",
           "/camionetas/mantenimiento",
-          "/camionetas/garita" // 👈 NUEVO
+          "/camionetas/garita", // 👈 NUEVO
+          "/camionetas/mi-camioneta" // 👈 NUEVO
         ) && (
             <>
               <button
@@ -299,6 +302,16 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       >
                         <ClipboardList className="h-4 w-4 text-gray-600" />
                         Garita (Control QR)
+                      </NavLink>
+                    )}
+                    {canSeeCam_MiCamioneta && (
+                      <NavLink
+                        to="/camionetas/mi-camioneta"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Truck className="h-4 w-4 text-gray-600" />
+                        Mi Camioneta
                       </NavLink>
                     )}
 

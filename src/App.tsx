@@ -25,6 +25,7 @@ import RegistrosGastos from "./pages/Camionetas/RegistrosIncidentes";
 import RegistrosChecklist from "./pages/Camionetas/RegistrosChecklist";
 import Conductores from "./pages/Camionetas/Conductores";
 import Garita from "./pages/Camionetas/Garita";
+import MiCamioneta from "./pages/Camionetas/MiCamioneta";
 
 /* Programación de mantenimiento */
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
@@ -184,6 +185,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/camionetas/garita">
                 <Garita />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camionetas/mi-camioneta"
+            element={
+              <ProtectedRoute path="/camionetas/mi-camioneta">
+                <MiCamioneta />
               </ProtectedRoute>
             }
           />

@@ -61,7 +61,7 @@ function fromRow(r: DriverRow): Driver {
 
 function toRow(d: Partial<Driver>): Partial<DriverRow> {
   const out: Partial<DriverRow> = {};
-  if (d.id !== undefined) out.id = d.id;
+  if (d.id) out.id = d.id;
   if (d.nombre !== undefined) out.nombre = d.nombre;
   if (d.dni !== undefined) out.dni = d.dni;
   if (d.licencia !== undefined) out.licencia = d.licencia;
