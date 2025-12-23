@@ -61,6 +61,7 @@ export default function GestionRecursos() {
                     </div>
                     <TabAgentes
                         agentes={agentes}
+                        setToast={setToast}
                         onAdd={async (nombre, dni, supervisor) => {
                             try {
                                 await upsertAgente({ nombre, dni, supervisor });
@@ -131,19 +132,26 @@ export default function GestionRecursos() {
 
 function TabAgentes({
     agentes,
+    setToast,
     onAdd,
     onUpdate
 }: {
     agentes: Agente[];
+    setToast: (t: ToastState) => void;
     onAdd: (n: string, d?: string, s?: string) => void;
     onUpdate: (id: string, d: Partial<Agente>) => void;
 }) {
     const [search, setSearch] = useState("");
+    const [supervisorFilter, setSupervisorFilter] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Agente | null>(null);
     const [formData, setFormData] = useState({ nombre: "", dni: "", supervisor: "", activo: true });
 
-    const filtered = agentes.filter(a => a.nombre.toLowerCase().includes(search.toLowerCase()));
+    const filtered = agentes.filter(a => {
+        const matchesSearch = a.nombre.toLowerCase().includes(search.toLowerCase());
+        const matchesSupervisor = supervisorFilter ? a.supervisor === supervisorFilter : true;
+        return matchesSearch && matchesSupervisor;
+    });
 
     const handleOpen = (item?: Agente) => {
         if (item) {
@@ -158,6 +166,15 @@ function TabAgentes({
 
     const handleSubmit = () => {
         if (!formData.nombre.trim()) return;
+
+        // Validar DNI duplicado
+        if (formData.dni) {
+            const duplicate = agentes.find(a => a.dni === formData.dni && a.id !== editItem?.id);
+            if (duplicate) {
+                setToast({ type: "error", message: "El DNI ya está registrado en otro agente." });
+                return;
+            }
+        }
 
         if (editItem) {
             onUpdate(editItem.id, {
@@ -174,20 +191,33 @@ function TabAgentes({
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="relative max-w-sm w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar agente..."
-                        className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1 max-w-lg">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar agente..."
+                            className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <select
+                        className="h-10 rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 w-40"
+                        value={supervisorFilter}
+                        onChange={e => setSupervisorFilter(e.target.value)}
+                    >
+                        <option value="">Todos (Sup)</option>
+                        <option value="SUP 1">SUP 1</option>
+                        <option value="SUP 2">SUP 2</option>
+                        <option value="SUP 3">SUP 3</option>
+                        <option value="SUP 4">SUP 4</option>
+                    </select>
                 </div>
                 <button
                     onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors shrink-0"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo Agente
@@ -266,13 +296,17 @@ function TabAgentes({
                     </div>
                     <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1.5">Supervisor</label>
-                        <input
-                            type="text"
+                        <select
                             className="w-full h-11 rounded-lg border-gray-300 focus:border-red-500 focus:ring-red-500 text-sm px-3 border border-gray-200"
                             value={formData.supervisor}
                             onChange={e => setFormData({ ...formData, supervisor: e.target.value })}
-                            placeholder="Nombre del supervisor"
-                        />
+                        >
+                            <option value="">-- Seleccionar --</option>
+                            <option value="SUP 1">SUP 1</option>
+                            <option value="SUP 2">SUP 2</option>
+                            <option value="SUP 3">SUP 3</option>
+                            <option value="SUP 4">SUP 4</option>
+                        </select>
                     </div>
                     {editItem && (
                         <div className="flex items-center justify-between p-3 rounded-xl border border-gray-100 bg-gray-50/50 mt-2">
@@ -318,6 +352,7 @@ function TabPuestos({
     onUpdate: (id: string, d: Partial<Puesto>) => void;
 }) {
     const [search, setSearch] = useState("");
+    const [sedeFilter, setSedeFilter] = useState("");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Puesto | null>(null);
 
@@ -327,7 +362,11 @@ function TabPuestos({
     const [turnos, setTurnos] = useState<Turno[]>(["DIA", "NOCHE"]);
     const [activo, setActivo] = useState(true);
 
-    const filtered = puestos.filter(p => p.nombre.toLowerCase().includes(search.toLowerCase()));
+    const filtered = puestos.filter(p => {
+        const matchesSearch = p.nombre.toLowerCase().includes(search.toLowerCase());
+        const matchesSede = sedeFilter ? p.sede_id === sedeFilter : true;
+        return matchesSearch && matchesSede;
+    });
 
     const handleOpen = (item?: Puesto) => {
         if (item) {
@@ -363,20 +402,30 @@ function TabPuestos({
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <div className="relative max-w-sm w-full">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        placeholder="Buscar puesto..."
-                        className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
-                        value={search}
-                        onChange={e => setSearch(e.target.value)}
-                    />
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-2 flex-1 max-w-lg">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            placeholder="Buscar puesto..."
+                            className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
+                            value={search}
+                            onChange={e => setSearch(e.target.value)}
+                        />
+                    </div>
+                    <select
+                        className="h-10 rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 w-40"
+                        value={sedeFilter}
+                        onChange={e => setSedeFilter(e.target.value)}
+                    >
+                        <option value="">Todas las Sedes</option>
+                        {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
                 </div>
                 <button
                     onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors"
+                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors shrink-0"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo Puesto

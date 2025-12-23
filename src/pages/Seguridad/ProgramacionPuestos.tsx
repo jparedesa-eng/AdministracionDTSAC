@@ -455,9 +455,9 @@ export default function ProgramacionPuestos() {
 
     return (
         <div className="flex flex-col h-full gap-4 text-slate-800">
-            <div className="flex flex-col gap-1">
-                <h1 className="text-xl font-bold text-gray-900 tracking-tight">Gestión de Turnos</h1>
-                <p className="text-sm text-gray-500">Programación mensual de agentes y puestos</p>
+            <div className="px-1">
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Turnos</h1>
+                <p className="mt-1 text-sm text-gray-500">Programación mensual de agentes y puestos</p>
             </div>
 
             <div className="flex flex-col flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
 import {
-    Camera,
     Plus,
     Search,
     PencilLine,
@@ -271,11 +270,10 @@ function TabCamaras({
             {/* Header Section */}
             <div className="flex items-center justify-between gap-4 px-1">
                 <div>
-                    <h1 className="text-2xl font-black tracking-tight text-gray-900 flex items-center gap-2">
-                        <Camera className="h-7 w-7 text-blue-600" />
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                         Inventario de cámaras CCTV
                     </h1>
-                    <p className="text-sm font-medium text-gray-500">
+                    <p className="text-sm text-gray-500 mt-1">
                         Gestión técnica de infraestructura de video vigilancia
                     </p>
                 </div>
@@ -307,7 +305,7 @@ function TabCamaras({
                         <select
                             value={filterSede}
                             onChange={e => setFilterSede(e.target.value)}
-                            className="rounded-lg border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
+                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
                         >
                             <option value="">Todas las Sedes</option>
                             {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
@@ -316,7 +314,7 @@ function TabCamaras({
                         <select
                             value={filterCentral}
                             onChange={e => setFilterCentral(e.target.value)}
-                            className="rounded-lg border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
+                            className="rounded-lg border border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
                         >
                             <option value="">Todas las Centrales</option>
                             {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
@@ -325,7 +323,7 @@ function TabCamaras({
                         <select
                             value={filterTipo}
                             onChange={e => setFilterTipo(e.target.value)}
-                            className="rounded-lg border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
+                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
                         >
                             <option value="">Todos los Tipos</option>
                             <option value="CAMARA FIJA">Cámara Fija</option>
@@ -335,7 +333,7 @@ function TabCamaras({
                         <select
                             value={filterUbicacion}
                             onChange={e => setFilterUbicacion(e.target.value)}
-                            className="rounded-lg border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
+                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
                         >
                             <option value="">Todas las Ubicaciones</option>
                             <option value="INTERIOR">Interior</option>
@@ -345,7 +343,7 @@ function TabCamaras({
                         <select
                             value={filterEstado}
                             onChange={e => setFilterEstado(e.target.value as any)}
-                            className="rounded-lg border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
+                            className="rounded-lg border border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
                         >
                             <option value="all">Todos los Estados</option>
                             <option value="activa">Activas</option>
@@ -409,7 +407,7 @@ function TabCamaras({
                                         <td className="px-3 py-1.5 text-right">
                                             <button
                                                 onClick={() => handleOpen(c)}
-                                                className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors opacity-0 group-hover:opacity-100"
+                                                className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                                             >
                                                 <PencilLine className="h-3.5 w-3.5" />
                                             </button>

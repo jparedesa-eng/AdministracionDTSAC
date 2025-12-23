@@ -770,11 +770,12 @@ export default function ChecklistCamaras() {
             {/* Header */}
             <div className="flex flex-col md:flex-row justify-between items-end gap-4 px-1">
                 <div>
-                    <h2 className="text-3xl font-black text-slate-900 tracking-tight flex items-center gap-3">
-                        <ShieldCheck className="h-9 w-9 text-blue-600" />
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">
                         Centro de Control CCTV
-                    </h2>
-                    <p className="text-slate-500 font-medium text-sm mt-1">Gestión operativa multisede y auditoría técnica de cámaras</p>
+                    </h1>
+                    <p className="text-sm text-gray-500 mt-1">
+                        Gestión operativa multisede y auditoría técnica de cámaras
+                    </p>
                 </div>
                 <div className="flex items-center gap-3">
                     <button

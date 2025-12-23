@@ -44,6 +44,9 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     ? (profile!.allowed_views as string[])
     : [];
 
+  // DEBUG: Verificar permisos en consola
+  console.log("[Sidebar] Profile:", { role: profile?.rol, views, isAdmin });
+
   const hasAccess = (path: string) => {
     if (isAdmin) return true; // admin ve todo
     return views.some(
@@ -647,105 +650,111 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
           )}
 
         {/* Seguridad Patrimonial */}
-        {showAny("/seguridad/*", "/seguridad/programacion", "/seguridad/recursos", "/seguridad/checklist-camaras", "/seguridad/inventario-camaras") && (
-          <>
-            <SectionLabel>Seguridad Patrimonial</SectionLabel>
-            <button
-              type="button"
-              onClick={() => setOpenSeguridad((v) => !v)}
-              className={[
-                baseItem,
-                location.pathname.startsWith("/seguridad")
-                  ? activeClass
-                  : idleClass,
-                "mt-1",
-              ].join(" ")}
-              aria-expanded={openSeguridad}
-              aria-controls="submenu-seguridad"
-            >
-              <ShieldCheck
-                className={
+        {showAny(
+          "/seguridad/*",
+          "/seguridad/programacion",
+          "/seguridad/recursos",
+          "/seguridad/checklist-camaras",
+          "/seguridad/inventario-camaras"
+        ) && (
+            <>
+              <SectionLabel>Seguridad Patrimonial</SectionLabel>
+              <button
+                type="button"
+                onClick={() => setOpenSeguridad((v) => !v)}
+                className={[
+                  baseItem,
                   location.pathname.startsWith("/seguridad")
-                    ? iconActive
-                    : iconIdle
-                }
-              />
-              <span className="font-medium">Seguridad Patrimonial</span>
-              <span className="ml-auto transition-transform">
-                {openSeguridad ? (
-                  <ChevronDown
-                    className={
-                      location.pathname.startsWith("/seguridad")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                ) : (
-                  <ChevronRight
-                    className={
-                      location.pathname.startsWith("/seguridad")
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                )}
-              </span>
-            </button>
+                    ? activeClass
+                    : idleClass,
+                  "mt-1",
+                ].join(" ")}
+                aria-expanded={openSeguridad}
+                aria-controls="submenu-seguridad"
+              >
+                <ShieldCheck
+                  className={
+                    location.pathname.startsWith("/seguridad")
+                      ? iconActive
+                      : iconIdle
+                  }
+                />
+                <span className="font-medium">Seguridad Patrimonial</span>
+                <span className="ml-auto transition-transform">
+                  {openSeguridad ? (
+                    <ChevronDown
+                      className={
+                        location.pathname.startsWith("/seguridad")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  ) : (
+                    <ChevronRight
+                      className={
+                        location.pathname.startsWith("/seguridad")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  )}
+                </span>
+              </button>
 
-            <AnimatePresence initial={false}>
-              {openSeguridad && (
-                <motion.div
-                  id="submenu-seguridad"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                >
-                  {canSeeSeg_Programacion && (
-                    <NavLink
-                      to="/seguridad/programacion"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <CalendarDays className="h-4 w-4 text-gray-600" />
-                      Programación de Puestos
-                    </NavLink>
-                  )}
-                  {canSeeSeg_Recursos && (
-                    <NavLink
-                      to="/seguridad/recursos"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Users className="h-4 w-4 text-gray-600" />
-                      Gestión de Recursos
-                    </NavLink>
-                  )}
-                  {canSeeSeg_ChecklistCamaras && (
-                    <NavLink
-                      to="/seguridad/checklist-camaras"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <ClipboardList className="h-4 w-4 text-gray-600" />
-                      Checklist de Cámaras
-                    </NavLink>
-                  )}
-                  {canSeeSeg_InventarioCamaras && (
-                    <NavLink
-                      to="/seguridad/inventario-camaras"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                    >
-                      <Wrench className="h-4 w-4 text-gray-600" />
-                      Inventario de Cámaras
-                    </NavLink>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
+              <AnimatePresence initial={false}>
+                {openSeguridad && (
+                  <motion.div
+                    id="submenu-seguridad"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                  >
+                    {canSeeSeg_Programacion && (
+                      <NavLink
+                        to="/seguridad/programacion"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <CalendarDays className="h-4 w-4 text-gray-600" />
+                        Programación de Puestos
+                      </NavLink>
+                    )}
+                    {canSeeSeg_Recursos && (
+                      <NavLink
+                        to="/seguridad/recursos"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Users className="h-4 w-4 text-gray-600" />
+                        Gestión de Recursos
+                      </NavLink>
+                    )}
+                    {canSeeSeg_ChecklistCamaras && (
+                      <NavLink
+                        to="/seguridad/checklist-camaras"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ClipboardList className="h-4 w-4 text-gray-600" />
+                        Checklist de Cámaras
+                      </NavLink>
+                    )}
+                    {canSeeSeg_InventarioCamaras && (
+                      <NavLink
+                        to="/seguridad/inventario-camaras"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Wrench className="h-4 w-4 text-gray-600" />
+                        Inventario de Cámaras
+                      </NavLink>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
 
         {/* Preferencias / Configuración (agrupado) */}
         {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias || canSeeConfigSedes || canSeeConfigCentrales) && (

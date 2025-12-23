@@ -15,7 +15,7 @@ export type Profile = {
 type AuthCtx = {
   user: any | null;
   profile: Profile | null;
-  login: (dni: string, pass: string) => Promise<void>;
+  login: (username: string, pass: string) => Promise<void>;
   logout: () => Promise<void>;
   canView: (path: string) => boolean;
   loadingSession: boolean;
@@ -24,7 +24,7 @@ type AuthCtx = {
 const Ctx = createContext<AuthCtx>(null as any);
 export const useAuth = () => useContext(Ctx);
 
-const dniToEmail = (dni: string) => `${dni}@users.local`;
+const usernameToEmail = (username: string) => `${username}@users.local`;
 
 // Timeout simple con Promise.race (evita tipo genérico del query)
 function promiseWithTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -80,11 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }
 
-  async function login(dni: string, pass: string) {
-    if (!/^\d{8}$/.test(dni)) throw new Error("Usuario inválido.");
+  async function login(username: string, pass: string) {
+    // Eliminada validación estricta de 8 dígitos para permitir alfanuméricos
+    // if (!/^\d{8}$/.test(dni)) throw new Error("Usuario inválido.");
 
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: dniToEmail(dni),
+      email: usernameToEmail(username),
       password: pass,
     });
     if (error) throw error;

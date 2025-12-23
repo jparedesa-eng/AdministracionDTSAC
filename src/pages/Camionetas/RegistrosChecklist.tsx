@@ -17,6 +17,8 @@ import {
   ChevronDown,
   FileSpreadsheet,
 } from "lucide-react";
+import { Toast } from "../../components/ui/Toast";
+import type { ToastState } from "../../components/ui/Toast";
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
@@ -480,13 +482,13 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
         ${row.tipo ? row.tipo.toUpperCase() : "REGULAR"}
       </div>
       <div style="font-weight:600;">${row.placa ?? ""}</div>
-      <div>${new Date(row.created_at).toLocaleString()}</div>
+      <div>${calculateSeniority(row.fecha_ingreso)}</div>
     </div>
   </div>
 
   <!-- Datos generales -->
   <div style="font-size:14px; font-weight:700; margin: 10px 0 8px;">Datos generales</div>
-  <div style="display:grid; grid-template-columns: repeat(3, 1fr); gap:8px; margin-bottom:12px;">
+  <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:8px; margin-bottom:12px;">
     ${cell("Fecha:", fechaStr)}
     ${cell("Sede:", row.sede ?? "—")}
     ${cell("Kilometraje:", row.kilometraje ?? "—")}
@@ -495,7 +497,6 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
     ${cell("Nombre Usuario:", getNombre(row))}
     ${cell("Correo Usuario:", getCorreo(row))}
     ${cell("Estado checklist:", row.aprobado ? "APROBADO" : "CON OBSERVACIONES")}
-    ${cell("Tiempo de antigüedad:", calculateSeniority(row.fecha_ingreso))}
   </div>
 
   <!-- Firma -->
@@ -535,6 +536,7 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
                   "rayado": { label: "Rayado", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
                   "abollado": { label: "Abollado", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
                   "danio_severo": { label: "Daño Severo", text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
+                  "no_entregado": { label: "No Entregado", text: "#374151", bg: "#F3F4F6", border: "#D1D5DB" },
                 };
 
                 const statusKey = it.status || it.nota || "";
@@ -601,8 +603,9 @@ async function fetchGruposFor(row: ChecklistRow): Promise<Grupo[]> {
   return Array.from(byGroup.values());
 }
 
-async function exportPdf(row: ChecklistRow) {
+async function exportPdf(row: ChecklistRow, setToast: (t: ToastState) => void) {
   try {
+    setToast({ type: "info", message: "Generando PDF, por favor espere..." });
     const grupos = await fetchGruposFor(row);
 
     const host = document.createElement("div");
@@ -615,10 +618,14 @@ async function exportPdf(row: ChecklistRow) {
     document.body.appendChild(host);
 
     const pdfRoot = host.querySelector("#pdf-root") as HTMLElement;
+    // Wait for images
+    await new Promise((resolve) => setTimeout(resolve, 500));
+
     const canvas = await html2canvas(pdfRoot, {
-      scale: 4,
+      scale: 3, // Increased scale for better quality
       useCORS: true,
       backgroundColor: "#ffffff",
+      logging: false,
     });
 
     const pdf = new jsPDF({
@@ -628,8 +635,8 @@ async function exportPdf(row: ChecklistRow) {
       compress: true,
     });
 
-    const imgData = canvas.toDataURL("image/png");
-    pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height, undefined, "SLOW");
+    const imgData = canvas.toDataURL("image/jpeg", 0.95); // JPEG slightly smaller/faster than PNG
+    pdf.addImage(imgData, "JPEG", 0, 0, canvas.width, canvas.height, undefined, "FAST");
 
     const nombre = `Checklist_${row.placa ?? "vehiculo"}_${new Date(
       row.created_at
@@ -637,9 +644,10 @@ async function exportPdf(row: ChecklistRow) {
     pdf.save(nombre);
 
     document.body.removeChild(host);
+    setToast({ type: "success", message: "PDF descargado correctamente." });
   } catch (e: any) {
     console.error(e);
-    alert(e?.message ?? "No se pudo exportar el PDF.");
+    setToast({ type: "error", message: e?.message ?? "No se pudo exportar el PDF." });
   }
 }
 
@@ -964,6 +972,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   };
 
   const guardar = async () => {
+    if (saving) return; // Prevent double submission
     if (!fecha) {
       alert("Fecha requerida.");
       return;
@@ -1524,6 +1533,7 @@ export default function RegistrosChecklist() {
   const [page, setPage] = React.useState(1);
   const [pageSize, setPageSize] = React.useState(10);
   const [loading, setLoading] = React.useState(false);
+  const [toast, setToast] = React.useState<ToastState>(null);
 
   const today = new Date().toISOString().slice(0, 10);
   const [fromDate, setFromDate] = React.useState(today);
@@ -1771,7 +1781,7 @@ export default function RegistrosChecklist() {
           <button
             type="button"
             onClick={() => setOpenCreate(true)}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-900 active:scale-[.99]"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 active:scale-[.99]"
           >
             <PlusCircle className="h-4 w-4" />
             <span>Nuevo checklist</span>
@@ -1879,9 +1889,6 @@ export default function RegistrosChecklist() {
               <h2 className="text-lg font-semibold leading-tight">
                 Lista de Checklists
               </h2>
-              <p className="text-xs text-gray-500">
-                Mostrando {rows.length} de {total} — Página {page} / {totalPages}
-              </p>
             </div>
           </div>
         </div>
@@ -1929,7 +1936,7 @@ export default function RegistrosChecklist() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
+                        className="p-1.5 rounded-lg bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                         onClick={() => openDetails(c)}
                         title="Ver detalles"
                       >
@@ -1937,15 +1944,15 @@ export default function RegistrosChecklist() {
                       </button>
                       <button
                         type="button"
-                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
-                        onClick={() => exportPdf(c)}
+                        className="p-1.5 rounded-lg bg-rose-50 text-rose-600 hover:bg-rose-100 transition-colors"
+                        onClick={() => exportPdf(c, setToast)}
                         title="Descargar PDF"
                       >
                         <FileDown className="h-5 w-5" />
                       </button>
                       <button
                         type="button"
-                        className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
+                        className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
                         onClick={() => openEditModal(c)}
                         title="Editar checklist"
                       >
@@ -2214,8 +2221,10 @@ export default function RegistrosChecklist() {
         onSaved={async () => {
           setPage(1);
           await fetchChecklists({ page: 1 });
+          setToast({ type: "success", message: "Checklist guardado correctamente." });
         }}
       />
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
