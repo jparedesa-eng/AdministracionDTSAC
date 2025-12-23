@@ -20,14 +20,14 @@ import {
 import jsPDF from "jspdf";
 import html2canvas from "html2canvas";
 import * as XLSX from "xlsx";
-import { guardarChecklist } from "../../store/checklistStore";
+import { guardarChecklist, actualizarChecklist } from "../../store/checklistStore";
 import { camionetasStore } from "../../store/camionetasStore";
 import { useAuth } from "../../auth/AuthContext";
 
 /* =============== Tipos =============== */
 type Grupo = {
   titulo: string;
-  items: { name: string; ok: boolean; nota?: string }[];
+  items: { name: string; ok: boolean; status?: string; nota?: string }[];
 };
 
 type ChecklistRow = {
@@ -56,6 +56,7 @@ type ChecklistRow = {
 
   observaciones?: string | null;
   aprobado?: boolean | null;
+  fecha_ingreso?: string | null; // NUEVO CAMPO
 
   // Ítems embebidos (JSONB)
   grupos?: any;
@@ -72,8 +73,8 @@ type ChecklistItemRow = {
   nota: string | null;
 };
 
-type CkItem = { name: string; ok: boolean; nota?: string };
-type CkGroup = { title: string; items: CkItem[] };
+type CkItem = { name: string; ok: boolean; status?: string; nota?: string };
+type CkGroup = { titulo: string; items: CkItem[] };
 
 type Driver = {
   id: string;
@@ -85,25 +86,30 @@ type Driver = {
 /* =============== Grupos base =============== */
 const GRUPOS: CkGroup[] = [
   {
-    title: "OTROS",
+    titulo: "DOCUMENTOS Y SEGURIDAD",
     items: [
+      "DOCUMENTOS DE VEHÍCULO",
       "EXTINTOR",
       "BOTIQUÍN",
+    ].map((name) => ({ name, ok: true, status: "vigente" })),
+  },
+  {
+    titulo: "ACCESORIOS Y FUNCIONAMIENTO",
+    items: [
       "SEGURO DE RUEDAS",
       "GATA",
       "LLAVE DE RUEDAS",
       "CONOS",
       "TACOS",
-      "DOCUMENTOS DE VEHÍCULO",
       "FORRO ASIENTOS",
       "PISOS",
       "LUNAS",
       "FUNCIONAMIENTO DE LUCES",
       "ALARMA DE RETROCESO",
-    ].map((name) => ({ name, ok: true })),
+    ].map((name) => ({ name, ok: true, status: "funcional" })),
   },
   {
-    title: "PARTE FRONTAL",
+    titulo: "PARTE FRONTAL",
     items: [
       "Parachoque delantero",
       "Parabrisa",
@@ -116,29 +122,29 @@ const GRUPOS: CkGroup[] = [
       "Espejo retrovisor LH",
       "Guardafango delantero LH",
       "Guardafango trasero LH",
-    ].map((name) => ({ name, ok: true })),
+    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
   },
   {
-    title: "PARTE LATERAL IZQUIERDA (LH)",
+    titulo: "PARTE LATERAL IZQUIERDA (LH)",
     items: [
       "Zocalo LH",
       "Puerta piloto LH",
       "Tapa de combustible LH",
       "Puerta trasera LH",
-    ].map((name) => ({ name, ok: true })),
+    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
   },
   {
-    title: "PARTE LATERAL DERECHA (RH)",
+    titulo: "PARTE LATERAL DERECHA (RH)",
     items: [
       "Espejo retroviso RH",
       "Guardafango delantero RH",
       "Guardafango trasero RH",
       "Zocalo RH",
       "Puerta piloto RH",
-    ].map((name) => ({ name, ok: true })),
+    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
   },
   {
-    title: "PARTE POSTERIOR",
+    titulo: "PARTE POSTERIOR",
     items: [
       "Puerta trasera RH",
       "Compuerta de tolva",
@@ -146,7 +152,7 @@ const GRUPOS: CkGroup[] = [
       "Faros posterior RH",
       "Llanta de repuesto",
       "Parachoque posterior",
-    ].map((name) => ({ name, ok: true })),
+    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
   },
 ];
 
@@ -283,6 +289,69 @@ function formatFechaHoraLocal(valor?: string | null, fallback?: string): string 
   return src;
 }
 
+/** Formatea una fecha ISO para inputs de tipo datetime-local (YYYY-MM-DDTHH:MM) */
+function formatForDateTimeLocal(iso?: string | null): string {
+  if (!iso) return "";
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+
+    // Ajuste a la zona horaria local para obtener los componentes
+    const pad = (n: number) => n.toString().padStart(2, '0');
+    const Y = d.getFullYear();
+    const M = pad(d.getMonth() + 1);
+    const D = pad(d.getDate());
+    const h = pad(d.getHours());
+    const m = pad(d.getMinutes());
+
+    return `${Y}-${M}-${D}T${h}:${m}`;
+  } catch (e) {
+    return "";
+  }
+}
+const KNOWN_STATUSES = [
+  "vigente", "por_vencer", "vencido", "faltante",
+  "funcional", "defecto_leve", "deteriorado",
+  "buen_estado", "rayado", "abollado", "danio_severo",
+  "no_entregado"
+];
+
+function normalizeItem(name: string, ok: boolean, rawStatus?: string, rawNota?: string): CkItem {
+  let status = String(rawStatus ?? "");
+  let nota = String(rawNota ?? "");
+
+  if (!status && KNOWN_STATUSES.includes(nota)) {
+    status = nota;
+    nota = "";
+  }
+  return { name, ok, status, nota: nota || "" };
+}
+
+/** Calcula la antigüedad en años y meses */
+function calculateSeniority(fechaIngreso?: string | null): string {
+  if (!fechaIngreso) return "—";
+  try {
+    const start = new Date(fechaIngreso);
+    const end = new Date();
+    if (isNaN(start.getTime())) return "—";
+
+    let years = end.getFullYear() - start.getFullYear();
+    let months = end.getMonth() - start.getMonth();
+
+    if (months < 0) {
+      years--;
+      months += 12;
+    }
+
+    const yearStr = years > 0 ? `${years} ${years === 1 ? "año" : "años"}` : "";
+    const monthStr = months > 0 ? `${months} ${months === 1 ? "mes" : "meses"}` : "";
+
+    if (yearStr && monthStr) return `${yearStr} y ${monthStr}`;
+    return yearStr || monthStr || "Menos de un mes";
+  } catch (e) {
+    return "—";
+  }
+}
 function normalizeGruposFromRow(row: ChecklistRow): Grupo[] | null {
   if (!row || !row.grupos) return null;
   const raw = row.grupos as any;
@@ -290,11 +359,12 @@ function normalizeGruposFromRow(row: ChecklistRow): Grupo[] | null {
     const grupos: Grupo[] = raw.map((g: any) => ({
       titulo: String(g.title ?? g.titulo ?? "OTROS"),
       items: Array.isArray(g.items)
-        ? g.items.map((it: any) => ({
-          name: String(it.name ?? ""),
-          ok: Boolean(it.ok),
-          ...(it.ok ? {} : { nota: it.nota ? String(it.nota) : "" }),
-        }))
+        ? g.items.map((it: any) => normalizeItem(
+          String(it.name ?? ""),
+          Boolean(it.ok),
+          it.status,
+          it.nota
+        ))
         : [],
     }));
     return grupos;
@@ -305,7 +375,72 @@ function normalizeGruposFromRow(row: ChecklistRow): Grupo[] | null {
 const getDni = (r: ChecklistRow) => r.usuario_dni ?? r.dni_usuario ?? "—";
 const getNombre = (r: ChecklistRow) => r.usuario_nombre ?? r.nombre_usuario ?? "—";
 const getCorreo = (r: ChecklistRow) => r.usuario_correo ?? r.correo_usuario ?? "—";
-const getFirma = (r: ChecklistRow) => r.firma_base64 ?? r.firma_usuario_dataurl ?? null;
+
+/** Helper para asegurar que la firma sea un DataURL válido */
+function resolveFirmaSource(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+
+  // Step 1: Remove ALL whitespace
+  let cleaned = raw.replace(/\s/g, "");
+  if (!cleaned) return null;
+
+  // Step 2: If it's an external URL, return as-is
+  if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) {
+    return cleaned;
+  }
+
+  // Step 3: AGGRESSIVE extraction - find where the actual base64 payload starts
+  const base64Marker = "base64,";
+  const markerIdx = cleaned.toLowerCase().indexOf(base64Marker);
+
+  let payload: string;
+  if (markerIdx !== -1) {
+    // Extract everything AFTER "base64,"
+    payload = cleaned.substring(markerIdx + base64Marker.length);
+  } else if (cleaned.includes(",")) {
+    // Has comma but no "base64" - split and take second part
+    const parts = cleaned.split(",");
+    payload = parts[parts.length - 1];
+  } else {
+    // No markers, assume entire string is the payload
+    payload = cleaned;
+  }
+
+  // Step 4: Rebuild with guaranteed correct prefix
+  return `data:image/png;base64,${payload}`;
+}
+
+const getFirma = (r: ChecklistRow) => {
+  const raw = r.firma_base64 ?? r.firma_usuario_dataurl;
+  return resolveFirmaSource(raw);
+};
+
+/** Convierte un data URL a Blob URL para mejor compatibilidad */
+function dataURLtoBlob(dataURL: string): Blob {
+  const parts = dataURL.split(',');
+  const byteString = atob(parts[1]);
+  const mimeString = parts[0].split(':')[1].split(';')[0];
+
+  const ab = new ArrayBuffer(byteString.length);
+  const ia = new Uint8Array(ab);
+  for (let i = 0; i < byteString.length; i++) {
+    ia[i] = byteString.charCodeAt(i);
+  }
+
+  return new Blob([ab], { type: mimeString });
+}
+
+function createBlobURL(dataURL: string | null): string | null {
+  if (!dataURL) return null;
+  try {
+    const blob = dataURLtoBlob(dataURL);
+    return URL.createObjectURL(blob);
+  } catch (error) {
+    console.error("Error creating blob URL:", error);
+    return dataURL; // Fallback to original data URL
+  }
+}
+
 
 /* =============== Componentes auxiliares PDF =============== */
 function cell(label: string, value: string | number) {
@@ -360,6 +495,7 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
     ${cell("Nombre Usuario:", getNombre(row))}
     ${cell("Correo Usuario:", getCorreo(row))}
     ${cell("Estado checklist:", row.aprobado ? "APROBADO" : "CON OBSERVACIONES")}
+    ${cell("Tiempo de antigüedad:", calculateSeniority(row.fecha_ingreso))}
   </div>
 
   <!-- Firma -->
@@ -385,22 +521,43 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
         <div style="display:grid; grid-template-columns: repeat(2, 1fr); gap:6px; padding:10px;">
           ${g.items
             .map(
-              (it) => `
-              <div style="border:1px solid ${it.ok ? "#6EE7B7" : "#FCA5A5"
-                }; border-radius:8px; padding:8px; font-size:12px; display:flex; justify-content:space-between; align-items:flex-start; background:${it.ok ? "#ECFDF5" : "#FEF2F2"
-                };">
-                <div style="max-width:55%;">
-                  ${it.name}
+              (it) => {
+                // Mapeo de estados para el PDF
+                const statusMap: Record<string, { label: string; text: string; bg: string; border: string }> = {
+                  "vigente": { label: "Vigente", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
+                  "por_vencer": { label: "Por Vencer", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
+                  "vencido": { label: "Vencido", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
+                  "faltante": { label: "Faltante", text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
+                  "funcional": { label: "Funcional", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
+                  "defecto_leve": { label: "Defecto Leve", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
+                  "deteriorado": { label: "Deteriorado", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
+                  "buen_estado": { label: "Buen Estado", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
+                  "rayado": { label: "Rayado", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
+                  "abollado": { label: "Abollado", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
+                  "danio_severo": { label: "Daño Severo", text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
+                };
+
+                const statusKey = it.status || it.nota || "";
+
+                const s = statusMap[statusKey] || (it.ok
+                  ? { label: "OK", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" }
+                  : { label: it.nota || "NO", text: "#B91C1C", bg: "#FEF2F2", border: "#FCA5A5" });
+
+                const hasPdfNote = it.nota && !statusMap[it.nota];
+
+                return `
+              <div style="border:1px solid ${s.border}; border-radius:8px; padding:8px; font-size:12px; display:flex; flex-direction:column; gap:4px; background:${s.bg};">
+                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+                  <div style="max-width:70%;">
+                    ${it.name}
+                  </div>
+                  <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
+                    <span style="font-weight:700; font-size:11px; color:${s.text}">${s.label}</span>
+                  </div>
                 </div>
-                <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px; max-width:45%;">
-                  <span style="font-weight:700; font-size:11px; ${it.ok ? "color:#15803D" : "color:#B91C1C"
-                }">${it.ok ? "OK" : "NO"}</span>
-                  ${!it.ok && it.nota
-                  ? `<span style="color:#6B7280; font-size:11px; text-align:right;">${it.nota}</span>`
-                  : ""
-                }
-                </div>
-              </div>`
+                ${hasPdfNote ? `<div style="color:#6B7280; font-size:11px; border-top:1px solid ${s.border}; margin-top:2px; padding-top:2px; font-style:italic;">Obs: ${it.nota}</div>` : ""}
+              </div>`;
+              }
             )
             .join("")}
         </div>
@@ -434,11 +591,12 @@ async function fetchGruposFor(row: ChecklistRow): Promise<Grupo[]> {
   (data as ChecklistItemRow[]).forEach((r) => {
     const key = (r.grupo ?? "OTROS").toString();
     if (!byGroup.has(key)) byGroup.set(key, { titulo: key, items: [] });
-    byGroup.get(key)!.items.push({
-      name: r.name,
-      ok: !!r.ok,
-      ...(r.ok ? {} : { nota: r.nota ?? "" }),
-    });
+    byGroup.get(key)!.items.push(normalizeItem(
+      r.name,
+      !!r.ok,
+      undefined, // From flat table, we only have nota
+      r.nota ?? ""
+    ));
   });
   return Array.from(byGroup.values());
 }
@@ -458,7 +616,7 @@ async function exportPdf(row: ChecklistRow) {
 
     const pdfRoot = host.querySelector("#pdf-root") as HTMLElement;
     const canvas = await html2canvas(pdfRoot, {
-      scale: 3,
+      scale: 4,
       useCORS: true,
       backgroundColor: "#ffffff",
     });
@@ -471,7 +629,7 @@ async function exportPdf(row: ChecklistRow) {
     });
 
     const imgData = canvas.toDataURL("image/png");
-    pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height, "", "FAST");
+    pdf.addImage(imgData, "PNG", 0, 0, canvas.width, canvas.height, undefined, "SLOW");
 
     const nombre = `Checklist_${row.placa ?? "vehiculo"}_${new Date(
       row.created_at
@@ -490,12 +648,14 @@ type ChecklistCreateModalProps = {
   open: boolean;
   onClose: () => void;
   onSaved: () => Promise<void> | void;
+  editingRow?: ChecklistRow | null; // Nuevo prop para edición
 };
 
 const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   open,
   onClose,
   onSaved,
+  editingRow,
 }) => {
   const { profile } = useAuth();
   const sig = useSignaturePad(open);
@@ -512,12 +672,14 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   const [responsable, setResponsable] = React.useState("");
   const [uDni, setUDni] = React.useState("");
   const [uNombre, setUNombre] = React.useState("");
+  const [fechaIngreso, setFechaIngreso] = React.useState<string | null>(null); // NUEVO ESTADO
   const [grupos, setGrupos] = React.useState<CkGroup[]>(
     GRUPOS.map((g) => ({
-      title: g.title,
+      titulo: g.titulo,
       items: g.items.map((i) => ({ ...i })),
     }))
   );
+  const [observaciones, setObservaciones] = React.useState(""); // Nuevo estado para observaciones
   const [saving, setSaving] = React.useState(false);
 
   const [conductores, setConductores] = React.useState<Driver[]>([]);
@@ -560,10 +722,34 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   }, []);
 
   React.useEffect(() => {
-    if (profile?.nombre) {
+    if (profile?.nombre && !editingRow) {
       setResponsable((prev) => prev || profile.nombre);
     }
-  }, [profile]);
+  }, [profile, editingRow]);
+
+  // Cargar datos si estamos editando
+  React.useEffect(() => {
+    if (editingRow && open) {
+      setTipo(editingRow.tipo ?? "regular");
+      // Importante: formatear para datetime-local
+      setFecha(formatForDateTimeLocal(editingRow.fecha ?? editingRow.created_at));
+      setSede(editingRow.sede ?? "Trujillo");
+      setPlaca(editingRow.placa ?? "");
+      setKm(editingRow.kilometraje?.toString() ?? "");
+      setResponsable(editingRow.responsable_inspeccion ?? "");
+      setUDni(getDni(editingRow));
+      setUNombre(getNombre(editingRow));
+      setObservaciones(editingRow.observaciones ?? "");
+      setFechaIngreso(editingRow.fecha_ingreso ?? null);
+
+      const inRow = normalizeGruposFromRow(editingRow);
+      if (inRow && inRow.length > 0) {
+        setGrupos(inRow);
+      }
+    } else if (!editingRow && open) {
+      resetForm();
+    }
+  }, [editingRow, open]);
 
   // Cerrar dropdown placa cuando se hace click fuera
   React.useEffect(() => {
@@ -596,31 +782,17 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     );
   };
 
-  const marcarGrupo = (gi: number, ok: boolean) => {
-    setGrupos((prev) =>
-      prev.map((g, idx) =>
-        idx !== gi
-          ? g
-          : {
-            ...g,
-            items: g.items.map((it) => ({
-              ...it,
-              ok,
-              nota: ok ? undefined : it.nota,
-            })),
-          }
-      )
-    );
-  };
-
-  // Filtrar ítems de OTROS según el último checklist (checklist de entrega)
-  // Filtrar ítems de OTROS según el último checklist (checklist de entrega)
+  // Filtrar ítems según el último checklist (checklist de entrega)
   React.useEffect(() => {
+    // Si estamos editando, NO aplicamos filtros de inventario automático
+    // para no sobreescribir los datos guardados del registro.
+    if (editingRow) return;
+
     // Si es tipo ENTREGA, mostramos TODOS los items siempre (para definir el inventario)
     if (tipo === "entrega") {
       setGrupos(
         GRUPOS.map((g) => ({
-          title: g.title,
+          titulo: g.titulo,
           items: g.items.map((i) => ({ ...i })),
         }))
       );
@@ -628,11 +800,10 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     }
 
     // Si es REGULAR, aplicamos el filtro basado en la última entrega
-    // Si no hay placa, restauramos los grupos originales
     if (!placa) {
       setGrupos(
         GRUPOS.map((g) => ({
-          title: g.title,
+          titulo: g.titulo,
           items: g.items.map((i) => ({ ...i })),
         }))
       );
@@ -642,12 +813,11 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     let active = true;
     (async () => {
       try {
-        // Buscar el último checklist DE ENTREGA de esta placa
         const { data, error } = await supabase
           .from("checklists")
           .select("grupos")
           .eq("placa", placa)
-          .eq("tipo", "entrega") // SOLO CHECKLISTS DE ENTREGA
+          .eq("tipo", "entrega")
           .order("created_at", { ascending: false })
           .limit(1)
           .maybeSingle();
@@ -658,58 +828,45 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
           return;
         }
 
-        // Si no existe checklist de entrega previo, mostramos todo (fallback)
         if (!data || !data.grupos) {
           setGrupos(
             GRUPOS.map((g) => ({
-              title: g.title,
+              titulo: g.titulo,
               items: g.items.map((i) => ({ ...i })),
             }))
           );
           return;
         }
 
-        // Si existe, filtramos el grupo "OTROS"
         const prevGrupos = Array.isArray(data.grupos) ? (data.grupos as any[]) : [];
-        const prevOtros = prevGrupos.find(
-          (pg) => String(pg.title || pg.titulo) === "OTROS"
-        );
 
-        if (!prevOtros || !Array.isArray(prevOtros.items)) {
-          return;
-        }
+        // Mapeamos los ítems que NO deben aparecer (los marcados como no entregados)
+        const noEntregados = new Set<string>();
+        prevGrupos.forEach((pg: any) => {
+          if (Array.isArray(pg.items)) {
+            pg.items.forEach((it: any) => {
+              const isNoEntregado =
+                it.status === "no_entregado" ||
+                (it.nota && (it.nota.toUpperCase() === "NO ENTREGADO" || it.nota.toUpperCase() === "NO CUENTA"));
 
-        // Obtenemos los nombres de ítems que NO fueron marcados como "NO ENTREGADO"
-        const allowedItems = new Set<string>();
-        prevOtros.items.forEach((it: any) => {
-          const esNoCuenta = !it.ok && (it.nota === "NO CUENTA" || it.nota === "NO ENTREGADO");
-          if (!esNoCuenta) {
-            allowedItems.add(String(it.name));
+              if (isNoEntregado) {
+                noEntregados.add(String(it.name));
+              }
+            });
           }
         });
 
-        // Actualizamos el estado
         setGrupos((currentGrupos) => {
           return currentGrupos.map((g) => {
-            if (g.title === "OTROS") {
-              const baseItems = GRUPOS.find((x) => x.title === "OTROS")?.items || [];
-              const newItems = baseItems
-                .filter((baseItem) => allowedItems.has(baseItem.name))
-                .map((baseItem) => ({ ...baseItem }));
+            const baseItems = GRUPOS.find((x) => x.titulo === g.titulo)?.items || [];
+            const filteredItems = baseItems
+              .filter((item) => !noEntregados.has(item.name))
+              .map((item) => ({ ...item }));
 
-              return {
-                ...g,
-                items: newItems,
-              };
-            }
-            const baseG = GRUPOS.find((x) => x.title === g.title);
-            if (baseG) {
-              return {
-                title: baseG.title,
-                items: baseG.items.map(i => ({ ...i }))
-              };
-            }
-            return g;
+            return {
+              ...g,
+              items: filteredItems,
+            };
           });
         });
       } catch (err) {
@@ -720,7 +877,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     return () => {
       active = false;
     };
-  }, [placa, tipo]);
+  }, [placa, tipo, editingRow, open]);
 
   // Nuevo efecto para obtener el último kilometraje
   React.useEffect(() => {
@@ -755,6 +912,20 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     })();
   }, [placa]);
 
+  // Buscar fecha_ingreso del inventario cuando cambia la placa (solo si no estamos editando o si cambia manualmente)
+  React.useEffect(() => {
+    if (!placa) {
+      setFechaIngreso(null);
+      return;
+    }
+    const vehiculo = camionetasStore.inventario.find(v => v.placa === placa);
+    if (vehiculo && vehiculo.fechaIngreso) {
+      setFechaIngreso(vehiculo.fechaIngreso);
+    } else {
+      setFechaIngreso(null);
+    }
+  }, [placa]);
+
   const aprobado = React.useMemo(
     () => grupos.every((g) => g.items.every((it) => it.ok)),
     [grupos]
@@ -770,10 +941,11 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     setUNombre("");
     setGrupos(
       GRUPOS.map((g) => ({
-        title: g.title,
+        titulo: g.titulo,
         items: g.items.map((i) => ({ ...i })),
       }))
     );
+    setObservaciones("");
     setPlacaSearch("");
     setPlacaOpen(false);
     sig.clear();
@@ -823,7 +995,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
       setSaving(true);
       const firma = sig.toDataURL();
 
-      await guardarChecklist({
+      const payload: any = {
         placa: placa.trim().toUpperCase(),
         fecha,
         sede: sede || null,
@@ -834,8 +1006,16 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         firma_base64: firma,
         grupos,
         aprobado,
-        tipo, // Enviamos el tipo
-      });
+        tipo,
+        observaciones: observaciones.trim(), // Enviamos observaciones
+        fecha_ingreso: fechaIngreso, // Enviamos fecha de ingreso
+      };
+
+      if (editingRow) {
+        await actualizarChecklist(editingRow.id, payload);
+      } else {
+        await guardarChecklist(payload);
+      }
 
       await onSaved();
       resetForm();
@@ -857,14 +1037,16 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         onClick={onClose}
         aria-hidden
       />
-      <div className="absolute inset-0 grid place-items-center p-3 sm:p-4">
-        <div className="w-full max-w-5xl overflow-hidden rounded-2xl border bg-white shadow-xl">
+      <div className="absolute inset-0 flex items-center justify-center p-3 sm:p-4">
+        <div className="w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
           {/* Header */}
-          <div className="flex items-center justify-between border-b px-5 py-4">
+          <div className="flex items-center justify-between border-b border-gray-100 px-5 py-4">
             <div>
-              <h3 className="text-lg font-semibold">Nuevo checklist de vehículo</h3>
-              <p className="text-xs text-gray-500">
-                Registra la inspección antes de la entrega o uso.
+              <h3 className="text-lg font-semibold text-gray-900">
+                {editingRow ? "Editar checklist" : "Nuevo checklist de vehículo"}
+              </h3>
+              <p className="text-xs text-gray-600">
+                {editingRow ? "Corrige o actualiza los datos del registro." : "Registra la inspección antes de la entrega o uso."}
               </p>
             </div>
             <button
@@ -877,7 +1059,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="max-h-[75vh] overflow-y-auto px-5 py-4">
+          <div className="flex-1 overflow-y-auto px-5 py-4">
             {/* Datos generales */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="grid gap-1">
@@ -887,18 +1069,18 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                   <input
                     type="datetime-local"
                     value={fecha}
-                    readOnly
-                    className="w-full rounded-xl border px-10 py-2.5 text-sm shadow-sm outline-none bg-gray-100 text-gray-500 cursor-not-allowed"
+                    onChange={(e) => setFecha(e.target.value)}
+                    className="w-full rounded-xl border border-gray-200 px-10 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
                   />
                 </div>
               </div>
 
-              <div className="grid gap-1">
+              <div className="grid gap-1 ">
                 <label className="text-sm font-medium">Sede</label>
                 <select
                   value={sede}
                   onChange={(e) => setSede(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
                 >
                   <option value="Trujillo">Trujillo</option>
                   <option value="Arequipa">Arequipa</option>
@@ -912,8 +1094,8 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                     type="button"
                     onClick={() => setTipo("regular")}
                     className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${tipo === "regular"
-                      ? "bg-gray-900 text-white border-gray-900"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
+                      ? "bg-blue-900 text-white border-blue-900"
+                      : "bg-white text-gray-700 hover:bg-gray-50 border-gray-200"
                       }`}
                   >
                     Regular / Diario
@@ -923,7 +1105,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                     onClick={() => setTipo("entrega")}
                     className={`flex-1 rounded-xl border px-3 py-2 text-sm font-medium transition ${tipo === "entrega"
                       ? "bg-emerald-600 text-white border-emerald-600"
-                      : "bg-white text-gray-700 hover:bg-gray-50"
+                      : "bg-white text-gray-700 hover:bg-gray-50 border-gray-200"
                       }`}
                   >
                     Entrega
@@ -947,7 +1129,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                       setPlacaSearch(placa);
                       setPlacaOpen(true);
                     }}
-                    className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none focus:ring-1 focus:ring-gray-300 placeholder:text-gray-400"
+                    className="w-full rounded-xl border border-gray-200 py-2 pl-9 pr-4 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 placeholder:text-gray-400"
                     placeholder="Buscar placa..."
                   />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
@@ -956,7 +1138,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                 </div>
 
                 {placaOpen && (
-                  <div className="absolute z-50 mt-1 w-full rounded-xl border bg-white shadow-lg overflow-hidden max-h-60 overflow-y-auto top-full">
+                  <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-100 bg-white overflow-hidden max-h-60 overflow-y-auto top-full shadow-md">
                     {filteredPlacas.length === 0 && (
                       <div className="px-3 py-2 text-xs text-gray-400">
                         Sin resultados
@@ -986,205 +1168,324 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                 )}
               </div>
 
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">
-                  Kilometraje
-                  {lastKm !== null && <span className="ml-1 text-xs font-normal text-gray-500">(Último: {lastKm})</span>}
+              {/* Mostrar Tiempo de Antigüedad debajo de la Placa si existe */}
+              {fechaIngreso && (
+                <div className="mt-1 px-1">
+                  <p className="text-[11px] font-medium text-blue-700 bg-blue-50/50 px-2 py-1 rounded-lg border border-blue-100/50 inline-block">
+                    <span className="opacity-70">Tiempo de antigüedad: </span>
+                    {calculateSeniority(fechaIngreso)}
+                  </p>
+                </div>
+              )}
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">
+                Kilometraje
+                {lastKm !== null && <span className="ml-1 text-xs font-normal text-gray-500">(Último: {lastKm})</span>}
+              </label>
+              <input
+                type="number"
+                value={km}
+                onChange={(e) => setKm(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                placeholder="Ej: 45231"
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">Responsable de la inspección</label>
+              <input
+                value={responsable}
+                onChange={(e) => setResponsable(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                placeholder="Nombre del responsable"
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">DNI de usuario de unidad</label>
+              <input
+                value={uDni}
+                onChange={(e) => handleUDniChange(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                placeholder="00000000"
+                inputMode="numeric"
+                maxLength={8}
+              />
+            </div>
+
+            <div className="grid gap-1">
+              <label className="text-sm font-medium">Nombre de usuario de unidad</label>
+              <input
+                value={uNombre}
+                onChange={(e) => setUNombre(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                placeholder="Nombre y apellidos"
+              />
+            </div>
+
+            <div className="sm:col-span-2 lg:col-span-3">
+              <label className="text-sm font-medium">Observaciones generales</label>
+              <textarea
+                value={observaciones}
+                onChange={(e) => setObservaciones(e.target.value)}
+                rows={2}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                placeholder="Observaciones o notas sobre el estado general de la unidad..."
+              />
+            </div>
+
+            {/* Firma */}
+            <div className="sm:col-span-2 lg:col-span-3">
+              <div className="flex items-center justify-between">
+                <label className="inline-flex items-center gap-2 text-sm font-medium">
+                  <PenLine className="h-4 w-4 text-gray-500" />
+                  Firma de usuario de unidad
                 </label>
-                <input
-                  type="number"
-                  value={km}
-                  onChange={(e) => setKm(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
-                  placeholder="Ej: 45231"
-                />
+                <button
+                  type="button"
+                  onClick={sig.clear}
+                  className="inline-flex items-center gap-2 rounded-lg border b px-3 py-1.5 text-xs hover:bg-gray-50"
+                >
+                  <Eraser className="h-3.5 w-3.5" />
+                  Limpiar
+                </button>
               </div>
-
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">Responsable de la inspección</label>
-                <input
-                  value={responsable}
-                  onChange={(e) => setResponsable(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
-                  placeholder="Nombre del responsable"
+              <div ref={sig.wrapRef} className="mt-2 rounded-xl border border-gray-600 p-2">
+                <canvas
+                  ref={sig.canvasRef}
+                  onMouseDown={sig.start}
+                  onMouseMove={sig.move}
+                  onMouseUp={sig.end}
+                  onMouseLeave={sig.end}
+                  onTouchStart={sig.start}
+                  onTouchMove={sig.move}
+                  onTouchEnd={sig.end}
+                  onTouchCancel={sig.end}
+                  className="block w-full select-none"
+                  style={{ touchAction: 'none' }}
                 />
-              </div>
-
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">DNI de usuario de unidad</label>
-                <input
-                  value={uDni}
-                  onChange={(e) => handleUDniChange(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
-                  placeholder="00000000"
-                  inputMode="numeric"
-                  maxLength={8}
-                />
-              </div>
-
-              <div className="grid gap-1">
-                <label className="text-sm font-medium">Nombre de usuario de unidad</label>
-                <input
-                  value={uNombre}
-                  onChange={(e) => setUNombre(e.target.value)}
-                  className="w-full rounded-xl border px-3 py-2.5 text-sm shadow-sm outline-none"
-                  placeholder="Nombre y apellidos"
-                />
-              </div>
-
-              {/* Firma */}
-              <div className="sm:col-span-2 lg:col-span-3">
-                <div className="flex items-center justify-between">
-                  <label className="inline-flex items-center gap-2 text-sm font-medium">
-                    <PenLine className="h-4 w-4 text-gray-500" />
-                    Firma de usuario de unidad
-                  </label>
-                  <button
-                    type="button"
-                    onClick={sig.clear}
-                    className="inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-xs hover:bg-gray-50"
-                  >
-                    <Eraser className="h-3.5 w-3.5" />
-                    Limpiar
-                  </button>
-                </div>
-                <div ref={sig.wrapRef} className="mt-2 rounded-xl border p-2">
-                  <canvas
-                    ref={sig.canvasRef}
-                    onMouseDown={sig.start}
-                    onMouseMove={sig.move}
-                    onMouseUp={sig.end}
-                    onMouseLeave={sig.end}
-                    onTouchStart={sig.start}
-                    onTouchMove={sig.move}
-                    onTouchEnd={sig.end}
-                    className="block w-full touch-none select-none"
-                  // style={{ height: 180 }} // Height handled in hook logic now
-                  />
-                </div>
               </div>
             </div>
 
             {/* Grupos */}
             <div className="mt-5 grid gap-4">
               {grupos.map((g, gi) => (
-                <div key={g.title} className="rounded-xl border">
+                <div key={g.titulo} className="rounded-xl border">
                   <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold">{g.title}</h4>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => marcarGrupo(gi, true)}
-                        className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-medium text-emerald-700 hover:bg-emerald-100"
-                      >
-                        Marcar grupo OK
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => marcarGrupo(gi, false)}
-                        className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-1.5 text-xs font-medium text-rose-700 hover:bg-rose-100"
-                      >
-                        Marcar grupo NO
-                      </button>
-                    </div>
+                    <h4 className="text-sm font-semibold">{g.titulo}</h4>
                   </div>
 
                   <div className="grid gap-2 p-3 sm:grid-cols-2">
-                    {g.items.map((it, ii) => (
-                      <div
-                        key={it.name}
-                        className={`rounded-lg border p-3 transition ${it.ok
-                          ? "border-emerald-300 bg-emerald-50"
-                          : "border-rose-300 bg-rose-50"
-                          }`}
-                      >
-                        <div className="flex items-center justify-between gap-3">
-                          <span className="text-sm">{it.name}</span>
-                          {/* Renderizado condicional según tipo */}
-                          {tipo === "entrega" && g.title === "OTROS" ? (
-                            <div className="flex gap-2">
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setItem(gi, ii, { ok: true, nota: undefined })
+                    {g.items.map((it, ii) => {
+                      // Determinar color según estado
+                      const getItemColor = () => {
+                        const status = it.status || "";
+                        if (it.ok && (status === "vigente" || status === "funcional" || status === "buen_estado" || !status)) {
+                          return "border-emerald-300 bg-emerald-50";
+                        }
+                        if (status === "por_vencer" || status === "defecto_leve" || status === "rayado") {
+                          return "border-yellow-300 bg-yellow-50";
+                        }
+                        if (status === "vencido" || status === "deteriorado" || status === "abollado") {
+                          return "border-orange-300 bg-orange-50";
+                        }
+                        if (status === "faltante" || status === "danio_severo") {
+                          return "border-rose-300 bg-rose-50";
+                        }
+                        if (status === "no_entregado") {
+                          return "border-slate-300 bg-slate-50";
+                        }
+                        return it.ok ? "border-emerald-300 bg-emerald-50" : "border-rose-300 bg-rose-50";
+                      };
+
+                      return (
+                        <div
+                          key={it.name}
+                          className={`rounded-lg border p-3 transition ${getItemColor()}`}
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <span className="text-sm font-medium">{it.name}</span>
+                            {/* Selector de estado según grupo */}
+                            {g.titulo === "DOCUMENTOS Y SEGURIDAD" ? (
+                              // Estados para items con vencimiento
+                              <div className="flex flex-wrap gap-1 sm:justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: true, status: "vigente" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "vigente"
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Vigente
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "por_vencer" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "por_vencer"
+                                    ? "bg-yellow-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Por Vencer
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "vencido" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "vencido"
+                                    ? "bg-orange-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Vencido
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "faltante" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "faltante"
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Faltante
+                                </button>
+                                {tipo === "entrega" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setItem(gi, ii, { ok: false, status: "no_entregado" })}
+                                    className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "no_entregado"
+                                      ? "bg-slate-700 text-white"
+                                      : "bg-white text-gray-600 border hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    No entregado
+                                  </button>
+                                )}
+                              </div>
+                            ) : g.titulo === "ACCESORIOS Y FUNCIONAMIENTO" ? (
+                              // Estados para items funcionales
+                              <div className="flex flex-wrap gap-1 sm:justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: true, status: "funcional" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "funcional"
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Funcional
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "defecto_leve" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "defecto_leve"
+                                    ? "bg-yellow-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Defecto Leve
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "deteriorado" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "deteriorado"
+                                    ? "bg-orange-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Deteriorado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "faltante" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "faltante"
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Faltante
+                                </button>
+                                {tipo === "entrega" && (
+                                  <button
+                                    type="button"
+                                    onClick={() => setItem(gi, ii, { ok: false, status: "no_entregado" })}
+                                    className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "no_entregado"
+                                      ? "bg-slate-700 text-white"
+                                      : "bg-white text-gray-600 border hover:bg-gray-50"
+                                      }`}
+                                  >
+                                    No entregado
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              // Estados para inspección visual
+                              <div className="flex flex-wrap gap-1 sm:justify-end">
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: true, status: "buen_estado" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "buen_estado"
+                                    ? "bg-emerald-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Buen Estado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "rayado" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "rayado"
+                                    ? "bg-yellow-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Rayado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "abollado" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "abollado"
+                                    ? "bg-orange-500 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Abollado
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => setItem(gi, ii, { ok: false, status: "danio_severo" })}
+                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "danio_severo"
+                                    ? "bg-rose-600 text-white"
+                                    : "bg-white text-gray-600 border hover:bg-gray-50"
+                                    }`}
+                                >
+                                  Daño Severo
+                                </button>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Campo de observación: visible si el estado NO es verde */}
+                          {it.status && !["vigente", "funcional", "buen_estado"].includes(it.status) && (
+                            <div className="mt-2 text-[11px] font-medium text-gray-600">
+                              Observación adicional:
+                              <input
+                                value={it.nota ?? ""}
+                                onChange={(e) =>
+                                  setItem(gi, ii, {
+                                    nota: (e.target as HTMLInputElement).value,
+                                  })
                                 }
-                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${it.ok
-                                  ? "bg-emerald-600 text-white"
-                                  : "bg-white text-gray-500 border hover:bg-gray-50"
-                                  }`}
-                              >
-                                OK
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setItem(gi, ii, { ok: false, nota: "Malo" })
-                                }
-                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${!it.ok && it.nota !== "NO ENTREGADO" && it.nota !== "NO CUENTA"
-                                  ? "bg-rose-600 text-white"
-                                  : "bg-white text-gray-500 border hover:bg-gray-50"
-                                  }`}
-                              >
-                                NO OK
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() =>
-                                  setItem(gi, ii, { ok: false, nota: "NO ENTREGADO" })
-                                }
-                                className={`rounded px-2 py-1 text-[10px] font-bold transition ${!it.ok && it.nota === "NO ENTREGADO"
-                                  ? "bg-gray-600 text-white"
-                                  : "bg-white text-gray-500 border hover:bg-gray-50"
-                                  }`}
-                              >
-                                NO ENTREGADO
-                              </button>
-                            </div>
-                          ) : (
-                            <div className="flex items-center gap-2">
-                              <span
-                                className={`text-xs font-semibold ${it.ok ? "text-emerald-700" : "text-rose-700"
-                                  }`}
-                              >
-                                {it.ok ? "OK" : "NO"}
-                              </span>
-                              <label className="relative inline-flex cursor-pointer items-center select-none">
-                                <input
-                                  type="checkbox"
-                                  className="peer sr-only"
-                                  checked={it.ok}
-                                  onChange={(e) =>
-                                    setItem(gi, ii, {
-                                      ok: (e.target as HTMLInputElement).checked,
-                                      ...((e.target as HTMLInputElement).checked
-                                        ? { nota: undefined }
-                                        : {}),
-                                    })
-                                  }
-                                />
-                                <div className="h-5 w-9 rounded-full bg-rose-200 transition peer-checked:bg-emerald-500" />
-                                <div className="absolute left-0.5 top-0.5 h-4 w-4 rounded-full bg-white shadow transition peer-checked:translate-x-4" />
-                              </label>
+                                className="mt-1 w-full rounded-lg border px-3 py-2 text-xs outline-none focus:ring-1 focus:ring-gray-200"
+                                placeholder="Escribe aquí observaciones adicionales..."
+                              />
                             </div>
                           )}
                         </div>
-
-                        {!it.ok && (
-                          <div className="mt-2">
-                            <input
-                              value={it.nota ?? ""}
-                              onChange={(e) =>
-                                setItem(gi, ii, {
-                                  nota: (e.target as HTMLInputElement).value,
-                                })
-                              }
-                              className="w-full rounded-lg border px-3 py-2 text-xs outline-none"
-                              placeholder="Nota (opcional)…"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               ))}
@@ -1196,7 +1497,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="rounded-xl border bg-white px-4 py-2 text-sm hover:bg-gray-50"
+              className="rounded-xl border border-gray-200 bg-white px-4 py-2 text-sm hover:bg-gray-50"
             >
               Cancelar
             </button>
@@ -1204,10 +1505,10 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
               type="button"
               onClick={guardar}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-60"
             >
               <CheckCircle className="h-4 w-4" />
-              {saving ? "Guardando..." : "Guardar checklist"}
+              {saving ? "Guardando..." : editingRow ? "Actualizar checklist" : "Guardar checklist"}
             </button>
           </div>
         </div>
@@ -1240,6 +1541,12 @@ export default function RegistrosChecklist() {
   const [loadingView, setLoadingView] = React.useState(false);
 
   const [openCreate, setOpenCreate] = React.useState(false);
+  const [editingRow, setEditingRow] = React.useState<ChecklistRow | null>(null);
+
+  const openEditModal = (row: ChecklistRow) => {
+    setEditingRow(row);
+    setOpenCreate(true);
+  };
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const canPrev = page > 1;
@@ -1357,6 +1664,7 @@ export default function RegistrosChecklist() {
         "Correo Usuario": getCorreo(r),
         Estado: r.aprobado ? "Aprobado" : "Observaciones",
         Observaciones: r.observaciones ?? "",
+        "Antigüedad Unidad": calculateSeniority(r.fecha_ingreso),
       }));
 
       const sheetResumen = XLSX.utils.json_to_sheet(exportData);
@@ -1376,14 +1684,28 @@ export default function RegistrosChecklist() {
         const grupos = await fetchGruposFor(ck);
         grupos.forEach((g) => {
           g.items.forEach((it) => {
+            const statusKey = it.status || (it.nota && {
+              "vigente": 1, "por_vencer": 1, "vencido": 1, "faltante": 1, "funcional": 1, "defecto_leve": 1, "deteriorado": 1, "buen_estado": 1, "rayado": 1, "abollado": 1, "danio_severo": 1
+            }[it.nota] ? it.nota : "");
+
+            const statusMap: Record<string, string> = {
+              "vigente": "Vigente", "por_vencer": "Por Vencer", "vencido": "Vencido", "faltante": "Faltante",
+              "funcional": "Funcional", "defecto_leve": "Defecto Leve", "deteriorado": "Deteriorado",
+              "buen_estado": "Buen Estado", "rayado": "Rayado", "abollado": "Abollado", "danio_severo": "Daño Severo",
+              "no_entregado": "No Entregado"
+            };
+
+            const estadoLabel = statusMap[statusKey] || (it.ok ? "OK" : "NO");
+            const manualNote = it.nota && it.nota !== statusKey ? it.nota : "";
+
             itemsRows.push({
               ChecklistID: ck.id,
               Placa: ck.placa ?? "",
               Fecha: formatFechaHoraLocal(ck.fecha, ck.created_at),
               Grupo: g.titulo,
               Item: it.name,
-              Estado: it.ok ? "OK" : "NO",
-              Nota: it.nota ?? "",
+              Estado: estadoLabel,
+              Nota: manualNote,
             });
           });
         });
@@ -1413,32 +1735,8 @@ export default function RegistrosChecklist() {
     setViewGrupos([]);
     setLoadingView(true);
     try {
-      const inRow = normalizeGruposFromRow(row);
-      if (inRow && inRow.length > 0) {
-        setViewGrupos(inRow);
-        return;
-      }
-
-      const { data, error } = await supabase
-        .from("checklist_items")
-        .select("*")
-        .eq("checklist_id", row.id)
-        .order("id", { ascending: true });
-
-      if (error) throw error;
-
-      const byGroup = new Map<string, Grupo>();
-      (data as ChecklistItemRow[]).forEach((r) => {
-        const key = (r.grupo ?? "OTROS").toString();
-        if (!byGroup.has(key)) byGroup.set(key, { titulo: key, items: [] });
-        byGroup.get(key)!.items.push({
-          name: r.name,
-          ok: !!r.ok,
-          ...(r.ok ? {} : { nota: r.nota ?? "" }),
-        });
-      });
-
-      setViewGrupos(Array.from(byGroup.values()));
+      const grupos = await fetchGruposFor(row);
+      setViewGrupos(grupos);
     } catch (e: any) {
       alert(e?.message ?? "No se pudieron cargar los ítems del checklist.");
     } finally {
@@ -1473,7 +1771,7 @@ export default function RegistrosChecklist() {
           <button
             type="button"
             onClick={() => setOpenCreate(true)}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-gray-800 active:scale-[.99]"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-900 active:scale-[.99]"
           >
             <PlusCircle className="h-4 w-4" />
             <span>Nuevo checklist</span>
@@ -1482,7 +1780,7 @@ export default function RegistrosChecklist() {
       </div>
 
       {/* Filtros */}
-      <section className="rounded-2xl px-5 py-4 bg-white shadow-sm">
+      <div className="rounded-2xl px-5 py-4 border border-gray-200 bg-white">
         <div className="flex flex-col sm:flex-row flex-wrap sm:items-end gap-3">
           <div className="grid gap-1 w-full sm:w-auto">
             <label className="text-xs font-medium text-gray-600">Desde</label>
@@ -1492,7 +1790,7 @@ export default function RegistrosChecklist() {
               onChange={(e) => {
                 setFromDate(e.target.value);
               }}
-              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
             />
           </div>
           <div className="grid gap-1 w-full sm:w-auto">
@@ -1503,7 +1801,7 @@ export default function RegistrosChecklist() {
               onChange={(e) => {
                 setToDate(e.target.value);
               }}
-              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
             />
           </div>
 
@@ -1512,7 +1810,7 @@ export default function RegistrosChecklist() {
             <select
               value={placaFilter}
               onChange={(e) => setPlacaFilter(e.target.value)}
-              className="w-full sm:w-[180px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[180px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
             >
               <option value="">Todas</option>
               {placasInventario.map((p) => (
@@ -1528,7 +1826,7 @@ export default function RegistrosChecklist() {
             <select
               value={tipoFilter}
               onChange={(e) => setTipoFilter(e.target.value)}
-              className="w-full sm:w-[140px] rounded-xl border border-gray-100 px-3 py-2.5 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="w-full sm:w-[140px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
             >
               <option value="">Todos</option>
               <option value="entrega">Entrega</option>
@@ -1542,7 +1840,7 @@ export default function RegistrosChecklist() {
               setPage(1);
               fetchChecklists({ page: 1 });
             }}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border bg-white px-4 py-2.5 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
             title="Aplicar filtros"
           >
             <Filter className="h-4 w-4" />
@@ -1553,7 +1851,7 @@ export default function RegistrosChecklist() {
             type="button"
             onClick={exportExcel}
             disabled={exportingExcel}
-            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
+            className="flex w-full sm:w-auto items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60"
             title="Exportar a Excel todos los registros filtrados"
           >
             {exportingExcel ? (
@@ -1570,10 +1868,10 @@ export default function RegistrosChecklist() {
             </div>
           )}
         </div>
-      </section>
+      </div>
 
       {/* Tabla */}
-      <section className="overflow-hidden rounded-2xl bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="border-b border-gray-100 px-6 py-5">
           <div className="flex items-center gap-2">
             <Calendar className="h-5 w-5 text-gray-600" />
@@ -1631,20 +1929,27 @@ export default function RegistrosChecklist() {
                     <div className="flex justify-end gap-2">
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
+                        className="p-1.5 rounded-lg text-blue-600 hover:bg-blue-50 transition-colors"
                         onClick={() => openDetails(c)}
+                        title="Ver detalles"
                       >
-                        <Eye className="h-4 w-4" />
-                        Ver
+                        <Eye className="h-5 w-5" />
                       </button>
                       <button
                         type="button"
-                        className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
+                        className="p-1.5 rounded-lg text-rose-600 hover:bg-rose-50 transition-colors"
                         onClick={() => exportPdf(c)}
-                        title="Exportar PDF"
+                        title="Descargar PDF"
                       >
-                        <FileDown className="h-4 w-4" />
-                        PDF
+                        <FileDown className="h-5 w-5" />
+                      </button>
+                      <button
+                        type="button"
+                        className="p-1.5 rounded-lg text-amber-600 hover:bg-amber-50 transition-colors"
+                        onClick={() => openEditModal(c)}
+                        title="Editar checklist"
+                      >
+                        <PenLine className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -1684,7 +1989,7 @@ export default function RegistrosChecklist() {
               type="button"
               disabled={!canPrev || loading}
               onClick={() => setPage((p) => Math.max(1, p - 1))}
-              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 disabled:opacity-50"
             >
               <ChevronLeft className="h-4 w-4" />
               Anterior
@@ -1693,7 +1998,7 @@ export default function RegistrosChecklist() {
               type="button"
               disabled={!canNext || loading}
               onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              className="inline-flex items-center gap-2 rounded-xl border bg-white px-3 py-2 shadow-sm hover:bg-gray-50 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 hover:bg-gray-50 disabled:opacity-50"
             >
               Siguiente
               <ChevronRight className="h-4 w-4" />
@@ -1717,167 +2022,200 @@ export default function RegistrosChecklist() {
             </select>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* MODAL: Ver detalle */}
-      {
-        openView && viewRow && (
-          <div className="fixed inset-0 z-50">
-            <div
-              className="absolute inset-0 bg-black/30"
-              onClick={() => setOpenView(false)}
-              aria-hidden
-            />
-            <div className="absolute inset-0 grid place-items-center p-2 sm:p-4">
-              <div className="w-full max-w-5xl overflow-hidden rounded-2xl border bg-white shadow-xl">
-                <div className="flex items-center justify-between border-b px-4 sm:px-5 py-3 sm:py-4">
-                  <div>
-                    <h3 className="text-base sm:text-lg font-semibold">
-                      Detalle de checklist
-                    </h3>
-                    <p className="text-xs text-gray-500">
-                      Registrado: {new Date(viewRow.created_at).toLocaleString()}
-                    </p>
+      {openView && viewRow && (
+        <div className="fixed inset-0 z-50">
+          <div
+            className="absolute inset-0 bg-black/30"
+            onClick={() => setOpenView(false)}
+            aria-hidden
+          />
+          <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4">
+            <div className="w-full max-w-5xl max-h-[95vh] flex flex-col overflow-hidden rounded-2xl border border-gray-100 bg-white shadow-2xl">
+              <div className="flex items-center justify-between border-b border-gray-100 px-4 sm:px-5 py-3 sm:py-4">
+                <div>
+                  <h3 className="text-base sm:text-lg font-semibold">
+                    Detalle de checklist
+                  </h3>
+                  <p className="text-xs text-gray-500">
+                    Registrado: {new Date(viewRow.created_at).toLocaleString()}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setOpenView(false)}
+                  className="rounded-lg p-1 hover:bg-gray-100"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-y-auto px-4 sm:px-5 py-4">
+                {/* Datos generales */}
+                <h4 className="mb-2 text-sm font-semibold text-gray-700">
+                  Datos generales
+                </h4>
+                <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                  {[
+                    ["Fecha", formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)],
+                    ["Sede", viewRow.sede ?? "—"],
+                    ["Placa", viewRow.placa ?? "—"],
+                    ["Kilometraje", viewRow.kilometraje?.toString() ?? "—"],
+                    ["Resp. Inspección", viewRow.responsable_inspeccion ?? "—"],
+                    ["DNI Usuario", getDni(viewRow)],
+                    ["Nombre Usuario", getNombre(viewRow)],
+                    ["Correo Usuario", getCorreo(viewRow)],
+                    ["Tipo", viewRow.tipo ? viewRow.tipo.toUpperCase() : "REGULAR"], // Mostrar tipo
+                    ["Tiempo de antigüedad", calculateSeniority(viewRow.fecha_ingreso)],
+                  ].map(([label, val]) => (
+                    <div
+                      key={label as string}
+                      className="rounded-lg border border-gray-100 px-3 py-2"
+                    >
+                      <span className="text-sm">
+                        <span className="font-medium">{label}: </span>
+                        {val as string}
+                      </span>
+                    </div>
+                  ))}
+
+                  <div className="rounded-lg border border-gray-100 px-3 py-2 sm:col-span-2 lg:col-span-3">
+                    <span className="text-sm font-medium block mb-2">
+                      Firma de usuario
+                    </span>
+                    {(() => {
+                      const dataUrl = getFirma(viewRow);
+                      if (!dataUrl) return <span className="text-xs text-gray-500">Sin firma</span>;
+
+                      const blobUrl = createBlobURL(dataUrl);
+                      return (
+                        <img
+                          src={blobUrl!}
+                          alt="Firma del usuario"
+                          className="h-24 w-auto rounded border border-gray-100 bg-white md:h-24 lg:h-28"
+                          onError={() => {
+                            console.error("Error al cargar la firma");
+                          }}
+                        />
+                      );
+                    })()}
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenView(false)}
-                    className="rounded-lg p-1 hover:bg-gray-100"
-                  >
-                    <X className="h-5 w-5" />
-                  </button>
                 </div>
 
-                <div className="px-4 sm:px-5 py-4 max-h-[80vh] overflow-y-auto">
-                  {/* Datos generales */}
-                  <h4 className="mb-2 text-sm font-semibold text-gray-700">
-                    Datos generales
-                  </h4>
-                  <div className="grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
-                    {[
-                      ["Fecha", formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)],
-                      ["Sede", viewRow.sede ?? "—"],
-                      ["Placa", viewRow.placa ?? "—"],
-                      ["Kilometraje", viewRow.kilometraje?.toString() ?? "—"],
-                      ["Resp. Inspección", viewRow.responsable_inspeccion ?? "—"],
-                      ["DNI Usuario", getDni(viewRow)],
-                      ["Nombre Usuario", getNombre(viewRow)],
-                      ["Correo Usuario", getCorreo(viewRow)],
-                      ["Tipo", viewRow.tipo ? viewRow.tipo.toUpperCase() : "REGULAR"], // Mostrar tipo
-                    ].map(([label, val]) => (
-                      <div
-                        key={label as string}
-                        className="rounded-lg border px-3 py-2"
-                      >
-                        <span className="text-sm">
-                          <span className="font-medium">{label}: </span>
-                          {val as string}
-                        </span>
+                {/* Estado y observaciones */}
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {estadoPill(!!viewRow.aprobado)}
+                  <span className="text-sm text-gray-600">
+                    <span className="font-medium">Observaciones: </span>
+                    {viewRow.observaciones?.trim() || "—"}
+                  </span>
+                </div>
+
+                {/* Ítems */}
+                <h4 className="mt-6 mb-2 text-sm font-semibold text-gray-700">
+                  Ítems del vehículo
+                </h4>
+
+                {loadingView && (
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Loader2 className="h-4 w-4 animate-spin" /> Cargando ítems…
+                  </div>
+                )}
+
+                {!loadingView && (
+                  <div className="grid gap-4">
+                    {viewGrupos.map((g) => (
+                      <div key={g.titulo} className="rounded-2xl border border-gray-100">
+                        <div className="border-b border-gray-100 bg-gray-50/50 px-3 py-2 text-sm font-semibold">
+                          {g.titulo}
+                        </div>
+                        <div className="grid gap-2 p-3 sm:grid-cols-2">
+                          {g.items.map((it) => {
+                            const getStatusDisplay = () => {
+                              const statusKey = it.status || it.nota || "";
+                              const statusMap: Record<string, { label: string; color: string }> = {
+                                "vigente": { label: "Vigente", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+                                "por_vencer": { label: "Por Vencer", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+                                "vencido": { label: "Vencido", color: "bg-orange-100 text-orange-700 border-orange-200" },
+                                "faltante": { label: "Faltante", color: "bg-rose-100 text-rose-700 border-rose-200" },
+                                "funcional": { label: "Funcional", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+                                "defecto_leve": { label: "Defecto Leve", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+                                "deteriorado": { label: "Deteriorado", color: "bg-orange-100 text-orange-700 border-orange-200" },
+                                "buen_estado": { label: "Buen Estado", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
+                                "rayado": { label: "Rayado", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
+                                "abollado": { label: "Abollado", color: "bg-orange-100 text-orange-700 border-orange-200" },
+                                "danio_severo": { label: "Daño Severo", color: "bg-rose-100 text-rose-700 border-rose-200" },
+                                "no_entregado": { label: "No Entregado", color: "bg-slate-100 text-slate-700 border-slate-200" }
+                              };
+                              if (statusMap[statusKey]) return statusMap[statusKey];
+                              return it.ok
+                                ? { label: "OK", color: "bg-emerald-100 text-emerald-700 border-emerald-200" }
+                                : { label: it.nota || "NO", color: "bg-rose-100 text-rose-700 border-rose-200" };
+                            };
+                            const status = getStatusDisplay();
+                            const hasObservation = it.nota && ![
+                              "vigente", "por_vencer", "vencido", "faltante", "funcional", "defecto_leve", "deteriorado", "buen_estado", "rayado", "abollado", "danio_severo", "no_entregado"
+                            ].includes(it.nota);
+
+                            return (
+                              <div key={it.name} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2">
+                                <div className="flex items-center justify-between">
+                                  <span className="text-sm">{it.name}</span>
+                                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-semibold border ${status.color}`}>
+                                    {status.label}
+                                  </span>
+                                </div>
+                                {hasObservation && (
+                                  <div className="text-[11px] text-gray-500 italic border-t border-gray-50 mt-1 pt-1">
+                                    Obs: {it.nota}
+                                  </div>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
                       </div>
                     ))}
 
-                    <div className="rounded-lg border px-3 py-2 sm:col-span-2 lg:col-span-3">
-                      <span className="text-sm font-medium block mb-2">
-                        Firma de usuario
-                      </span>
-                      {getFirma(viewRow) ? (
-                        <img
-                          src={getFirma(viewRow)!}
-                          alt="Firma del usuario"
-                          className="h-24 w-auto rounded border bg-white md:h-24 lg:h-28"
-                        />
-                      ) : (
-                        <span className="text-xs text-gray-500">Sin firma</span>
-                      )}
-                    </div>
+                    {viewGrupos.length === 0 && (
+                      <div className="text-sm text-gray-500">
+                        Sin ítems registrados.
+                      </div>
+                    )}
                   </div>
+                )}
+              </div>
 
-                  {/* Estado y observaciones */}
-                  <div className="mt-3 flex flex-wrap items-center gap-3">
-                    {estadoPill(!!viewRow.aprobado)}
-                    <span className="text-sm text-gray-600">
-                      <span className="font-medium">Observaciones: </span>
-                      {viewRow.observaciones?.trim() || "—"}
-                    </span>
-                  </div>
-
-                  {/* Ítems */}
-                  <h4 className="mt-6 mb-2 text-sm font-semibold text-gray-700">
-                    Ítems del vehículo
-                  </h4>
-
-                  {loadingView && (
-                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                      <Loader2 className="h-4 w-4 animate-spin" /> Cargando ítems…
-                    </div>
-                  )}
-
-                  {!loadingView && (
-                    <div className="grid gap-4">
-                      {viewGrupos.map((g) => (
-                        <div key={g.titulo} className="rounded-2xl border">
-                          <div className="border-b bg-gray-50 px-3 py-2 text-sm font-semibold">
-                            {g.titulo}
-                          </div>
-                          <div className="grid gap-2 p-3 sm:grid-cols-2">
-                            {g.items.map((it) => (
-                              <div
-                                key={it.name}
-                                className="flex items-center justify-between rounded-lg border px-3 py-2"
-                              >
-                                <span className="text-sm">{it.name}</span>
-                                <div className="flex items-center gap-3">
-                                  <span
-                                    className={`text-xs font-medium ${it.ok ? "text-emerald-600" : "text-rose-600"
-                                      }`}
-                                  >
-                                    {it.ok ? "OK" : "NO"}
-                                  </span>
-                                  {!it.ok && it.nota && (
-                                    <span className="text-xs text-gray-500 max-w-[220px] truncate">
-                                      {it.nota}
-                                    </span>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
-
-                      {viewGrupos.length === 0 && (
-                        <div className="text-sm text-gray-500">
-                          Sin ítems registrados.
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="flex items-center justify-end gap-2 border-t px-4 sm:px-5 py-3 sm:py-4">
-                  <button
-                    type="button"
-                    onClick={() => setOpenView(false)}
-                    className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium shadow-sm hover:bg-gray-50 active:scale-[.98]"
-                  >
-                    Cerrar
-                  </button>
-                </div>
+              <div className="flex items-center justify-end gap-2 border-t px-4 sm:px-5 py-3 sm:py-4">
+                <button
+                  type="button"
+                  onClick={() => setOpenView(false)}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-100 bg-white px-4 py-2.5 text-sm font-medium hover:bg-gray-50 active:scale-[.98]"
+                >
+                  Cerrar
+                </button>
               </div>
             </div>
           </div>
-        )
+        </div>
+      )
       }
 
       {/* MODAL: Crear checklist */}
       <ChecklistCreateModal
         open={openCreate}
-        onClose={() => setOpenCreate(false)}
+        editingRow={editingRow}
+        onClose={() => {
+          setOpenCreate(false);
+          setEditingRow(null);
+        }}
         onSaved={async () => {
           setPage(1);
           await fetchChecklists({ page: 1 });
         }}
       />
-    </div >
+    </div>
   );
 }

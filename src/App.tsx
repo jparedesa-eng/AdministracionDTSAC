@@ -37,9 +37,25 @@ import GerenciaPasaje from "./pages/pasajes/GerenciaView";
 import GestionPasaje from "./pages/pasajes/GestionView";
 import ProveedoresPasaje from "./pages/pasajes/ProvidersPage";
 
+/* Telefonia */
+import InventarioTelefonia from "./pages/Telefonia/Inventario";
+import SolicitarTelefonia from "./pages/Telefonia/Solicitar";
+import GestionTelefonia from "./pages/Telefonia/Gestion";
+import AprobacionIT from "./pages/Telefonia/AprobacionIT";
+import AprobacionGerencia from "./pages/Telefonia/AprobacionGerencia";
+import AprobacionAdmin from "./pages/Telefonia/AprobacionAdmin";
+
 /* Configuración */
 import PersonalPage from "./pages/configuracion/PersonalPage";
 import GerenciasPage from "./pages/configuracion/GerenciasPage";
+import SedesPage from "./pages/configuracion/SedesPage";
+import CctvCentralesPage from "./pages/configuracion/CctvCentralesPage";
+
+/* Seguridad */
+import ProgramacionPuestos from "./pages/Seguridad/ProgramacionPuestos";
+import GestionRecursos from "./pages/Seguridad/GestionRecursos";
+import ChecklistCamaras from "./pages/Seguridad/ChecklistCamaras";
+import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
 
 /* Errores */
 import Forbidden403 from "./pages/Errors/403";
@@ -49,7 +65,7 @@ function ProtectedLayout() {
   const [isOpen, setIsOpen] = React.useState(false);
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900">
+    <div className="min-h-screen bg-slate-50 text-gray-900">
       {/* Top bar (móvil) */}
       <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-100 bg-white px-3 py-2 md:hidden">
         <button
@@ -68,7 +84,7 @@ function ProtectedLayout() {
       <Sidebar open={isOpen} onClose={() => setIsOpen(false)} />
 
       <main className="md:pl-72">
-        <div className="min-h-[calc(100vh-48px)] md:min-h-screen flex flex-col bg-gray-50">
+        <div className="min-h-[calc(100vh-48px)] md:min-h-screen flex flex-col bg-slate-100">
           <div className="h-6 md:h-12" />
           <div className="flex-1 p-4 md:p-6">
             <Outlet />
@@ -287,6 +303,71 @@ export default function App() {
             }
           />
 
+          {/* Telefonia */}
+          <Route
+            path="/telefonia"
+            element={
+              <ProtectedRoute path="/telefonia/*">
+                <div className="px-1">
+                  <h1 className="text-xl font-semibold">
+                    Telefonía
+                  </h1>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Selecciona una opción del submenú (Inventario, Solicitar, Gestión).
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/inventario"
+            element={
+              <ProtectedRoute path="/telefonia/inventario">
+                <InventarioTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/solicitar"
+            element={
+              <ProtectedRoute path="/telefonia/solicitar">
+                <SolicitarTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/gestion"
+            element={
+              <ProtectedRoute path="/telefonia/gestion">
+                <GestionTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/aprobacion-it"
+            element={
+              <ProtectedRoute path="/telefonia/aprobacion-it">
+                <AprobacionIT />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/aprobacion-gerencia"
+            element={
+              <ProtectedRoute path="/telefonia/aprobacion-gerencia">
+                <AprobacionGerencia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/aprobacion-admin"
+            element={
+              <ProtectedRoute path="/telefonia/aprobacion-admin">
+                <AprobacionAdmin />
+              </ProtectedRoute>
+            }
+          />
+
           {/* Configuración */}
           <Route
             path="/configuracion/personal"
@@ -301,6 +382,75 @@ export default function App() {
             element={
               <ProtectedRoute path="/configuracion/gerencias">
                 <GerenciasPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/sedes"
+            element={
+              <ProtectedRoute path="/configuracion/sedes">
+                <SedesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/centrales-cctv"
+            element={
+              <ProtectedRoute path="/configuracion/centrales-cctv">
+                <CctvCentralesPage />
+              </ProtectedRoute>
+            }
+          />
+
+
+
+
+
+          {/* Seguridad */}
+          <Route
+            path="/seguridad"
+            element={
+              <ProtectedRoute path="/seguridad/*">
+                <div className="px-1">
+                  <h1 className="text-xl font-semibold">
+                    Seguridad Patrimonial
+                  </h1>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Selecciona una opción del submenú.
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/programacion"
+            element={
+              <ProtectedRoute path="/seguridad/programacion">
+                <ProgramacionPuestos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/recursos"
+            element={
+              <ProtectedRoute path="/seguridad/recursos">
+                <GestionRecursos />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/checklist-camaras"
+            element={
+              <ProtectedRoute path="/seguridad/checklist-camaras">
+                <ChecklistCamaras />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/inventario-camaras"
+            element={
+              <ProtectedRoute path="/seguridad/inventario-camaras">
+                <InventarioCamaras />
               </ProtectedRoute>
             }
           />

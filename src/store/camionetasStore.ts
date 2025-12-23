@@ -26,6 +26,8 @@ export interface Vehiculo {
   traccion?: "4x2" | "4x4" | null;
   revTecnica?: string | null;
   soat?: string | null;
+  /** Nuevo: fecha de ingreso de la camioneta */
+  fechaIngreso?: string | null;
   /** Nuevo: si el vehículo tiene volante físico (tarjeta) asignado */
   volante?: "Si" | "No";
   estado: EstadoVehiculo;
@@ -70,6 +72,8 @@ type VehiculoRow = {
   traccion: "4x2" | "4x4" | null;
   rev_tecnica: string | null;
   soat: string | null;
+  /** Nuevo col */
+  fecha_ingreso: string | null;
   /** Nuevo: columna en BD */
   volante: "Si" | "No" | null;
   estado: EstadoVehiculo;
@@ -88,6 +92,7 @@ function vFromRow(r: VehiculoRow): Vehiculo {
     traccion: r.traccion,
     revTecnica: r.rev_tecnica,
     soat: r.soat,
+    fechaIngreso: r.fecha_ingreso,
     /** Si viene null, por defecto "No" */
     volante: (r.volante as "Si" | "No" | null) ?? "No",
     estado: r.estado,
@@ -108,6 +113,7 @@ function vToRow(v: Partial<Vehiculo>): Partial<VehiculoRow> {
   if (v.traccion !== undefined) out.traccion = v.traccion ?? null;
   if (v.revTecnica !== undefined) out.rev_tecnica = v.revTecnica ?? null;
   if (v.soat !== undefined) out.soat = v.soat ?? null;
+  if (v.fechaIngreso !== undefined) out.fecha_ingreso = v.fechaIngreso ?? null;
   if (v.volante !== undefined) out.volante = (v.volante as "Si" | "No") ?? "No";
   if (v.estado !== undefined) out.estado = v.estado;
   return out;

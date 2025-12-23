@@ -257,7 +257,7 @@ function Pagination({
   const disabledNext = page >= Math.max(1, totalPages);
 
   return (
-    <nav className="flex items-center justify-between gap-2 py-3 text-sm text-gray-600">
+    <nav className="flex items-center justify-between gap-2 py-3 text-sm text-gray-400">
       <div>
         Página <span className="font-medium">{page}</span> de{" "}
         <span className="font-medium">{Math.max(1, totalPages)}</span>
@@ -417,7 +417,7 @@ export default function PersonalPage() {
           Personal (Mantenedor)
         </h1>
         <p className="mt-1 text-sm text-gray-600">
-          Maestro de trabajadores con DNI, nombre, gerencia y estado
+          Maestro de trabajadores, nombre, gerencia y estado
           (activo/cesado). Las gerencias se toman del mantenedor de gerencias.
         </p>
       </div>
@@ -435,7 +435,7 @@ export default function PersonalPage() {
       </div>
 
       {/* Tabla */}
-      <section className="overflow-hidden rounded-2xl border bg-white shadow-sm">
+      <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 text-xs uppercase text-gray-500">

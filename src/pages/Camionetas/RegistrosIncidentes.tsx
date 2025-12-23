@@ -183,7 +183,7 @@ function ConfirmDialog({
         aria-hidden
       />
       <div className="absolute inset-0 grid place-items-center p-4">
-        <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+        <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white">
           <div className="flex items-center justify-between border-b px-5 py-4">
             <h3 className="text-lg font-semibold">{title}</h3>
             <button
@@ -823,7 +823,7 @@ export default function RegistrosIncidentes({
       </div>
 
       {/* Filtros */}
-      <div className="rounded-2xl border border-gray-100 bg-white px-6 py-4 shadow-sm">
+      <div className="rounded-2xl border border-gray-200 bg-white px-6 py-4">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           <label className="inline-flex items-center gap-2 text-sm text-gray-700">
             <Filter className="h-4 w-4 text-gray-400" />
@@ -929,7 +929,7 @@ export default function RegistrosIncidentes({
               type="button"
               onClick={exportExcelIncidentes}
               disabled={exportingExcel}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60 md:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 md:w-auto"
               title="Exportar a Excel los registros filtrados"
             >
               {exportingExcel ? (
@@ -944,8 +944,8 @@ export default function RegistrosIncidentes({
       </div>
 
       {/* Lista – scroll solo interno (x/y) */}
-      <section
-        className="max-w-full rounded-2xl border border-gray-100 bg-white shadow-sm"
+      <div
+        className="max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white"
         style={{ contain: "inline-size" }}
       >
         <div className="border-b border-gray-100 px-6 py-5">
@@ -1228,7 +1228,7 @@ export default function RegistrosIncidentes({
                 <span className="text-gray-600 text-sm">
                   Página {pageSafe} de {totalPages}
                 </span>
-                <div className="flex items-center rounded-lg border bg-white shadow-sm">
+                <div className="flex items-center rounded-lg border border-gray-200 bg-white">
                   <button
                     type="button"
                     onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -1250,7 +1250,7 @@ export default function RegistrosIncidentes({
             </div>
           </div>
         </div>
-      </section>
+      </div>
 
       {/* MODAL: Nuevo (con FECHA) */}
       {
@@ -1469,7 +1469,7 @@ export default function RegistrosIncidentes({
               aria-hidden
             />
             <div className="absolute inset-0 grid place-items-center p-4">
-              <div className="w-full max-w-2xl rounded-2xl border bg-white shadow-xl">
+              <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
                 <div className="flex items-center justify-between border-b px-5 py-4">
                   <h3 className="text-lg font-semibold">
                     Editar registro

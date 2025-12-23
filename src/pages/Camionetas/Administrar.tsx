@@ -101,10 +101,10 @@ export default function AdministrarSolicitudes() {
     tab === "Reservada"
       ? asignadas
       : tab === "enUso"
-      ? enUso
-      : tab === "Cancelado"
-      ? canceladas
-      : cerradas;
+        ? enUso
+        : tab === "Cancelado"
+          ? canceladas
+          : cerradas;
 
   const data = baseData.filter(filtro);
 
@@ -147,7 +147,7 @@ export default function AdministrarSolicitudes() {
     }
   };
 
-  // Píldoras de estado
+  // Píldoras de estado (modificado para aceptar Vencido)
   const pill = (label: string) => {
     const styles: Record<string, string> = {
       Reservada:
@@ -155,6 +155,7 @@ export default function AdministrarSolicitudes() {
       "En uso": "bg-sky-50 text-sky-800 ring-sky-200 font-semibold",
       Cancelado: "bg-rose-50 text-rose-800 ring-rose-200",
       Cerrada: "bg-slate-50 text-slate-800 ring-slate-200",
+      Vencido: "bg-neutral-100 text-neutral-600 ring-neutral-200 font-semibold",
     };
     const cls = styles[label] ?? "bg-slate-50 text-slate-700 ring-slate-200";
     return (
@@ -174,11 +175,10 @@ export default function AdministrarSolicitudes() {
     <button
       type="button"
       onClick={onClick}
-      className={`px-3 py-1.5 text-sm rounded-full transition ${
-        active
-          ? "bg-slate-900 text-white shadow"
-          : "bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50"
-      }`}
+      className={`px-3 py-1.5 text-sm rounded-full transition border ${active
+        ? "bg-slate-900 text-white border-slate-900"
+        : "bg-white text-slate-700 border-gray-200 hover:bg-slate-50"
+        }`}
     >
       {children}
     </button>
@@ -192,7 +192,7 @@ export default function AdministrarSolicitudes() {
     );
 
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen">
       <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
         {/* Encabezado */}
         <header className="mb-6 flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
@@ -213,7 +213,7 @@ export default function AdministrarSolicitudes() {
         {/* Resumen (KPIs) */}
         <div className="mb-6 grid gap-4 sm:grid-cols-3">
           {/* Reservadas */}
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-2xl bg-white px-4 py-4 border border-gray-200">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-emerald-50 text-emerald-700">
                 <CheckCircle className="h-5 w-5" />
@@ -233,7 +233,7 @@ export default function AdministrarSolicitudes() {
           </div>
 
           {/* En uso */}
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-2xl bg-white px-4 py-4 border border-gray-200">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-sky-50 text-sky-700">
                 <Hourglass className="h-5 w-5" />
@@ -254,7 +254,7 @@ export default function AdministrarSolicitudes() {
           </div>
 
           {/* Inventario disponible */}
-          <div className="rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+          <div className="rounded-2xl bg-white px-4 py-4 border border-gray-200">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-xl bg-indigo-50 text-indigo-700">
                 <Truck className="h-5 w-5" />
@@ -276,7 +276,7 @@ export default function AdministrarSolicitudes() {
         </div>
 
         {/* Barra de estados + filtros */}
-        <div className="mb-6 rounded-2xl bg-white px-4 py-4 shadow-sm ring-1 ring-slate-200">
+        <div className="mb-6 rounded-2xl bg-white px-4 py-4 border border-gray-200">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             {/* Tabs */}
             <div className="flex flex-wrap gap-2">
@@ -313,7 +313,7 @@ export default function AdministrarSolicitudes() {
                 <input
                   value={qPlaca}
                   onChange={(e) => setQPlaca(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-9 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:bg-white focus:ring-sky-200"
+                  className="w-full rounded-xl border border-gray-200 bg-slate-50 px-9 py-2 text-sm outline-none focus:bg-white focus:border-gray-400 transition-colors"
                   placeholder="Filtrar por placa"
                 />
               </div>
@@ -322,7 +322,7 @@ export default function AdministrarSolicitudes() {
                 <input
                   value={qSol}
                   onChange={(e) => setQSol(e.target.value)}
-                  className="w-full rounded-xl border border-slate-200 bg-slate-50 px-9 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:bg-white focus:ring-sky-200"
+                  className="w-full rounded-xl border border-gray-200 bg-slate-50 px-9 py-2 text-sm outline-none focus:bg-white focus:border-gray-400 transition-colors"
                   placeholder="Filtrar por DNI o nombre"
                 />
               </div>
@@ -332,7 +332,7 @@ export default function AdministrarSolicitudes() {
                   setQPlaca("");
                   setQSol("");
                 }}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
                 title="Limpiar filtros"
               >
                 <RotateCcw className="h-4 w-4" />
@@ -344,7 +344,7 @@ export default function AdministrarSolicitudes() {
 
         {/* Estado de carga */}
         {loading && (
-          <div className="rounded-2xl bg-white p-6 text-sm text-slate-600 shadow-sm ring-1 ring-slate-200 flex items-center gap-3">
+          <div className="rounded-2xl bg-white p-6 text-sm text-slate-600 border border-gray-200 flex items-center gap-3">
             <Loader2 className="h-4 w-4 animate-spin text-slate-400" />
             <span>{loadingMsg ?? "Cargando información…"}</span>
           </div>
@@ -356,9 +356,21 @@ export default function AdministrarSolicitudes() {
             {pageData.map((s) => {
               const estadoLower = (s.estado ?? "").toString().toLowerCase();
 
+              const now = new Date();
+              const inicio = new Date(s.usoInicio);
+              const fin = new Date(s.usoFin);
+              const isVencido = !estadoLower.startsWith("cancel") && !estadoLower.startsWith("cerrada") && now > fin;
+
+              let estadoDisplay: string = s.estado;
+              if (isVencido) estadoDisplay = "Vencido";
+
               let accentBar = "bg-slate-300";
               let iconBg = "bg-slate-700";
-              if (estadoLower.startsWith("reserv")) {
+
+              if (isVencido) {
+                accentBar = "bg-neutral-400";
+                iconBg = "bg-neutral-600";
+              } else if (estadoLower.startsWith("reserv")) {
                 accentBar = "bg-emerald-400";
                 iconBg = "bg-emerald-600";
               } else if (estadoLower === "en uso") {
@@ -396,13 +408,12 @@ export default function AdministrarSolicitudes() {
                 ? new Date(terminoUsoGaritaRaw)
                 : null;
 
-              const inicio = new Date(s.usoInicio);
-              const fin = new Date(s.usoFin);
+
 
               return (
                 <div
                   key={s.id}
-                  className="rounded-2xl bg-white px-5 py-4 shadow-sm ring-1 ring-slate-200"
+                  className="rounded-2xl bg-white px-5 py-4 border border-gray-200"
                 >
                   <div className="grid gap-3 md:grid-cols-[minmax(0,1fr),auto] md:items-stretch">
                     {/* Columna izquierda */}
@@ -429,7 +440,7 @@ export default function AdministrarSolicitudes() {
                               </p>
                             </div>
                           </div>
-                          <div>{pill(s.estado)}</div>
+                          <div>{pill(estadoDisplay)}</div>
                         </div>
 
                         {/* Línea 2: solicitante + creador */}
@@ -520,23 +531,23 @@ export default function AdministrarSolicitudes() {
                     {/* Columna derecha: acciones */}
                     <div className="flex items-end justify-end gap-2 md:items-center">
                       <div className="flex flex-wrap justify-end gap-1.5">
-                        {(s.estado === "Pendiente" ||
-                          s.estado === "Reservada") && (
-                          <button
-                            type="button"
-                            onClick={() => pedirRechazo(s.id)}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white shadow-sm hover:bg-rose-700"
-                            title="Rechazar solicitud"
-                          >
-                            Rechazar
-                          </button>
-                        )}
+                        {((s.estado === "Pendiente" ||
+                          s.estado === "Reservada") && !isVencido) && (
+                            <button
+                              type="button"
+                              onClick={() => pedirRechazo(s.id)}
+                              className="inline-flex items-center gap-1.5 rounded-full bg-rose-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-rose-700"
+                              title="Rechazar solicitud"
+                            >
+                              Rechazar
+                            </button>
+                          )}
 
                         {s.estado === "En uso" && s.vehiculo && (
                           <button
                             type="button"
                             onClick={() => pedirDevolucion(s.vehiculo!)}
-                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-200"
+                            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-200"
                             title="Registrar devolución"
                           >
                             Devolución
@@ -550,7 +561,7 @@ export default function AdministrarSolicitudes() {
             })}
 
             {pageData.length === 0 && (
-              <div className="rounded-2xl bg-white p-6 text-center text-sm text-slate-500 shadow-sm ring-1 ring-slate-200">
+              <div className="rounded-2xl bg-white p-6 text-center text-sm text-slate-500 border border-gray-200">
                 No hay registros para los filtros seleccionados.
               </div>
             )}
@@ -573,7 +584,7 @@ export default function AdministrarSolicitudes() {
                 type="button"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
-                className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 border border-gray-200 hover:bg-slate-50 disabled:opacity-50"
               >
                 <ChevronLeft className="h-4 w-4" /> Anterior
               </button>
@@ -581,7 +592,7 @@ export default function AdministrarSolicitudes() {
                 type="button"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page === totalPages}
-                className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 disabled:opacity-50"
+                className="inline-flex items-center gap-1 rounded-full bg-white px-3 py-1.5 text-xs font-medium text-slate-700 border border-gray-200 hover:bg-slate-50 disabled:opacity-50"
               >
                 Siguiente <ChevronRight className="h-4 w-4" />
               </button>
@@ -620,11 +631,10 @@ export default function AdministrarSolicitudes() {
               await ejecutarConfirm();
               setConfirm({ open: false, kind: null });
             }}
-            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold text-white shadow-sm ${
-              confirm.kind === "rechazar"
-                ? "bg-rose-600 hover:bg-rose-700"
-                : "bg-slate-900 hover:bg-slate-800"
-            }`}
+            className={`inline-flex items-center gap-1.5 rounded-xl px-4 py-1.5 text-sm font-semibold text-white ${confirm.kind === "rechazar"
+              ? "bg-rose-600 hover:bg-rose-700"
+              : "bg-slate-900 hover:bg-slate-800"
+              }`}
           >
             {confirm.kind === "rechazar" ? "Rechazar" : "Confirmar"}
           </button>

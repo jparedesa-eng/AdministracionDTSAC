@@ -42,6 +42,7 @@ type Vehiculo = {
   proveedor: string;
   revTecnica: string; // YYYY-MM-DD
   soat: string; // YYYY-MM-DD
+  fechaIngreso?: string; // NUEVO
   estado: EstadoVehiculoDB;
   volante: VolanteTipo;
 };
@@ -59,6 +60,7 @@ const fromDb = (r: any): Vehiculo => ({
   proveedor: r.proveedor ?? "",
   revTecnica: r.rev_tecnica,
   soat: r.soat,
+  fechaIngreso: r.fecha_ingreso,
   estado: r.estado as EstadoVehiculoDB,
   volante:
     r.volante === "Si" || r.volante === "No"
@@ -79,6 +81,7 @@ const toDb = (v: Vehiculo) => ({
   proveedor: v.proveedor || null,
   rev_tecnica: v.revTecnica,
   soat: v.soat,
+  fecha_ingreso: v.fechaIngreso,
   estado: v.estado,
   volante: v.volante,
 });
@@ -100,7 +103,7 @@ function EstadoBadge({ estado }: { estado: EstadoVehiculoDB }) {
   };
   return (
     <span
-      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ${styles[estado] || "bg-gray-100 text-gray-700 ring-gray-200"
+      className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ring-1 ring-inset ${styles[estado] || "bg-gray-100 text-gray-700 ring-gray-200"
         }`}
     >
       {estado}
@@ -246,6 +249,26 @@ async function apiUpdateVolante(id: string, volante: VolanteTipo) {
   return fromDb(data);
 }
 
+// Nueva función para obtener contadores totales
+async function apiFetchVehiculoStats() {
+  // Pedimos solo la columna estado de TODOS los vehículos
+  const { data, error } = await supabase
+    .from("vehiculos")
+    .select("estado");
+
+  if (error) {
+    console.error("Error fetching stats:", error);
+    return { disponible: 0, mantenimiento: 0, inactivo: 0 };
+  }
+
+  const rows = data || [];
+  const disponible = rows.filter((r) => r.estado === "Disponible").length;
+  const mantenimiento = rows.filter((r) => r.estado === "Mantenimiento").length;
+  const inactivo = rows.filter((r) => r.estado === "Inactivo").length;
+
+  return { disponible, mantenimiento, inactivo };
+}
+
 /* =========================
    Página principal
 ========================= */
@@ -287,6 +310,7 @@ export default function Inventario() {
     proveedor: "",
     revTecnica: "",
     soat: "",
+    fechaIngreso: "",
     estado: "Disponible",
     volante: "No",
   });
@@ -302,6 +326,13 @@ export default function Inventario() {
   // Carga
   const [loading, setLoading] = React.useState(false);
   const [errMsg, setErrMsg] = React.useState<string | null>(null);
+
+  // KPIs globales
+  const [kpiStats, setKpiStats] = React.useState({
+    disponible: 0,
+    mantenimiento: 0,
+    inactivo: 0,
+  });
 
   // Toast global
   const [toast, setToast] = React.useState<ToastState>(null);
@@ -334,13 +365,23 @@ export default function Inventario() {
     }
   }, [q, estadoFiltro, page]);
 
+  const loadStats = React.useCallback(async () => {
+    try {
+      const stats = await apiFetchVehiculoStats();
+      setKpiStats(stats);
+    } catch (error) {
+      console.error(error);
+    }
+  }, []);
+
   React.useEffect(() => {
     setPage(1);
   }, [q, estadoFiltro]);
 
   React.useEffect(() => {
     load();
-  }, [load]);
+    loadStats(); // Cargamos stats al inicio también
+  }, [load, loadStats]);
 
   /* Acciones */
   const openEdit = (v: Vehiculo) => {
@@ -362,6 +403,8 @@ export default function Inventario() {
     try {
       const updated = await apiUpdateVehiculo(editDraft);
       setRows((arr) => arr.map((it) => (it.id === updated.id ? updated : it)));
+      // Actualizamos stats por si cambió estado via edit (aunque raro)
+      loadStats();
       setToast({
         type: "success",
         message: "Vehículo actualizado correctamente.",
@@ -393,6 +436,7 @@ export default function Inventario() {
     try {
       const updated = await apiUpdateEstado(statusVeh.id, statusDraft);
       setRows((arr) => arr.map((it) => (it.id === updated.id ? updated : it)));
+      loadStats();
       setToast({
         type: "success",
         message: "Estado actualizado correctamente.",
@@ -451,6 +495,7 @@ export default function Inventario() {
       setCreateOpen(false);
       setPage(1);
       await load();
+      loadStats();
     } catch (e: any) {
       setToast({
         type: "error",
@@ -492,11 +537,8 @@ export default function Inventario() {
     }
   };
 
-  // KPI: solo los estados vigentes (no contamos "En uso")
-  const disponibles = rows.filter((d) => d.estado === "Disponible").length;
-  const mantenimiento = rows.filter((d) => d.estado === "Mantenimiento")
-    .length;
-  const inactivos = rows.filter((d) => d.estado === "Inactivo").length;
+  // KPI: usar kpiStats en lugar de rows.filter
+  const { disponible, mantenimiento, inactivo } = kpiStats;
 
   return (
     <div className="space-y-5">
@@ -514,12 +556,12 @@ export default function Inventario() {
       {/* KPIs Simplificados */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* Disponibles */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Disponibles</p>
               <p className="mt-2 text-3xl font-bold text-gray-900">
-                {disponibles}
+                {disponible}
               </p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
@@ -529,7 +571,7 @@ export default function Inventario() {
         </div>
 
         {/* Mantenimiento */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">
@@ -546,11 +588,11 @@ export default function Inventario() {
         </div>
 
         {/* Inactivos */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Inactivos</p>
-              <p className="mt-2 text-3xl font-bold text-gray-900">{inactivos}</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{inactivo}</p>
             </div>
             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
               <XCircle className="h-5 w-5" />
@@ -567,7 +609,7 @@ export default function Inventario() {
             value={q}
             onChange={(e) => setQ(e.target.value.toUpperCase())}
             placeholder="Buscar vehículo..."
-            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
+            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 transition-colors"
           />
         </div>
 
@@ -596,7 +638,7 @@ export default function Inventario() {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
           >
             <Plus className="h-4 w-4" />
             <span>Nuevo</span>
@@ -605,7 +647,7 @@ export default function Inventario() {
       </div>
 
       {/* Tabla */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -617,6 +659,7 @@ export default function Inventario() {
                 <th className="px-4 py-3">Color</th>
                 <th className="px-4 py-3">Responsable</th>
                 <th className="px-4 py-3">Proveedor</th>
+                <th className="px-4 py-3">Fecha Ingreso</th>
                 <th className="px-4 py-3">Rev. Técnica</th>
                 <th className="px-4 py-3">SOAT</th>
                 <th className="px-4 py-3">Estado</th>
@@ -691,6 +734,9 @@ export default function Inventario() {
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
                       {v.proveedor || <span className="text-gray-300">-</span>}
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 text-xs">
+                      {v.fechaIngreso || <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-4 py-3">
                       <FechaVencimiento dateStr={v.revTecnica} />
@@ -923,6 +969,19 @@ export default function Inventario() {
                   }
                   className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
                   placeholder="Empresa de alquiler"
+                />
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Fecha de Ingreso
+                </label>
+                <input
+                  type="date"
+                  value={editDraft.fechaIngreso || ""}
+                  onChange={(e) =>
+                    handleEditChange("fechaIngreso", e.target.value)
+                  }
+                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
                 />
               </div>
               <div>
@@ -1195,6 +1254,19 @@ export default function Inventario() {
                 }
                 className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
                 placeholder="Empresa de alquiler"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                F. Ingreso
+              </label>
+              <input
+                type="date"
+                value={createDraft.fechaIngreso || ""}
+                onChange={(e) =>
+                  handleCreateChange("fechaIngreso", e.target.value)
+                }
+                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
               />
             </div>
             <div>

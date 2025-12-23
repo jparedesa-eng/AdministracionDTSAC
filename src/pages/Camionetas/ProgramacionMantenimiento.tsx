@@ -132,7 +132,7 @@ function MonthCalendar(props: {
   const today = todayYMD();
 
   return (
-    <div className="rounded-2xl border bg-white shadow-sm">
+    <div className="rounded-2xl border border-gray-200 bg-white">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2">
         <div className="flex items-center gap-2">
           <CalendarDays className="h-4 w-4" />
@@ -171,7 +171,7 @@ function MonthCalendar(props: {
                   className={[
                     "min-h-14 w-full bg-white p-1.5 text-left transition relative rounded-md",
                     "hover:bg-gray-50",
-                    isSelected ? "ring-2 ring-gray-900 bg-slate-50" : "",
+                    isSelected ? "ring-2 ring-gray-200 bg-slate-50" : "",
                   ].join(" ")}
                 >
                   <div className="flex items-center justify-between">
@@ -184,7 +184,7 @@ function MonthCalendar(props: {
                       {day.getDate()}
                     </span>
                     {ev && ev.count > 0 && (
-                      <span className="rounded-full bg-gray-900 px-1.5 text-[10px] font-semibold text-white">
+                      <span className="rounded-full bg-slate-600 px-1.5 text-[10px] font-semibold text-white">
                         {ev.count}
                       </span>
                     )}
@@ -237,7 +237,7 @@ function Modal({
   const maxW = size === "lg" ? "max-w-2xl" : size === "sm" ? "max-w-sm" : "max-w-lg";
   return (
     <div className="fixed inset-0 z-50 grid place-items-center bg-black/40 p-4">
-      <div className={`w-full ${maxW} rounded-2xl bg-white shadow-xl`}>
+      <div className={`w-full ${maxW} rounded-2xl border border-gray-200 bg-white`}>
         <div className="flex items-center justify-between border-b px-5 py-3">
           <h3 className="text-sm font-semibold">{title}</h3>
           <button onClick={onClose} className="rounded-lg px-2 py-1 text-sm hover:bg-gray-100">
@@ -299,7 +299,7 @@ function RegisterAttentionModal({
                 notas: notas.trim() || null,
               })
             }
-            className="rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+            className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
           >
             Guardar
           </button>
@@ -415,7 +415,7 @@ function CreatePreventiveModal({
                 tipo,
               });
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
           >
             <PlusCircle className="h-4 w-4" />
             Crear programa y agenda
@@ -542,7 +542,7 @@ function CreateCorrectiveModal({
               const vSel = vehiculos.find((v) => v.id === vehiculoId);
               onCreate({ vehiculo_id: vehiculoId, placa: vSel?.placa || "", tipo, fecha, notas: notas || null });
             }}
-            className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
           >
             <PlusCircle className="h-4 w-4" />
             Programar
@@ -1004,26 +1004,26 @@ export default function ProgramacionMantenimiento() {
       <div className="space-y-4">
         {/* KPIs */}
         <div className="grid grid-cols-4 gap-3">
-          <div className="rounded-2xl border bg-white p-3 text-center">
+          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
             <p className="text-xs text-gray-500">Vencidos</p>
             <p className="mt-1 text-xl font-semibold text-rose-600">{buckets.venc}</p>
           </div>
-          <div className="rounded-2xl border bg-white p-3 text-center">
+          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
             <p className="text-xs text-gray-500">Próx. 30 días</p>
             <p className="mt-1 text-xl font-semibold text-amber-600">{buckets.soon}</p>
           </div>
-          <div className="rounded-2xl border bg-white p-3 text-center">
+          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
             <p className="text-xs text-gray-500">En regla</p>
             <p className="mt-1 text-xl font-semibold text-emerald-600">{buckets.ok}</p>
           </div>
-          <div className="rounded-2xl border bg-white p-3 text-center">
+          <div className="rounded-2xl border border-gray-200 bg-white p-3 text-center">
             <p className="text-xs text-gray-500">Sin programa</p>
             <p className="mt-1 text-xl font-semibold">{buckets.sin}</p>
           </div>
         </div>
 
         {/* Buscador + tipo */}
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white">
           <div className="flex items-center gap-2">
             <Search className="h-4 w-4 text-gray-400" />
             <input
@@ -1043,9 +1043,8 @@ export default function ProgramacionMantenimiento() {
                   setTipoFiltro(opt);
                   setEstadoFiltro("Todos");
                 }}
-                className={`px-3 py-1.5 text-xs rounded-lg ${
-                  tipoFiltro === opt ? "bg-white shadow-sm border" : "text-gray-600"
-                }`}
+                className={`px-3 py-1.5 text-xs rounded-lg ${tipoFiltro === opt ? "bg-white border-gray-200 border" : "text-gray-600"
+                  }`}
               >
                 {opt}
               </button>
@@ -1054,8 +1053,8 @@ export default function ProgramacionMantenimiento() {
         </div>
 
         {/* Lista de vehículos (contexto) */}
-        <section className="rounded-2xl border bg-white shadow-sm">
-          <header className="flex items-center justify-between border-b px-4 py-3">
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
+          <header className="flex items-center justify-between border-b border-gray-100 px-4 py-3">
             <div className="flex items-center gap-2">
               <Wrench className="h-5 w-5" />
               <div>
@@ -1077,7 +1076,7 @@ export default function ProgramacionMantenimiento() {
                 return (
                   <div
                     key={v.id}
-                    className="flex w-full items-center justify-between border-b px-4 py-3"
+                    className="flex w-full items-center justify-between border-b border-gray-100 px-4 py-3"
                   >
                     <div>
                       <p className="text-sm font-medium">
@@ -1098,12 +1097,12 @@ export default function ProgramacionMantenimiento() {
                 );
               })}
           </div>
-        </section>
+        </div>
       </div>
 
       {/* ========== DERECHA: calendario + tabla ========== */}
       <div className="space-y-4 min-w-0">
-        <div className="rounded-2xl border bg-white p-4 shadow-sm">
+        <div className="rounded-2xl border border-gray-200 bg-white p-4">
           {/* Toolbar */}
           <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -1120,7 +1119,7 @@ export default function ProgramacionMantenimiento() {
               <button
                 type="button"
                 onClick={() => setOpenCreateCorrectivo(true)}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800"
+                className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
                 title="Programar mantenimiento correctivo"
               >
                 <PlusCircle className="h-4 w-4" />
@@ -1153,7 +1152,7 @@ export default function ProgramacionMantenimiento() {
         </div>
 
         {/* ======= Tabla: Programaciones del mes (scroll local) ======= */}
-        <section className="rounded-2xl border bg-white shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white">
           <header className="flex flex-wrap items-center justify-between gap-2 border-b px-4 py-3">
             <div className="flex items-center gap-2">
               <CalendarDays className="h-5 w-5" />
@@ -1173,9 +1172,8 @@ export default function ProgramacionMantenimiento() {
                       key={opt}
                       type="button"
                       onClick={() => setEstadoFiltro(opt)}
-                      className={`px-3 py-1.5 text-xs rounded-lg ${
-                        estadoFiltro === opt ? "bg-white shadow-sm border" : "text-gray-600"
-                      }`}
+                      className={`px-3 py-1.5 text-xs rounded-lg ${estadoFiltro === opt ? "bg-white border-gray-200 border" : "text-gray-600"
+                        }`}
                     >
                       {opt}
                     </button>
@@ -1272,9 +1270,8 @@ export default function ProgramacionMantenimiento() {
                             type="button"
                             onClick={() => !cumplida && onEditar(r)}
                             disabled={cumplida}
-                            className={`inline-flex items-center rounded-lg border p-1.5 text-xs ${
-                              cumplida ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
-                            }`}
+                            className={`inline-flex items-center rounded-lg border p-1.5 text-xs ${cumplida ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
+                              }`}
                             title="Editar programación"
                             aria-label="Editar programación"
                           >
@@ -1284,9 +1281,8 @@ export default function ProgramacionMantenimiento() {
                             type="button"
                             onClick={() => !cumplida && onEliminar(r)}
                             disabled={cumplida}
-                            className={`inline-flex items-center rounded-lg border p-1.5 text-xs ${
-                              cumplida ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
-                            }`}
+                            className={`inline-flex items-center rounded-lg border p-1.5 text-xs ${cumplida ? "opacity-40 cursor-not-allowed" : "hover:bg-gray-50"
+                              }`}
                             title="Eliminar programación"
                             aria-label="Eliminar programación"
                           >
@@ -1307,7 +1303,7 @@ export default function ProgramacionMantenimiento() {
               </tbody>
             </table>
           </div>
-        </section>
+        </div>
       </div>
 
       {/* === Modales === */}

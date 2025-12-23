@@ -1,11 +1,12 @@
 import React from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { LoadingScreen } from "../components/ui/LoadingScreen";
 
 /**
  * Protege una ruta por sesión + permisos de vista.
  * - Si no hay sesión: envía a /login y recuerda desde dónde venía.
- * - Si el perfil aún no carga: muestra un placeholder.
+ * - Si el perfil aún no carga: muestra un placeholder con timeout.
  * - Si no tiene permiso para `path`: redirige a la PRIMERA vista permitida.
  *   (Si no hay ninguna, envía a /403)
  */
@@ -13,24 +14,39 @@ export default function ProtectedRoute({
   children,
   path,
 }: {
-  children: React.ReactElement;   // JSX.Element también vale, uso React.ReactElement para más precisión
+  children: React.ReactElement;
   path: string;
 }) {
-  const { user, profile, canView } = useAuth();
+  const { user, profile, canView, loadingSession } = useAuth();
   const loc = useLocation();
+  const [profileTimeout, setProfileTimeout] = React.useState(false);
 
   // Sin sesión → login
   if (!user) {
     return <Navigate to="/login" replace state={{ from: loc.pathname }} />;
   }
 
-  // Cargando perfil
-  if (!profile) {
-    return (
-      <div className="grid place-items-center py-10 text-sm text-gray-500">
-        Cargando…
-      </div>
-    );
+  // Timeout para evitar carga infinita del perfil
+  React.useEffect(() => {
+    if (!profile && !loadingSession) {
+      const timer = setTimeout(() => {
+        console.warn("[ProtectedRoute] Profile loading timeout - proceeding with limited access");
+        setProfileTimeout(true);
+      }, 5000); // 5 segundos de timeout
+
+      return () => clearTimeout(timer);
+    }
+  }, [profile, loadingSession]);
+
+  // Cargando perfil (con mejor UI)
+  if (!profile && !profileTimeout) {
+    return <LoadingScreen text="Cargando perfil..." />;
+  }
+
+  // Si hubo timeout del perfil, redirigir a dashboard con advertencia
+  if (!profile && profileTimeout) {
+    console.error("[ProtectedRoute] Failed to load profile - redirecting to dashboard");
+    return <Navigate to="/dashboard" replace />;
   }
 
   // Permiso OK → render
@@ -39,7 +55,7 @@ export default function ProtectedRoute({
   }
 
   // No tiene permiso: escoger fallback según allowed_views
-  const allowed = Array.isArray(profile.allowed_views) ? profile.allowed_views : [];
+  const allowed = profile ? (Array.isArray(profile.allowed_views) ? profile.allowed_views : []) : [];
   // normaliza prefijos '/ruta/*' → '/ruta'
   const firstAllowed =
     allowed

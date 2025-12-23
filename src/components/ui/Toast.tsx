@@ -1,7 +1,7 @@
 import React, { useEffect } from "react";
 import { CheckCircle2, AlertTriangle, Info } from "lucide-react";
 
-export type ToastType = "success" | "error" | "info";
+export type ToastType = "success" | "error" | "info" | "warning";
 
 export type ToastState = {
   type: ToastType;
@@ -40,6 +40,12 @@ export const Toast: React.FC<ToastProps> = ({ toast, onClose }) => {
       Icon = AlertTriangle;
       containerClass = "bg-white border-rose-100 ring-rose-500/10";
       iconClass = "text-rose-500";
+      textClass = "text-gray-800";
+      break;
+    case "warning":
+      Icon = AlertTriangle;
+      containerClass = "bg-white border-amber-100 ring-amber-500/10";
+      iconClass = "text-amber-500";
       textClass = "text-gray-800";
       break;
     case "info":

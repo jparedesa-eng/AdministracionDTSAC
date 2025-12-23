@@ -521,7 +521,7 @@ export default function Solicitar() {
   ========================== */
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
         {/* Título + botón nuevo ticket */}
         <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -538,7 +538,7 @@ export default function Solicitar() {
             <button
               type="button"
               onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 transition-colors"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#cc0000] transition-colors"
             >
               <Plus className="h-4 w-4" />
               Nuevo ticket
@@ -567,7 +567,7 @@ export default function Solicitar() {
         )}
 
         {/* Indicador de disponibilidad */}
-        <div className="mb-6 rounded-2xl bg-white p-4 shadow-sm">
+        <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200">
           <div className="flex items-center justify-between gap-3">
             <div className="flex items-center gap-3">
               <div className="grid h-10 w-10 place-items-center rounded-lg bg-gray-900 text-white">
@@ -602,7 +602,7 @@ export default function Solicitar() {
         {showForm && (
           <form
             onSubmit={onSubmit}
-            className="rounded-2xl bg-white p-4 shadow-sm grid gap-4"
+            className="rounded-2xl bg-white p-4 border border-gray-200 grid gap-4"
           >
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
@@ -615,7 +615,7 @@ export default function Solicitar() {
                     type="datetime-local"
                     value={usoInicioLocal}
                     onChange={(e) => setUsoInicioLocal(e.target.value)}
-                    className="w-full rounded-xl border px-10 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                    className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
                 </div>
               </div>
@@ -629,7 +629,7 @@ export default function Solicitar() {
                     type="datetime-local"
                     value={usoFinLocal}
                     onChange={(e) => setUsoFinLocal(e.target.value)}
-                    className="w-full rounded-xl border px-10 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                    className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
                 </div>
               </div>
@@ -643,7 +643,7 @@ export default function Solicitar() {
                 value={selectedPlaca}
                 onChange={(e) => setSelectedPlaca(e.target.value)}
                 disabled={checking || (availableCount ?? 0) <= 0}
-                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300 disabled:opacity-60"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors disabled:opacity-60"
               >
                 <option value="">
                   {checking
@@ -675,7 +675,7 @@ export default function Solicitar() {
                     if (v.length !== 8) setNombreFromDB(false);
                     if (v.length === 0) setNombre("");
                   }}
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   placeholder="00000000"
                 />
                 {buscandoConductor && (
@@ -695,7 +695,7 @@ export default function Solicitar() {
                     if (!nombreFromDB) setNombre(e.target.value);
                   }}
                   className={
-                    "mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300 " +
+                    "mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors " +
                     (nombreFromDB
                       ? "bg-gray-100 cursor-not-allowed"
                       : "")
@@ -719,7 +719,7 @@ export default function Solicitar() {
                 <select
                   value={origen}
                   onChange={(e) => setOrigen(e.target.value)}
-                  className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 >
                   <option value="">— Selecciona origen —</option>
                   <option value="TRUJILLO">TRUJILLO</option>
@@ -733,7 +733,7 @@ export default function Solicitar() {
                 <select
                   value={destino}
                   onChange={(e) => setDestino(e.target.value)}
-                  className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 >
                   <option value="">— Selecciona destino —</option>
                   <option value="F. AGROMORIN">F. AGROMORIN</option>
@@ -755,7 +755,7 @@ export default function Solicitar() {
                   value={motivo}
                   onChange={(e) => setMotivo(e.target.value)}
                   rows={3}
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300 resize-y"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors resize-y"
                   placeholder="Describe brevemente el motivo del uso"
                 />
               </div>
@@ -765,7 +765,7 @@ export default function Solicitar() {
               <button
                 type="button"
                 onClick={() => setShowForm(false)}
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50 transition-colors"
+                className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <X className="h-4 w-4" />
                 Cancelar
@@ -773,7 +773,7 @@ export default function Solicitar() {
               <button
                 type="submit"
                 disabled={submitting || checking || !selectedPlaca}
-                className="inline-flex items-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-[#cc0000] disabled:opacity-60"
               >
                 {submitting ? (
                   <>
@@ -834,7 +834,7 @@ export default function Solicitar() {
           </div>
 
           {visibleTickets.length === 0 ? (
-            <div className="mt-4 rounded-xl bg-white p-3 shadow-sm ring-1 ring-gray-100">
+            <div className="mt-4 rounded-xl bg-white p-3 border border-gray-100">
               <p className="text-sm text-gray-500">
                 {ticketFilter === "reservados"
                   ? "No hay tickets reservados o en uso con los filtros actuales."
@@ -878,8 +878,15 @@ export default function Solicitar() {
                   const estado = (s.estado ?? "").toString();
                   const estadoLower = estado.toLowerCase();
 
+                  const now = new Date();
+                  const isVencido = !estadoLower.startsWith("cancel") && now > fin;
+
+                  let estadoDisplay = estado;
+                  if (isVencido) estadoDisplay = "Vencido";
+
                   let estadoDot = "bg-gray-400";
-                  if (estadoLower.startsWith("reserv"))
+                  if (isVencido) estadoDot = "bg-neutral-500";
+                  else if (estadoLower.startsWith("reserv"))
                     estadoDot = "bg-emerald-500";
                   else if (estadoLower.startsWith("cancel"))
                     estadoDot = "bg-rose-500";
@@ -888,7 +895,9 @@ export default function Solicitar() {
 
                   let estadoPill =
                     "bg-gray-100 text-gray-700 ring-gray-200";
-                  if (estadoLower.startsWith("reserv"))
+                  if (isVencido)
+                    estadoPill = "bg-neutral-100 text-neutral-600 ring-neutral-200";
+                  else if (estadoLower.startsWith("reserv"))
                     estadoPill =
                       "bg-emerald-50 text-emerald-800 ring-emerald-200";
                   else if (estadoLower.startsWith("cancel"))
@@ -904,7 +913,7 @@ export default function Solicitar() {
                   return (
                     <li
                       key={s.id}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm shadow-sm"
+                      className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm"
                     >
                       {/* fila superior compacta */}
                       <div className="flex items-start gap-3">
@@ -935,7 +944,7 @@ export default function Solicitar() {
                               <span
                                 className={`h-2 w-2 rounded-full ${estadoDot}`}
                               />
-                              {estado || "—"}
+                              {estadoDisplay || "—"}
                             </span>
                           </div>
 
@@ -1014,17 +1023,17 @@ export default function Solicitar() {
                         </div>
 
                         <div className="flex flex-col items-end gap-1.5">
-                          {(estadoLower.startsWith("reserv") ||
-                            estadoLower === "en uso") && (
+                          {((estadoLower.startsWith("reserv") ||
+                            estadoLower === "en uso") && !isVencido) && (
                               <button
                                 type="button"
                                 onClick={() => handleOpenQr(s)}
-                                className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-sky-700 active:bg-sky-800"
+                                className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
                               >
                                 Ver QR
                               </button>
                             )}
-                          {puedeCancelar(s.estado) && (
+                          {(puedeCancelar(s.estado) && !isVencido) && (
                             <button
                               type="button"
                               onClick={() => setTicketToCancel(s)}
@@ -1048,7 +1057,7 @@ export default function Solicitar() {
                   <button
                     type="button"
                     onClick={() => setTicketsToShow((prev) => prev + 10)}
-                    className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+                    className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
                   >
                     Cargar 10 más
                   </button>

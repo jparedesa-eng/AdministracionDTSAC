@@ -43,7 +43,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     (async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setUser(session?.user ?? null);
-      if (session?.user) loadProfileSafe(session.user.id);
+      if (session?.user) {
+        await loadProfileSafe(session.user.id);
+      }
       setLoadingSession(false);
     })();
 
@@ -60,12 +62,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       // Forzamos a Promise “real” para el race y evitamos el tipo PostgrestBuilder
       const query = supabase.from("profiles").select("*").eq("id", uid).single();
-      const resp: any = await promiseWithTimeout(query as unknown as Promise<any>, 2000);
+      const resp: any = await promiseWithTimeout(query as unknown as Promise<any>, 8000);
 
       if (resp?.data) {
         setProfile(resp.data as Profile);
       } else {
-        console.warn("[Auth] Perfil no encontrado para uid:", uid);
+        console.warn("[Auth] Perfil no encontrado:", uid);
         setProfile(null);
       }
     } catch (e: any) {
@@ -79,7 +81,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }
 
   async function login(dni: string, pass: string) {
-    if (!/^\d{8}$/.test(dni)) throw new Error("DNI inválido (8 dígitos).");
+    if (!/^\d{8}$/.test(dni)) throw new Error("Usuario inválido.");
 
     const { data, error } = await supabase.auth.signInWithPassword({
       email: dniToEmail(dni),

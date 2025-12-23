@@ -1,6 +1,7 @@
 // src/auth/RequireAuth.tsx
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "./AuthContext";
+import { LoadingScreen } from "../components/ui/LoadingScreen";
 
 /**
  * Protege las rutas internas:
@@ -14,11 +15,7 @@ export default function RequireAuth() {
 
   // Mientras inicializa la sesión (ej: Supabase getSession/onAuthStateChange)
   if (loadingSession) {
-    return (
-      <div className="grid min-h-screen place-items-center text-sm text-gray-500">
-        Cargando sesión…
-      </div>
-    );
+    return <LoadingScreen text="Validando sesión..." />;
   }
 
   // Sin sesión => a /login, guardando la ruta desde donde venía

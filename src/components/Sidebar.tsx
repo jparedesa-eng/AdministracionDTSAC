@@ -18,6 +18,10 @@ import {
   Plane,
   CalendarDays,
   MoreVertical,
+  Smartphone,
+  ShieldCheck,
+  MapPin, // For Sedes
+  Building2,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -66,7 +70,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const canSeeCam_RegChecklist = hasAccess("/camionetas/registros/checklist");
   const canSeeCam_Mantenimiento = hasAccess("/camionetas/mantenimiento");
   const canSeeCam_Garita = hasAccess("/camionetas/garita");
-  const canSeeCam_MiCamioneta = hasAccess("/camionetas/mi-camioneta"); // 👈 NUEVO
+  const canSeeCam_MiCamioneta = hasAccess("/camionetas/mi-camioneta");
 
   // Pasajes & Hospedaje
   const canSeePas_Solicitar = hasAccess("/pasajes/solicitar");
@@ -75,10 +79,26 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const canSeePas_Gestion = hasAccess("/pasajes/gestion");
   const canSeePas_Proveedores = hasAccess("/pasajes/proveedores");
 
+  // Telefonia
+  const canSeeTel_Solicitar = hasAccess("/telefonia/solicitar");
+  const canSeeTel_Inventario = hasAccess("/telefonia/inventario");
+  const canSeeTel_Gestion = hasAccess("/telefonia/gestion");
+  const canSeeTel_AprobIT = hasAccess("/telefonia/aprobacion-it");
+  const canSeeTel_AprobGerencia = hasAccess("/telefonia/aprobacion-gerencia");
+  const canSeeTel_AprobAdmin = hasAccess("/telefonia/aprobacion-admin");
+
   // Configuración / Preferencias
   const canSeeConfig = hasAccess("/config");
   const canSeeConfigPersonal = hasAccess("/configuracion/personal");
   const canSeeConfigGerencias = hasAccess("/configuracion/gerencias");
+  const canSeeConfigSedes = hasAccess("/configuracion/sedes");
+  const canSeeConfigCentrales = hasAccess("/configuracion/centrales-cctv");
+
+  // Seguridad
+  const canSeeSeg_Programacion = hasAccess("/seguridad/programacion");
+  const canSeeSeg_Recursos = hasAccess("/seguridad/recursos");
+  const canSeeSeg_ChecklistCamaras = hasAccess("/seguridad/checklist-camaras");
+  const canSeeSeg_InventarioCamaras = hasAccess("/seguridad/inventario-camaras");
 
   const canSeeAyuda = hasAccess("/ayuda");
 
@@ -90,21 +110,31 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const [openPasajes, setOpenPasajes] = React.useState(
     location.pathname.startsWith("/pasajes")
   );
+  const [openTelefonia, setOpenTelefonia] = React.useState(
+    location.pathname.startsWith("/telefonia")
+  );
   const [openConfigMenu, setOpenConfigMenu] = React.useState(
-    location.pathname.startsWith("/config") ||
-    location.pathname.startsWith("/configuracion")
+    location.pathname.startsWith("/configuracion") ||
+    location.pathname.startsWith("/config")
+  );
+  const [openSeguridad, setOpenSeguridad] = React.useState(
+    location.pathname.startsWith("/seguridad")
   );
 
   React.useEffect(() => {
     const inCam = location.pathname.startsWith("/camionetas");
     const inPas = location.pathname.startsWith("/pasajes");
+    const inTel = location.pathname.startsWith("/telefonia");
     const inConfig =
       location.pathname.startsWith("/config") ||
       location.pathname.startsWith("/configuracion");
+    const inSeg = location.pathname.startsWith("/seguridad");
 
     setOpenCamionetas(inCam);
     setOpenPasajes(inPas);
+    setOpenTelefonia(inTel);
     setOpenConfigMenu(inConfig);
+    setOpenSeguridad(inSeg);
   }, [location.pathname]);
 
   const [showUserMenu, setShowUserMenu] = React.useState(false);
@@ -488,8 +518,237 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             </>
           )}
 
+        {/* Telefonia */}
+        {showAny(
+          "/telefonia/*",
+          "/telefonia/solicitar",
+          "/telefonia/inventario",
+          "/telefonia/gestion",
+          "/telefonia/aprobacion-it",
+          "/telefonia/aprobacion-gerencia",
+          "/telefonia/aprobacion-admin"
+        ) && (
+            <>
+              <button
+                type="button"
+                onClick={() => setOpenTelefonia((v) => !v)}
+                className={[
+                  baseItem,
+                  location.pathname.startsWith("/telefonia")
+                    ? activeClass
+                    : idleClass,
+                  "mt-1",
+                ].join(" ")}
+                aria-expanded={openTelefonia}
+                aria-controls="submenu-telefonia"
+              >
+                <Smartphone
+                  className={
+                    location.pathname.startsWith("/telefonia")
+                      ? iconActive
+                      : iconIdle
+                  }
+                />
+                <span className="font-medium">Telefonía</span>
+                <span className="ml-auto transition-transform">
+                  {openTelefonia ? (
+                    <ChevronDown
+                      className={
+                        location.pathname.startsWith("/telefonia")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  ) : (
+                    <ChevronRight
+                      className={
+                        location.pathname.startsWith("/telefonia")
+                          ? "h-4 w-4 text-white"
+                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                      }
+                    />
+                  )}
+                </span>
+              </button>
+
+              <AnimatePresence initial={false}>
+                {openTelefonia && (
+                  <motion.div
+                    id="submenu-telefonia"
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: "auto", opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                  >
+                    {canSeeTel_Solicitar && (
+                      <NavLink
+                        to="/telefonia/solicitar"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <FilePlus2 className="h-4 w-4 text-gray-600" />
+                        Solicitar
+                      </NavLink>
+                    )}
+                    {canSeeTel_Inventario && (
+                      <NavLink
+                        to="/telefonia/inventario"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Wrench className="h-4 w-4 text-gray-600" />
+                        Inventario
+                      </NavLink>
+                    )}
+                    {canSeeTel_AprobIT && (
+                      <NavLink
+                        to="/telefonia/aprobacion-it"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Wrench className="h-4 w-4 text-gray-600" />
+                        Aprobación IT
+                      </NavLink>
+                    )}
+                    {canSeeTel_AprobGerencia && (
+                      <NavLink
+                        to="/telefonia/aprobacion-gerencia"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <ListChecks className="h-4 w-4 text-gray-600" />
+                        Aprobación Gerencia
+                      </NavLink>
+                    )}
+                    {canSeeTel_AprobAdmin && (
+                      <NavLink
+                        to="/telefonia/aprobacion-admin"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <DollarSign className="h-4 w-4 text-gray-600" />
+                        Aprobación Admin
+                      </NavLink>
+                    )}
+                    {canSeeTel_Gestion && (
+                      <NavLink
+                        to="/telefonia/gestion"
+                        className={({ isActive }) => submenuItem(isActive)}
+                        onClick={onClose}
+                      >
+                        <Truck className="h-4 w-4 text-gray-600" />
+                        Entregas / Historial
+                      </NavLink>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </>
+          )}
+
+        {/* Seguridad Patrimonial */}
+        {showAny("/seguridad/*", "/seguridad/programacion", "/seguridad/recursos", "/seguridad/checklist-camaras", "/seguridad/inventario-camaras") && (
+          <>
+            <SectionLabel>Seguridad Patrimonial</SectionLabel>
+            <button
+              type="button"
+              onClick={() => setOpenSeguridad((v) => !v)}
+              className={[
+                baseItem,
+                location.pathname.startsWith("/seguridad")
+                  ? activeClass
+                  : idleClass,
+                "mt-1",
+              ].join(" ")}
+              aria-expanded={openSeguridad}
+              aria-controls="submenu-seguridad"
+            >
+              <ShieldCheck
+                className={
+                  location.pathname.startsWith("/seguridad")
+                    ? iconActive
+                    : iconIdle
+                }
+              />
+              <span className="font-medium">Seguridad Patrimonial</span>
+              <span className="ml-auto transition-transform">
+                {openSeguridad ? (
+                  <ChevronDown
+                    className={
+                      location.pathname.startsWith("/seguridad")
+                        ? "h-4 w-4 text-white"
+                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                    }
+                  />
+                ) : (
+                  <ChevronRight
+                    className={
+                      location.pathname.startsWith("/seguridad")
+                        ? "h-4 w-4 text-white"
+                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                    }
+                  />
+                )}
+              </span>
+            </button>
+
+            <AnimatePresence initial={false}>
+              {openSeguridad && (
+                <motion.div
+                  id="submenu-seguridad"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                >
+                  {canSeeSeg_Programacion && (
+                    <NavLink
+                      to="/seguridad/programacion"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <CalendarDays className="h-4 w-4 text-gray-600" />
+                      Programación de Puestos
+                    </NavLink>
+                  )}
+                  {canSeeSeg_Recursos && (
+                    <NavLink
+                      to="/seguridad/recursos"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <Users className="h-4 w-4 text-gray-600" />
+                      Gestión de Recursos
+                    </NavLink>
+                  )}
+                  {canSeeSeg_ChecklistCamaras && (
+                    <NavLink
+                      to="/seguridad/checklist-camaras"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <ClipboardList className="h-4 w-4 text-gray-600" />
+                      Checklist de Cámaras
+                    </NavLink>
+                  )}
+                  {canSeeSeg_InventarioCamaras && (
+                    <NavLink
+                      to="/seguridad/inventario-camaras"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <Wrench className="h-4 w-4 text-gray-600" />
+                      Inventario de Cámaras
+                    </NavLink>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
+
         {/* Preferencias / Configuración (agrupado) */}
-        {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias) && (
+        {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias || canSeeConfigSedes || canSeeConfigCentrales) && (
           <>
             <SectionLabel>Preferencias</SectionLabel>
 
@@ -565,6 +824,28 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                     >
                       <ClipboardList className="h-4 w-4 text-gray-600" />
                       Gerencias
+                    </NavLink>
+                  )}
+
+                  {canSeeConfigSedes && (
+                    <NavLink
+                      to="/configuracion/sedes"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <MapPin className="h-4 w-4 text-gray-600" />
+                      Sedes
+                    </NavLink>
+                  )}
+
+                  {canSeeConfigCentrales && (
+                    <NavLink
+                      to="/configuracion/centrales-cctv"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                    >
+                      <Building2 className="h-4 w-4 text-gray-600" />
+                      Centrales CCTV
                     </NavLink>
                   )}
                 </motion.div>

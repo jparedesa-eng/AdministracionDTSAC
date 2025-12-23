@@ -11,6 +11,10 @@ import {
     Trash2,
     CheckCircle2,
     IdCard,
+    Search,
+    Calendar,
+    History,
+    X,
 } from "lucide-react";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
@@ -37,12 +41,17 @@ type Conductor = {
     dni: string;
     licencia: string;
     licencia_vencimiento?: string; // from DB
+    activo?: boolean; // from DB
 };
 
 // Joined row from vehiculo_conductores
 type ConductorAsignadoFull = {
     id: string; // id de la relación vehiculo_conductores
     conductor: Conductor; // joined data
+    tipo_autorizacion: 'permanente' | 'rango';
+    fecha_inicio: string;
+    fecha_fin?: string;
+    activo: boolean;
 };
 
 /* =========================
@@ -116,9 +125,23 @@ export default function MiCamioneta() {
     const [selectedDriverId, setSelectedDriverId] = React.useState("");
     const [adding, setAdding] = React.useState(false);
 
+    // New State for Add Modal
+    const [searchTerm, setSearchTerm] = React.useState("");
+    const [authType, setAuthType] = React.useState<'permanente' | 'rango'>('permanente');
+    const [dateStart, setDateStart] = React.useState(new Date().toISOString().split('T')[0]);
+    const [dateEnd, setDateEnd] = React.useState("");
+
+    // View Options
+    const [showHistory, setShowHistory] = React.useState(false);
+
     // Delete Confirmation
     const [openDelete, setOpenDelete] = React.useState(false);
     const [driverToDelete, setDriverToDelete] = React.useState<{ id: string, name: string } | null>(null);
+
+    /* Filtrado de conductores para mostrar */
+    const filteredDrivers = React.useMemo(() => {
+        return asignados.filter(a => showHistory || a.activo);
+    }, [asignados, showHistory]);
 
     /* Carga inicial */
     React.useEffect(() => {
@@ -167,19 +190,30 @@ export default function MiCamioneta() {
     };
 
     const loadAsignados = async (vehiculoId: string) => {
+        // Obtenemos todos los registros (activos e inactivos)
         const { data, error } = await supabase
             .from("vehiculo_conductores")
             .select(`
         id,
+        tipo_autorizacion,
+        fecha_inicio,
+        fecha_fin,
+        activo,
         conductor:conductores (id, nombre, dni, licencia, licencia_vencimiento)
       `)
-            .eq("vehiculo_id", vehiculoId);
+            .eq("vehiculo_id", vehiculoId)
+            .order("activo", { ascending: false }) // Activos primero
+            .order("fecha_inicio", { ascending: false });
 
         if (error) throw error;
         // data es any, hacemos cast safe
         const mapped = (data || []).map((item: any) => ({
             id: item.id,
             conductor: item.conductor,
+            tipo_autorizacion: item.tipo_autorizacion,
+            fecha_inicio: item.fecha_inicio,
+            fecha_fin: item.fecha_fin,
+            activo: item.activo
         }));
         setAsignados(mapped);
     };
@@ -188,6 +222,11 @@ export default function MiCamioneta() {
     const handleOpenAdd = async () => {
         setOpenAdd(true);
         setAllDrivers([]);
+        setSearchTerm("");
+        setSelectedDriverId("");
+        setAuthType("permanente");
+        setDateStart(new Date().toISOString().split('T')[0]);
+        setDateEnd("");
 
         try {
             // Nota: Quitamos el filtro de activo por si acaso, o lo dejamos si es estricto.
@@ -234,14 +273,40 @@ export default function MiCamioneta() {
         e.preventDefault();
         if (!vehiculo || !selectedDriverId) return;
 
+        // Validaciones
+        if (authType === 'rango') {
+            if (!dateStart) {
+                setToast({ type: "error", message: "Fecha de inicio requerida." });
+                return;
+            }
+            if (!dateEnd) {
+                setToast({ type: "error", message: "Fecha fin requerida para autorización por rango." });
+                return;
+            }
+            if (dateEnd < dateStart) {
+                setToast({ type: "error", message: "La fecha fin no puede ser anterior a la fecha de inicio." });
+                return;
+            }
+        }
+
         setAdding(true);
         try {
-            const { error } = await supabase.from("vehiculo_conductores").insert([
-                {
-                    vehiculo_id: vehiculo.id,
-                    conductor_id: selectedDriverId,
-                },
-            ]);
+            const payload = {
+                vehiculo_id: vehiculo.id,
+                conductor_id: selectedDriverId,
+                tipo_autorizacion: authType,
+                fecha_inicio: dateStart,
+                fecha_fin: authType === 'rango' ? dateEnd : null,
+                activo: true
+            };
+
+            // Verificar si el conductor ya existe en historial para reactivarlo?
+            // Por simplicidad, intentamos insertar. Si existe constraint unique (vehiculo_id, conductor_id), fallará.
+            // Si la lógica de negocio permite tener múltiples registros en el historia (mismo conductor, diferentes fechas), 
+            // entonces no debería haber unique constraint compuesta estricta sin incluir fechas o estado.
+            // Asumiremos que se crea un nuevo registro de autorización.
+
+            const { error } = await supabase.from("vehiculo_conductores").insert([payload]);
 
             if (error) throw error;
 
@@ -250,9 +315,9 @@ export default function MiCamioneta() {
             setSelectedDriverId("");
             await loadAsignados(vehiculo.id);
         } catch (e: any) {
-            // Check unique constraint violation
+            console.error(e);
             if (e.code === '23505') {
-                setToast({ type: "error", message: "Este conductor ya está autorizado." });
+                setToast({ type: "error", message: "Este conductor ya tiene una autorización (activa o registrada)." });
             } else {
                 setToast({ type: "error", message: "Error al autorizar conductor." });
             }
@@ -269,16 +334,21 @@ export default function MiCamioneta() {
     const handleRemove = async () => {
         if (!driverToDelete) return;
         try {
+            // Soft delete: Update activo = false, fecha_fin = Now
             const { error } = await supabase
                 .from("vehiculo_conductores")
-                .delete()
+                .update({
+                    activo: false,
+                    fecha_fin: new Date().toISOString().split('T')[0] // Set end date to today
+                })
                 .eq("id", driverToDelete.id);
+
             if (error) throw error;
 
-            setToast({ type: "success", message: "Conductor removido." });
+            setToast({ type: "success", message: "Autorización finalizada." });
             if (vehiculo) await loadAsignados(vehiculo.id);
         } catch (e: any) {
-            setToast({ type: "error", message: "Error al eliminar." });
+            setToast({ type: "error", message: "Error al finalizar autorización." });
         } finally {
             setOpenDelete(false);
             setDriverToDelete(null);
@@ -311,12 +381,17 @@ export default function MiCamioneta() {
         );
     }
 
+
+    /* Render */
+    // ... (rest of render logic before Authorized Drivers section)
+
     return (
         <div className="mx-auto max-w-5xl space-y-8 animate-in fade-in duration-500">
             <Toast toast={toast} onClose={() => setToast(null)} />
 
-            {/* Header Usuario Refinado */}
+            {/* Header Usuario Refinado (Existing code...) */}
             <div className="mb-6 rounded-3xl border border-gray-200 bg-white p-6 md:p-8">
+                {/* ... (Existing Header User content) ... */}
                 <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
                     <div className="space-y-4">
                         <div>
@@ -362,7 +437,7 @@ export default function MiCamioneta() {
                         )}
                         {!ownerDriver && (
                             <p className="text-sm text-gray-400 italic">
-                                No se encontró información de conductor asociada a tu usuario.
+                                No se encontraron datos de conductor para tu usuario.
                             </p>
                         )}
                     </div>
@@ -419,7 +494,7 @@ export default function MiCamioneta() {
 
             {/* Sección Conductores Autorizados */}
             <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
                     <div>
                         <h3 className="text-lg font-bold text-gray-900">
                             Conductores Autorizados
@@ -428,77 +503,103 @@ export default function MiCamioneta() {
                             Gestiona quién puede conducir tu unidad registrando sus entradas/salidas.
                         </p>
                     </div>
-                    <button
-                        onClick={handleOpenAdd}
-                        className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 transition-colors"
-                    >
-                        <Plus className="h-4 w-4" />
-                        <span>Agregar</span>
-                    </button>
+                    <div className="flex items-center gap-3">
+                        <button
+                            onClick={() => setShowHistory(!showHistory)}
+                            className={`inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors ${showHistory
+                                ? "bg-indigo-50 text-indigo-700 border border-indigo-100"
+                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                                }`}
+                        >
+                            <History className="h-4 w-4" />
+                            <span>{showHistory ? "Ocultar Historial" : "Ver Historial"}</span>
+                        </button>
+                        <button
+                            onClick={handleOpenAdd}
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 transition-colors"
+                        >
+                            <Plus className="h-4 w-4" />
+                            <span>Agregar</span>
+                        </button>
+                    </div>
                 </div>
 
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden">
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
                     <div className="divide-y divide-gray-100">
-                        {asignados.length === 0 ? (
+                        {filteredDrivers.length === 0 ? (
                             <div className="p-10 text-center">
                                 <User className="mx-auto h-10 w-10 text-gray-300" />
-                                <p className="mt-2 text-sm font-medium text-gray-900">Sin conductores autorizados</p>
-                                <p className="text-xs text-gray-500">Solo tú estás registrado como responsable.</p>
+                                <p className="mt-2 text-sm font-medium text-gray-900">
+                                    {showHistory ? "No hay conductores en el historial." : "No hay conductores activos autorizados."}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                    {showHistory ? "Los registros antiguos aparecerán aquí." : "Agrega un conductor para comenzar."}
+                                </p>
                             </div>
                         ) : (
-                            asignados.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between p-3 hover:bg-gray-50 transition-colors border-b border-gray-50 last:border-0">
-                                    <div className="flex items-center gap-3">
-                                        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-600 font-bold text-base shadow-sm">
+                            filteredDrivers.map((item) => (
+                                <div key={item.id} className={`flex flex-col sm:flex-row sm:items-center justify-between p-4 transition-colors border-b border-gray-50 last:border-0 ${!item.activo ? "bg-gray-50/50" : "hover:bg-gray-50"}`}>
+                                    <div className="flex items-start gap-4">
+                                        <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full font-bold text-base ${item.activo ? "bg-slate-100 text-slate-600" : "bg-gray-100 text-gray-400 grayscale"}`}>
                                             <User className="h-5 w-5" />
                                         </div>
                                         <div className="flex flex-col">
-                                            {/* Fila 1: Nombre */}
-                                            <p className="font-bold text-gray-900 text-sm">
-                                                {item.conductor.nombre}
-                                            </p>
+                                            <div className="flex items-center gap-2">
+                                                <p className={`font-bold text-sm ${item.activo ? "text-gray-900" : "text-gray-500"}`}>
+                                                    {item.conductor?.nombre || "Conductor desconocido"}
+                                                </p>
+                                                {!item.activo && (
+                                                    <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-[10px] font-medium text-gray-500 border border-gray-200">
+                                                        Historial
+                                                    </span>
+                                                )}
+                                                {item.activo && item.tipo_autorizacion === 'rango' && (
+                                                    <span className="inline-flex items-center rounded-full bg-blue-50 px-2 py-0.5 text-[10px] font-medium text-blue-700 border border-blue-100">
+                                                        Temporal
+                                                    </span>
+                                                )}
+                                            </div>
 
-                                            {/* Fila 2: DNI • Licencia */}
-                                            <div className="flex items-center gap-2 text-xs text-gray-500 mt-0.5">
+                                            {/* Detalles: DNI, Licencia */}
+                                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500 mt-1">
                                                 <span className="flex items-center gap-1">
                                                     <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider">DNI</span>
-                                                    {item.conductor.dni}
+                                                    {item.conductor?.dni || "-"}
                                                 </span>
                                                 <span className="text-gray-300">•</span>
                                                 <span className="flex items-center gap-1">
-                                                    <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider">Lic</span>
-                                                    <span className="font-medium text-gray-700 bg-gray-100 px-1 rounded-[4px] text-[10px]">
-                                                        {item.conductor.licencia || "S/L"}
-                                                    </span>
+                                                    <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider">Licencia</span>
+                                                    <span>{item.conductor?.licencia || "S/L"}</span>
                                                 </span>
-                                            </div>
-
-                                            {/* Fila 3: Vencimiento */}
-                                            <div className="flex items-center gap-1 text-xs mt-0.5">
-                                                <span className="font-semibold text-gray-400 text-[10px] uppercase tracking-wider">Vence</span>
-                                                <span className={`flex items-center gap-1 font-medium ${item.conductor.licencia_vencimiento && new Date(item.conductor.licencia_vencimiento) < new Date()
-                                                        ? "text-rose-600"
-                                                        : item.conductor.licencia_vencimiento && new Date(item.conductor.licencia_vencimiento).getTime() - new Date().getTime() < 30 * 24 * 60 * 60 * 1000
-                                                            ? "text-amber-600"
-                                                            : "text-emerald-600"
-                                                    }`}>
-                                                    {item.conductor.licencia_vencimiento
-                                                        ? new Date(item.conductor.licencia_vencimiento).toLocaleDateString("es-PE")
-                                                        : "-"}
-                                                    {item.conductor.licencia_vencimiento && new Date(item.conductor.licencia_vencimiento) < new Date() && (
-                                                        <AlertCircle className="h-3 w-3" />
-                                                    )}
-                                                </span>
+                                                {(item.fecha_inicio || item.fecha_fin) && (
+                                                    <>
+                                                        <span className="text-gray-300 hidden sm:inline">•</span>
+                                                        <span className="flex items-center gap-1 w-full sm:w-auto mt-1 sm:mt-0">
+                                                            <Calendar className="h-3 w-3 text-gray-400" />
+                                                            <span className="font-medium text-gray-600">
+                                                                {item.fecha_inicio ? new Date(item.fecha_inicio).toLocaleDateString("es-PE", { day: '2-digit', month: '2-digit' }) : "-"}
+                                                                {item.fecha_fin ? ` - ${new Date(item.fecha_fin).toLocaleDateString("es-PE", { day: '2-digit', month: '2-digit', year: '2-digit' })}` : " (Indefinido)"}
+                                                            </span>
+                                                        </span>
+                                                    </>
+                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                    <button
-                                        onClick={() => confirmRemove(item.id, item.conductor.nombre)}
-                                        className="p-3 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-all active:scale-95 shadow-sm border border-transparent hover:border-rose-100"
-                                        title="Quitar autorización"
-                                    >
-                                        <Trash2 className="h-5 w-5" />
-                                    </button>
+
+                                    {/* Action Buttons */}
+                                    {item.activo && (
+                                        <div className="mt-3 sm:mt-0 flex justify-end">
+                                            <button
+                                                onClick={() => item.conductor && confirmRemove(item.id, item.conductor.nombre)}
+                                                className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all active:scale-95 border border-transparent hover:border-rose-100 flex items-center gap-2"
+                                                title="Finalizar autorización"
+                                            >
+                                                <span className="text-xs font-medium sm:hidden">Finalizar</span>
+                                                <Trash2 className="h-4 w-4" />
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
                             ))
                         )}
@@ -513,28 +614,156 @@ export default function MiCamioneta() {
                 title="Autorizar Conductor"
                 size="md"
             >
-                <form onSubmit={handleAddSubmit} className="mt-4 space-y-4">
+                <form onSubmit={handleAddSubmit} className="mt-4 space-y-5">
                     <p className="text-sm text-gray-600">
                         Selecciona un conductor de la lista general para autorizarlo en la unidad <strong>{vehiculo.placa}</strong>.
                     </p>
 
+                    {/* Buscador de Conductor */}
+                    <div className="relative">
+                        <label className="mb-1.5 block text-sm font-medium text-gray-700">Conductor</label>
+                        {!selectedDriverId ? (
+                            <div className="relative">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nombre o DNI..."
+                                    className="w-full rounded-xl border border-gray-200 pl-10 pr-4 py-2.5 text-sm focus:border-gray-400 focus:ring-1 focus:ring-gray-200 transition-all outline-none"
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    autoFocus
+                                />
+                                {/* Dropdown de resultados */}
+                                {searchTerm.length > 1 && (
+                                    <div className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-xl border border-gray-200 bg-white p-1">
+                                        {allDrivers
+                                            .filter(d =>
+                                                d.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                d.dni.includes(searchTerm)
+                                            )
+                                            .length === 0 ? (
+                                            <div className="p-3 text-center text-sm text-gray-500">
+                                                No se encontraron resultados
+                                            </div>
+                                        ) : (
+                                            allDrivers
+                                                .filter(d =>
+                                                    d.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                                    d.dni.includes(searchTerm)
+                                                )
+                                                .map(d => (
+                                                    <button
+                                                        key={d.id}
+                                                        type="button"
+                                                        onClick={() => {
+                                                            setSelectedDriverId(d.id);
+                                                            setSearchTerm("");
+                                                        }}
+                                                        className="flex w-full flex-col gap-0.5 rounded-lg px-3 py-2 text-left text-sm hover:bg-indigo-50 transition-colors"
+                                                    >
+                                                        <span className="font-medium text-gray-900">{d.nombre}</span>
+                                                        <span className="text-xs text-gray-500">DNI: {d.dni}</span>
+                                                    </button>
+                                                ))
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-between rounded-xl border border-indigo-100 bg-indigo-50 p-3">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-8 w-8 items-center justify-center rounded-full bg-indigo-100 text-indigo-600">
+                                        <User className="h-4 w-4" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-indigo-900">
+                                            {allDrivers.find(d => d.id === selectedDriverId)?.nombre}
+                                        </p>
+                                        <p className="text-xs text-indigo-700">
+                                            DNI: {allDrivers.find(d => d.id === selectedDriverId)?.dni}
+                                        </p>
+                                    </div>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setSelectedDriverId("")}
+                                    className="rounded-full p-1 text-indigo-400 hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+                                >
+                                    <X className="h-4 w-4" />
+                                </button>
+                            </div>
+                        )}
+                        {/* Fallback si no hay conductores cargados o disponibles */}
+                        {allDrivers.length === 0 && !searchTerm && (
+                            <p className="mt-1 text-xs text-amber-600">Cargando lista de conductores...</p>
+                        )}
+                    </div>
+
+                    {/* Tipo de Autorización */}
                     <div>
-                        <label className="mb-1 block text-sm font-medium text-gray-700">Conductor</label>
-                        <select
-                            required
-                            className="w-full rounded-xl border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm py-2.5 px-3 border"
-                            value={selectedDriverId}
-                            onChange={(e) => setSelectedDriverId(e.target.value)}
-                        >
-                            <option value="">Seleccione...</option>
-                            {allDrivers.map(d => (
-                                <option key={d.id} value={d.id}>
-                                    {d.nombre} — {d.dni} {!(d as any).activo ? "(Inactivo)" : ""}
-                                </option>
-                            ))}
-                        </select>
-                        {allDrivers.length === 0 && (
-                            <p className="mt-1 text-xs text-amber-600">No se encontraron conductores disponibles para agregar.</p>
+                        <label className="mb-2 block text-sm font-medium text-gray-700">Tipo de Autorización</label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-medium transition-all ${authType === 'permanente'
+                                ? "border-slate-800 bg-slate-50 text-slate-900"
+                                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                                }`}>
+                                <input
+                                    type="radio"
+                                    name="authType"
+                                    value="permanente"
+                                    className="sr-only"
+                                    checked={authType === 'permanente'}
+                                    onChange={() => setAuthType('permanente')}
+                                />
+                                <span>Permanente</span>
+                            </label>
+
+                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-medium transition-all ${authType === 'rango'
+                                ? "border-slate-800 bg-slate-50 text-slate-900"
+                                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
+                                }`}>
+                                <input
+                                    type="radio"
+                                    name="authType"
+                                    value="rango"
+                                    className="sr-only"
+                                    checked={authType === 'rango'}
+                                    onChange={() => setAuthType('rango')}
+                                />
+                                <span>Por Rango/Temporal</span>
+                            </label>
+                        </div>
+                    </div>
+
+                    {/* Fechas */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="mb-1 block text-sm font-medium text-gray-700">
+                                Inicio <span className="text-red-500">*</span>
+                            </label>
+                            <input
+                                type="date"
+                                required
+                                className="w-full rounded-xl border-gray-200 focus:border-gray-400 focus:ring-gray-200 sm:text-sm py-2.5 px-3 border outline-none"
+                                value={dateStart}
+                                onChange={(e) => setDateStart(e.target.value)}
+                            />
+                        </div>
+
+                        {authType === 'rango' && (
+                            <div className="animate-in fade-in zoom-in slide-in-from-left-4 duration-300">
+                                <label className="mb-1 block text-sm font-medium text-gray-700">
+                                    Fin <span className="text-red-500">*</span>
+                                </label>
+                                <input
+                                    type="date"
+                                    required
+                                    className="w-full rounded-xl border-gray-200 focus:border-gray-400 focus:ring-gray-200 sm:text-sm py-2.5 px-3 border outline-none"
+                                    value={dateEnd}
+                                    onChange={(e) => setDateEnd(e.target.value)}
+                                    min={dateStart}
+                                />
+                            </div>
                         )}
                     </div>
 
@@ -549,7 +778,7 @@ export default function MiCamioneta() {
                         <button
                             type="submit"
                             disabled={!selectedDriverId || adding}
-                            className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+                            className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-50"
                         >
                             {adding && <Loader2 className="h-4 w-4 animate-spin" />}
                             Autorizar
@@ -581,7 +810,7 @@ export default function MiCamioneta() {
                         </button>
                         <button
                             onClick={handleRemove}
-                            className="rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-rose-700"
+                            className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
                         >
                             Sí, Quitar
                         </button>

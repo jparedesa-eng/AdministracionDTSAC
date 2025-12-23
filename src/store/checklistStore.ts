@@ -1,8 +1,8 @@
 // src/store/checklistStore.ts
 import { supabase } from "../supabase/supabaseClient"; // o tu cliente
 
-export type CkItem = { name: string; ok: boolean; nota?: string };
-export type CkGroup = { title: string; items: CkItem[] };
+export type CkItem = { name: string; ok: boolean; status?: string; nota?: string };
+export type CkGroup = { titulo: string; items: CkItem[] };
 
 export type SaveChecklistInput = {
   // 👇 YA NO HAY solicitud_id
@@ -19,6 +19,8 @@ export type SaveChecklistInput = {
   grupos: CkGroup[];
   aprobado: boolean;
   tipo: "entrega" | "regular"; // NUEVO CAMPO
+  observaciones?: string | null; // NUEVO CAMPO
+  fecha_ingreso?: string | null; // NUEVO: Fecha de ingreso de la unidad (antigüedad)
 };
 
 export async function guardarChecklist(input: SaveChecklistInput) {
@@ -36,6 +38,8 @@ export async function guardarChecklist(input: SaveChecklistInput) {
     grupos: input.grupos, // jsonb en la BD
     aprobado: input.aprobado,
     tipo: input.tipo, // Guardamos el tipo
+    observaciones: input.observaciones, // Guardamos observaciones
+    fecha_ingreso: input.fecha_ingreso, // Guardamos fecha de ingreso
   };
 
   if (input.usuario_correo) {
@@ -53,4 +57,49 @@ export async function guardarChecklist(input: SaveChecklistInput) {
     throw new Error(error.message);
   }
   return data;
+}
+
+export async function actualizarChecklist(id: string, input: SaveChecklistInput) {
+  const payload: any = {
+    placa: input.placa,
+    fecha: input.fecha,
+    sede: input.sede,
+    kilometraje: input.kilometraje,
+    responsable_inspeccion: input.responsable_inspeccion,
+    usuario_dni: input.usuario_dni,
+    usuario_nombre: input.usuario_nombre,
+    grupos: input.grupos,
+    aprobado: input.aprobado,
+    tipo: input.tipo,
+    observaciones: input.observaciones,
+    fecha_ingreso: input.fecha_ingreso,
+  };
+
+  if (input.firma_base64) {
+    payload.firma_base64 = input.firma_base64;
+  }
+
+  if (input.usuario_correo) {
+    payload.usuario_correo = input.usuario_correo;
+  }
+
+  console.log("Actualizando checklist con ID:", id, "Payload:", payload);
+
+  const { data, error } = await supabase
+    .from("checklists")
+    .update(payload)
+    .eq("id", id)
+    .select();
+
+  if (error) {
+    console.error("Error en actualizarChecklist:", error);
+    throw new Error(error.message);
+  }
+
+  if (!data || data.length === 0) {
+    console.warn("No se encontró el registro para actualizar o no hubo cambios aplicados.");
+    throw new Error("No se pudo actualizar el registro: El ID no fue encontrado o no tienes permisos (RLS).");
+  }
+
+  return data[0];
 }

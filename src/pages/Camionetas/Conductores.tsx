@@ -328,7 +328,7 @@ export default function Conductores() {
       {/* KPI Cards */}
       <div className="grid gap-4 md:grid-cols-3">
         {/* Total */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Total</p>
@@ -341,7 +341,7 @@ export default function Conductores() {
         </div>
 
         {/* Activos */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Activos</p>
@@ -354,7 +354,7 @@ export default function Conductores() {
         </div>
 
         {/* Inactivos */}
-        <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-500">Inactivos</p>
@@ -378,7 +378,7 @@ export default function Conductores() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar por nombre, DNI, licencia..."
-            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400"
+            className="w-full rounded-lg border border-gray-200 py-2 pl-10 pr-4 text-sm outline-none focus:border-gray-400 transition-colors"
           />
         </div>
 
@@ -393,7 +393,7 @@ export default function Conductores() {
           <button
             type="button"
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-slate-800 focus:outline-none focus:ring-2 focus:ring-slate-500 focus:ring-offset-2"
+            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
           >
             <Plus className="h-4 w-4" />
             <span>Nuevo</span>
@@ -402,7 +402,7 @@ export default function Conductores() {
       </div>
 
       {/* Tabla */}
-      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+      <div className="overflow-hidden rounded-xl border border-gray-200 bg-white">
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -543,7 +543,7 @@ export default function Conductores() {
               required
               value={form.nombre}
               onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
               placeholder="Ej. Juan Pérez"
             />
           </div>
@@ -564,7 +564,7 @@ export default function Conductores() {
                     dni: e.target.value.replace(/\D/g, "").slice(0, 8),
                   })
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 placeholder="8 dígitos"
               />
             </div>
@@ -575,7 +575,7 @@ export default function Conductores() {
               <input
                 value={form.telefono}
                 onChange={(e) => setForm({ ...form, telefono: e.target.value })}
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 placeholder="Ej. 999 000 000"
               />
             </div>
@@ -590,7 +590,7 @@ export default function Conductores() {
               <select
                 value={form.licencia}
                 onChange={(e) => setForm({ ...form, licencia: e.target.value })}
-                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
               >
                 <option value="">Seleccione...</option>
                 <option value="A-I">A-I</option>
@@ -612,7 +612,7 @@ export default function Conductores() {
                 onChange={(e) =>
                   setForm({ ...form, licenciaVence: e.target.value || null })
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
               />
             </div>
           </div>
@@ -623,7 +623,7 @@ export default function Conductores() {
             <select
               value={form.sede}
               onChange={(e) => setForm({ ...form, sede: e.target.value })}
-              className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
             >
               <option value="">Seleccione...</option>
               <option value="Trujillo">Trujillo</option>
@@ -643,13 +643,13 @@ export default function Conductores() {
             <button
               type="button"
               onClick={() => setOpenModal(false)}
-              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm hover:bg-gray-50"
+              className="rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
             >
               Cancelar
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+              className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 transition-colors"
             >
               {editing ? "Guardar Cambios" : "Crear Conductor"}
             </button>
