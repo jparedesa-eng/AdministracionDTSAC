@@ -12,30 +12,44 @@ import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
-import { getAgentesState, subscribeAgentes, upsertAgente, type Agente } from "../../store/agentesStore";
+import {
+    getAgentesState,
+    subscribeAgentes,
+    upsertAgente,
+    type Agente
+} from "../../store/agentesStore";
+import {
+    getSupervisoresState,
+    subscribeSupervisores,
+    type Supervisor
+} from "../../store/supervisoresStore";
 import { getPuestosState, subscribePuestos, upsertPuesto, type Puesto, type Turno } from "../../store/puestosStore";
 
 export default function GestionRecursos() {
     // Integrar stores desde Supabase
     const [, setSedesVersion] = useState(0);
-    const [, setAgentesVersion] = useState(0);
     const [, setPuestosVersion] = useState(0);
+    const [, setAgentesVersion] = useState(0);
+    const [, setSupervisoresVersion] = useState(0);
 
     useEffect(() => {
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
-        const unsubAgentes = subscribeAgentes(() => setAgentesVersion(prev => prev + 1));
         const unsubPuestos = subscribePuestos(() => setPuestosVersion(prev => prev + 1));
+        const unsubAgentes = subscribeAgentes(() => setAgentesVersion(prev => prev + 1));
+        const unsubSupervisores = subscribeSupervisores(() => setSupervisoresVersion(prev => prev + 1));
 
         return () => {
             unsubSedes();
-            unsubAgentes();
             unsubPuestos();
+            unsubAgentes();
+            unsubSupervisores();
         };
     }, []);
 
     const { sedes } = getSedesState();
-    const { agentes } = getAgentesState();
     const { puestos } = getPuestosState();
+    const { agentes } = getAgentesState();
+    const { supervisores } = getSupervisoresState();
 
     const [toast, setToast] = useState<ToastState>(null);
 
@@ -61,6 +75,7 @@ export default function GestionRecursos() {
                     </div>
                     <TabAgentes
                         agentes={agentes}
+                        supervisores={supervisores}
                         setToast={setToast}
                         onAdd={async (nombre, dni, supervisor) => {
                             try {
@@ -132,11 +147,13 @@ export default function GestionRecursos() {
 
 function TabAgentes({
     agentes,
+    supervisores,
     setToast,
     onAdd,
     onUpdate
 }: {
     agentes: Agente[];
+    supervisores: Supervisor[];
     setToast: (t: ToastState) => void;
     onAdd: (n: string, d?: string, s?: string) => void;
     onUpdate: (id: string, d: Partial<Agente>) => void;
@@ -209,10 +226,11 @@ function TabAgentes({
                         onChange={e => setSupervisorFilter(e.target.value)}
                     >
                         <option value="">Todos (Sup)</option>
-                        <option value="SUP 1">SUP 1</option>
-                        <option value="SUP 2">SUP 2</option>
-                        <option value="SUP 3">SUP 3</option>
-                        <option value="SUP 4">SUP 4</option>
+                        {supervisores.filter(s => s.activo).map(s => (
+                            <option key={s.id} value={s.nombre}>
+                                {s.nombre}
+                            </option>
+                        ))}
                     </select>
                 </div>
                 <button
@@ -302,10 +320,11 @@ function TabAgentes({
                             onChange={e => setFormData({ ...formData, supervisor: e.target.value })}
                         >
                             <option value="">-- Seleccionar --</option>
-                            <option value="SUP 1">SUP 1</option>
-                            <option value="SUP 2">SUP 2</option>
-                            <option value="SUP 3">SUP 3</option>
-                            <option value="SUP 4">SUP 4</option>
+                            {supervisores.filter(s => s.activo).map(s => (
+                                <option key={s.id} value={s.nombre}>
+                                    {s.nombre}
+                                </option>
+                            ))}
                         </select>
                     </div>
                     {editItem && (

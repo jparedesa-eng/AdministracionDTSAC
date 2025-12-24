@@ -50,6 +50,7 @@ import PersonalPage from "./pages/configuracion/PersonalPage";
 import GerenciasPage from "./pages/configuracion/GerenciasPage";
 import SedesPage from "./pages/configuracion/SedesPage";
 import CctvCentralesPage from "./pages/configuracion/CctvCentralesPage";
+import SupervisorST from "./pages/configuracion/SupervisorST";
 
 /* Seguridad */
 import ProgramacionPuestos from "./pages/Seguridad/ProgramacionPuestos";
@@ -398,6 +399,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/configuracion/centrales-cctv">
                 <CctvCentralesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/supervisores"
+            element={
+              <ProtectedRoute path="/configuracion/supervisores">
+                <SupervisorST />
               </ProtectedRoute>
             }
           />

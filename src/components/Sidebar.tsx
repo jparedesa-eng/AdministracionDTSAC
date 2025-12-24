@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   MapPin, // For Sedes
   Building2,
+  Briefcase
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
@@ -857,6 +858,15 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       Centrales CCTV
                     </NavLink>
                   )}
+
+                  <NavLink
+                    to="/configuracion/supervisores"
+                    className={({ isActive }) => submenuItem(isActive)}
+                    onClick={onClose}
+                  >
+                    <Briefcase className="h-4 w-4 text-gray-600" />
+                    Supervisores ST
+                  </NavLink>
                 </motion.div>
               )}
             </AnimatePresence>

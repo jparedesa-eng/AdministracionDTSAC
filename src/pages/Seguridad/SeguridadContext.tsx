@@ -8,6 +8,7 @@ export type AbsenceType = "JUSTIFICADA" | "INJUSTIFICADA";
 export type AssignmentStatus = "CUMPLIDO" | "FALTA" | "PENDING";
 
 export type Assignment = {
+    id?: string; // ID from programacion_turnos
     agenteId: string;
     status: AssignmentStatus;
     absenceType?: AbsenceType;

@@ -177,6 +177,9 @@ function useSignaturePad(open: boolean) {
       // Vamos a usar una altura mayor por defecto para mejorar la experiencia en móvil
       const height = window.innerWidth < 640 ? 300 : 200; // Más alto en móvil
 
+      // Evitar resetear si el tamaño es el mismo (previene borrado al abrir/cerrar teclado)
+      if (c.width === width && c.height === height) return;
+
       c.width = width;
       c.height = height;
 
@@ -219,6 +222,11 @@ function useSignaturePad(open: boolean) {
   };
 
   const start = (e: React.MouseEvent | React.TouchEvent) => {
+    // Cerrar teclado en móviles quitando el foco del input anterior
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur();
+    }
+
     e.preventDefault();
     const c = canvasRef.current;
     if (!c) return;
