@@ -12,8 +12,10 @@ import {
     Printer,
     Users,
     Sun,
-    Moon
+    Moon,
+    Camera
 } from "lucide-react";
+import { toPng } from "html-to-image";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
@@ -692,7 +694,7 @@ export default function ProgramacionPuestos() {
     const viewAgentPlan = useMemo(() => {
         if (!viewAgentId) return [];
         // Extract all assignments for this agent in current month
-        const plan: { date: Date, puesto: string, turno: Turno, status: string }[] = [];
+        const plan: { date: Date, puesto: string, sede: string, turno: Turno, status: string }[] = [];
         const m = currentDate.getMonth();
         const y = currentDate.getFullYear();
 
@@ -704,10 +706,14 @@ export default function ProgramacionPuestos() {
                 const [dy, dm, dd] = datePart.split("-").map(Number);
                 if (dy === y && (dm - 1) === m) {
                     const dateObj = new Date(dy, dm - 1, dd);
-                    const pName = puestos.find(p => p.id === pId)?.nombre || "Puesto Desconocido";
+                    const puestoObj = puestos.find(p => p.id === pId);
+                    const pName = puestoObj?.nombre || "Puesto Desconocido";
+                    const sName = sedes.find(s => s.id === puestoObj?.sede_id)?.nombre || "??";
+
                     plan.push({
                         date: dateObj,
                         puesto: pName,
+                        sede: sName,
                         turno: turn as Turno,
                         status: myAssign.status
                     });
@@ -716,6 +722,90 @@ export default function ProgramacionPuestos() {
         });
         return plan.sort((a, b) => a.date.getTime() - b.date.getTime());
     }, [viewAgentId, assignments, currentDate, puestos]);
+
+    // --- Screenshot Handler ---
+    const handleScreenshot = async () => {
+        const tableElement = document.querySelector("#programacion-table-container table");
+        if (!tableElement) return;
+
+        try {
+            setToast({ type: "info", message: "Generando vista de impresión..." });
+
+            // 1. Create a temporary container for the print layout
+            const printContainer = document.createElement("div");
+            printContainer.style.position = "absolute";
+            printContainer.style.top = "0";
+            printContainer.style.left = "0";
+            printContainer.style.width = "fit-content";
+            printContainer.style.minWidth = "1200px"; // Ensure decent width
+            printContainer.style.padding = "40px";
+            printContainer.style.backgroundColor = "#ffffff";
+            printContainer.style.zIndex = "-50"; // Hide from view but keep renderable
+
+            // 2. Add Header
+            const header = document.createElement("div");
+            header.style.marginBottom = "20px";
+            header.style.borderBottom = "2px solid #e5e7eb";
+            header.style.paddingBottom = "10px";
+            header.style.display = "flex";
+            header.style.justifyContent = "space-between";
+            header.style.alignItems = "center";
+
+            const title = document.createElement("h1");
+            title.innerText = "Programación de Turnos";
+            title.style.fontSize = "24px";
+            title.style.fontWeight = "bold";
+            title.style.color = "#111827";
+            title.style.margin = "0";
+
+            const subtitle = document.createElement("h2");
+            subtitle.innerText = currentDate.toLocaleDateString("es-PE", { month: "long", year: "numeric" }).toUpperCase();
+            subtitle.style.fontSize = "18px";
+            subtitle.style.fontWeight = "600";
+            subtitle.style.color = "#4b5563";
+            subtitle.style.margin = "0";
+
+            header.appendChild(title);
+            header.appendChild(subtitle);
+            printContainer.appendChild(header);
+
+            // 3. Clone Table
+            const tableClone = tableElement.cloneNode(true) as HTMLElement;
+            // Remove sticky positioning from clone to ensure flat rendering
+            const stickyElements = tableClone.querySelectorAll(".sticky");
+            stickyElements.forEach((el: any) => {
+                el.style.position = "static";
+            });
+            // Ensure all text is visible (not truncated) if possible, or keep as is.
+            // We'll keep the styles as is but allow width to expand
+            tableClone.style.width = "100%";
+
+            printContainer.appendChild(tableClone);
+            document.body.appendChild(printContainer);
+
+            // 4. Capture
+            const dataUrl = await toPng(printContainer, {
+                cacheBust: true,
+                backgroundColor: "#ffffff",
+                quality: 1.0,
+                pixelRatio: 2 // High quality
+            });
+
+            // 5. Cleanup
+            document.body.removeChild(printContainer);
+
+            // 6. Download
+            const link = document.createElement("a");
+            link.href = dataUrl;
+            link.download = `Reporte_Turnos_${currentDate.getFullYear()}_${currentDate.getMonth() + 1}.png`;
+            link.click();
+
+            setToast({ type: "success", message: "Reporte descargado correctamente." });
+        } catch (error) {
+            console.error("Screenshot error:", error);
+            setToast({ type: "error", message: "Error al generar el reporte." });
+        }
+    };
 
 
     return (
@@ -803,18 +893,20 @@ export default function ProgramacionPuestos() {
                         </div>
 
                         {/* Legacy View Button (Keeping just in case or remove if redundant? User asked for replacement, but maybe keep as "Print View") */}
+                        {/* Screenshot Button */}
                         <button
-                            onClick={() => setAgentViewOpen(true)}
-                            className="hidden xl:flex items-center gap-2 p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
-                            title="Modo Impresión (solo lectura)"
+                            onClick={handleScreenshot}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
+                            title="Capturar Vista Actual"
                         >
-                            <Printer className="h-4 w-4" />
+                            <Camera className="h-4 w-4" />
+                            <span className="hidden xl:inline">Capturar</span>
                         </button>
                     </div>
                 </div>
 
                 {/* Table Container */}
-                <div className="flex-1 overflow-auto relative bg-slate-50">
+                <div id="programacion-table-container" className="flex-1 overflow-auto relative bg-slate-50">
                     <table className="w-full border-collapse text-xs">
                         <thead className="sticky top-0 z-20 bg-white shadow-sm ring-1 ring-gray-200">
                             {/* Row 1: Weeks */}
@@ -1011,18 +1103,39 @@ export default function ProgramacionPuestos() {
                                                                     const turno = meta?.turno;
                                                                     const puestoName = meta?.puestoNombre;
 
-                                                                    let badgeClass = turno === 'DIA' ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-indigo-50 text-indigo-800 border-indigo-200';
+                                                                    let badgeClass = "";
 
-                                                                    if (assign.status === 'FALTA') badgeClass = 'bg-red-50 text-red-800 border-red-200';
+                                                                    // Default based on Turno (Pending)
+                                                                    if (turno === 'DIA') {
+                                                                        badgeClass = "bg-[#FFF9C4] text-[#5D4037] border-amber-200 hover:border-amber-400"; // Light Yellow / Brownish Text
+                                                                    } else {
+                                                                        badgeClass = "bg-blue-50 text-blue-900 border-blue-200 hover:border-blue-400"; // Light Blue
+                                                                    }
+
+                                                                    // Override if Status is set
+                                                                    if (assign.status === 'CUMPLIDO') {
+                                                                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-500 shadow-sm";
+                                                                    } else if (assign.status === 'FALTA') {
+                                                                        badgeClass = "bg-red-50 text-red-800 border-red-200 hover:border-red-400";
+                                                                    }
 
                                                                     return (
                                                                         <div
                                                                             key={idx}
-                                                                            className={`flex-1 ${badgeClass} rounded flex flex-col justify-center border text-[8px] leading-tight w-full min-h-0 relative px-1`}
+                                                                            className={`flex-1 ${badgeClass} rounded-md flex flex-col justify-start items-start border text-[8px] leading-none w-full min-h-0 relative px-1.5 py-1.5 transition-all gap-0.5`}
                                                                             title={`${puestoName} - ${turno}`}
                                                                         >
-                                                                            <span className="font-bold truncate">{puestoName}</span>
-                                                                            <span className="opacity-75">{turno}</span>
+                                                                            {/* 1. Turno */}
+                                                                            <div className="flex items-center gap-1 opacity-90 mb-0.5">
+                                                                                {turno === 'DIA' ? <Sun className="h-2 w-2" /> : <Moon className="h-2 w-2" />}
+                                                                                <span className="font-bold text-[7.5px] tracking-wide">{turno}</span>
+                                                                            </div>
+
+                                                                            {/* 2. Puesto */}
+                                                                            <span className="font-bold text-left truncate w-full leading-tight" style={{ fontSize: '8.5px' }}>{puestoName}</span>
+
+                                                                            {/* 3. Sede */}
+                                                                            <span className="text-[7px] text-left opacity-80 truncate w-full italic">{meta?.sedeNombre}</span>
                                                                         </div>
                                                                     );
                                                                 })}
@@ -1360,6 +1473,8 @@ export default function ProgramacionPuestos() {
                                                                         <span className="font-bold">{a.turno}</span>
                                                                     </div>
                                                                     <div className="truncate" title={a.puesto}>{a.puesto}</div>
+                                                                    <div className="truncate" title={a.puesto}>{a.puesto}</div>
+                                                                    <div className="truncate text-[8px] text-gray-500 italic" title={a.sede}>{a.sede}</div>
                                                                     {a.status === 'FALTA' && <div className="text-red-600 font-bold mt-0.5">⚠ FALTA</div>}
                                                                 </div>
                                                             ))}

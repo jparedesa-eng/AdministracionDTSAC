@@ -1098,7 +1098,7 @@ export default function ChecklistCamaras() {
                                 <User size={16} className="text-slate-400" />
                                 <input
                                     type="text"
-                                    placeholder="ID / Nombre del Auditor Responsable..."
+                                    placeholder="Nombre del Operador Responsable..."
                                     className="flex-1 bg-transparent text-xs font-bold outline-none text-slate-800"
                                     value={supervisorName}
                                     onChange={e => setSupervisorName(e.target.value)}
@@ -1140,7 +1140,7 @@ export default function ChecklistCamaras() {
                         <div className="p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
                             <div className="flex items-center gap-2 text-slate-400">
                                 <ShieldCheck size={16} className="text-emerald-500" />
-                                <p className="text-[10px] font-bold uppercase tracking-wider">Sincronización en tiempo real con Supabase.</p>
+                                <p className="text-[10px] font-bold uppercase tracking-wider">Sincronización en tiempo real.</p>
                             </div>
                             <div className="flex gap-3 w-full sm:w-auto">
                                 <button onClick={() => setIsAuditModalOpen(false)} className="px-6 py-2.5 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-600">Abortar</button>

@@ -193,6 +193,14 @@ function TabCamaras({
         return sedes.filter(s => central.sedes.includes(s.id));
     }, [formData.central_id, centrales, sedes]);
 
+    // Added: Filtered Sedes for the main filter (dependent on filterCentral)
+    const filteredSedesForFilter = useMemo(() => {
+        if (!filterCentral) return sedes;
+        const central = centrales.find(c => c.id === filterCentral);
+        if (!central || !central.sedes) return [];
+        return sedes.filter(s => central.sedes.includes(s.id));
+    }, [filterCentral, centrales, sedes]);
+
     // Reset Sede if it's not valid for the selected Central
     useEffect(() => {
         if (formData.central_id && formData.sede_id) {
@@ -202,6 +210,16 @@ function TabCamaras({
             }
         }
     }, [formData.central_id, centrales]);
+
+    // Added: Reset filterSede if selected filterCentral changes and current filterSede is invalid
+    useEffect(() => {
+        if (filterCentral && filterSede) {
+            const central = centrales.find(c => c.id === filterCentral);
+            if (central && central.sedes && !central.sedes.includes(filterSede)) {
+                setFilterSede("");
+            }
+        }
+    }, [filterCentral, centrales]);
 
     const handleOpen = (item?: Camara) => {
         if (item) {
@@ -279,7 +297,7 @@ function TabCamaras({
                 </div>
                 <button
                     onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-slate-800 text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-slate-900 transition-colors"
+                    className="flex items-center gap-2 bg-[#ff0000] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
                 >
                     <Plus className="h-4 w-4" />
                     Nueva cámara
@@ -303,21 +321,21 @@ function TabCamaras({
                     {/* Filters Row */}
                     <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
                         <select
+                            value={filterCentral}
+                            onChange={e => setFilterCentral(e.target.value)}
+                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
+                        >
+                            <option value="">Todas las Centrales</option>
+                            {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+
+                        <select
                             value={filterSede}
                             onChange={e => setFilterSede(e.target.value)}
                             className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
                         >
                             <option value="">Todas las Sedes</option>
-                            {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                        </select>
-
-                        <select
-                            value={filterCentral}
-                            onChange={e => setFilterCentral(e.target.value)}
-                            className="rounded-lg border border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
-                        >
-                            <option value="">Todas las Centrales</option>
-                            {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            {filteredSedesForFilter.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
                         </select>
 
                         <select
@@ -343,7 +361,7 @@ function TabCamaras({
                         <select
                             value={filterEstado}
                             onChange={e => setFilterEstado(e.target.value as any)}
-                            className="rounded-lg border border-gray-200 text-xs focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-8 outline-none"
+                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
                         >
                             <option value="all">Todos los Estados</option>
                             <option value="activa">Activas</option>
@@ -359,16 +377,19 @@ function TabCamaras({
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
                             <tr>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Código</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider">Nombre</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Central</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Sede</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Tipo</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Ubicación</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Área</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Nave/Fundo</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-center">Status</th>
-                                <th className="px-3 py-2 text-[10px] uppercase tracking-wider text-right">Acciones</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider">Código</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider">Nombre</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Central</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Sede</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Tipo</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Ubicación</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Área</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Nave/Fundo</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Tiempo Respaldo (Hrs)</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Marca</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Fecha Inst.</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Status</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
@@ -377,30 +398,39 @@ function TabCamaras({
                                 const sede = sedes.find(s => s.id === c.sede_id);
                                 return (
                                     <tr key={c.id} className="hover:bg-gray-50 group">
-                                        <td className="px-3 py-1.5 font-mono font-medium text-gray-900 text-[11px]">{c.codigo}</td>
-                                        <td className="px-3 py-1.5 font-medium text-gray-700 text-[11px] truncate max-w-[150px]">{c.nombre}</td>
-                                        <td className="px-3 py-1.5 text-gray-600 text-[10px] text-center">{central?.nombre || "-"}</td>
-                                        <td className="px-3 py-1.5 text-gray-600 text-[10px] text-center">{sede?.nombre || "-"}</td>
+                                        <td className="px-3 py-1.5 font-mono font-medium text-gray-900 text-xs">{c.codigo}</td>
+                                        <td className="px-3 py-1.5 font-medium text-gray-700 text-xs truncate max-w-[150px]">{c.nombre}</td>
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">{central?.nombre || "-"}</td>
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">{sede?.nombre || "-"}</td>
                                         <td className="px-3 py-1.5 text-center">
-                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tighter ${c.tipo_componente === "CAMARA FIJA" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter ${c.tipo_componente === "CAMARA FIJA" ? "bg-blue-50 text-blue-700" : "bg-purple-50 text-purple-700"}`}>
                                                 {c.tipo_componente || "-"}
                                             </span>
                                         </td>
                                         <td className="px-3 py-1.5 text-center">
-                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tighter ${c.ubicacion === "INTERIOR" ? "bg-gray-100 text-gray-700" : "bg-green-50 text-green-700"}`}>
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter ${c.ubicacion === "INTERIOR" ? "bg-gray-100 text-gray-700" : "bg-green-50 text-green-700"}`}>
                                                 {c.ubicacion || "-"}
                                             </span>
                                         </td>
                                         <td className="px-3 py-1.5 text-center">
-                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tighter bg-amber-50 text-amber-700 uppercase">
+                                            <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter bg-amber-50 text-amber-700 uppercase">
                                                 {c.area || "-"}
                                             </span>
                                         </td>
-                                        <td className="px-3 py-1.5 text-gray-600 text-[10px] text-center">
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">
                                             {c.nave_fundo || "-"}
                                         </td>
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">
+                                            {c.tiempo_respaldo || "-"}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">
+                                            {c.marca || "-"}
+                                        </td>
+                                        <td className="px-3 py-1.5 text-gray-600 text-[11px] text-center">
+                                            {c.fecha_instalacion || "-"}
+                                        </td>
                                         <td className="px-3 py-1.5 text-center">
-                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[9px] font-bold tracking-tighter ${c.activa ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter ${c.activa ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
                                                 {c.activa ? "OK" : "OUT"}
                                             </span>
                                         </td>
@@ -417,7 +447,7 @@ function TabCamaras({
                             })}
                             {currentRows.length === 0 && (
                                 <tr>
-                                    <td colSpan={10} className="px-6 py-8 text-center text-gray-500 text-xs italic">
+                                    <td colSpan={13} className="px-6 py-8 text-center text-gray-500 text-xs italic">
                                         No se encontraron cámaras.
                                     </td>
                                 </tr>
@@ -542,13 +572,13 @@ function TabCamaras({
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tiempo de Respaldo</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tiempo de Respaldo (Hrs)</label>
                             <input
-                                type="text"
+                                type="number"
                                 className="w-full h-11 rounded-lg border border-gray-200 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 text-sm px-3 outline-none"
                                 value={formData.tiempo_respaldo}
                                 onChange={e => setFormData({ ...formData, tiempo_respaldo: e.target.value })}
-                                placeholder="24 horas"
+                                placeholder="24"
                             />
                         </div>
                     </div>

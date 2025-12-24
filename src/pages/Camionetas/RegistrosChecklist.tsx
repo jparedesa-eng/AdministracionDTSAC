@@ -25,6 +25,7 @@ import * as XLSX from "xlsx";
 import { guardarChecklist, actualizarChecklist } from "../../store/checklistStore";
 import { camionetasStore } from "../../store/camionetasStore";
 import { useAuth } from "../../auth/AuthContext";
+import { CHECKLIST_CONFIG } from "../../data/checklistConfig";
 
 /* =============== Tipos =============== */
 type Grupo = {
@@ -86,77 +87,22 @@ type Driver = {
 };
 
 /* =============== Grupos base =============== */
-const GRUPOS: CkGroup[] = [
-  {
-    titulo: "DOCUMENTOS Y SEGURIDAD",
-    items: [
-      "DOCUMENTOS DE VEHÍCULO",
-      "EXTINTOR",
-      "BOTIQUÍN",
-    ].map((name) => ({ name, ok: true, status: "vigente" })),
-  },
-  {
-    titulo: "ACCESORIOS Y FUNCIONAMIENTO",
-    items: [
-      "SEGURO DE RUEDAS",
-      "GATA",
-      "LLAVE DE RUEDAS",
-      "CONOS",
-      "TACOS",
-      "FORRO ASIENTOS",
-      "PISOS",
-      "LUNAS",
-      "FUNCIONAMIENTO DE LUCES",
-      "ALARMA DE RETROCESO",
-    ].map((name) => ({ name, ok: true, status: "funcional" })),
-  },
-  {
-    titulo: "PARTE FRONTAL",
-    items: [
-      "Parachoque delantero",
-      "Parabrisa",
-      "Antena",
-      "Capot",
-      "Tapas triangular LH",
-      "Tapas triangular RH",
-      "Faro direccional LH",
-      "Faro direccional RH",
-      "Espejo retrovisor LH",
-      "Guardafango delantero LH",
-      "Guardafango trasero LH",
-    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
-  },
-  {
-    titulo: "PARTE LATERAL IZQUIERDA (LH)",
-    items: [
-      "Zocalo LH",
-      "Puerta piloto LH",
-      "Tapa de combustible LH",
-      "Puerta trasera LH",
-    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
-  },
-  {
-    titulo: "PARTE LATERAL DERECHA (RH)",
-    items: [
-      "Espejo retroviso RH",
-      "Guardafango delantero RH",
-      "Guardafango trasero RH",
-      "Zocalo RH",
-      "Puerta piloto RH",
-    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
-  },
-  {
-    titulo: "PARTE POSTERIOR",
-    items: [
-      "Puerta trasera RH",
-      "Compuerta de tolva",
-      "Faros posterior LH",
-      "Faros posterior RH",
-      "Llanta de repuesto",
-      "Parachoque posterior",
-    ].map((name) => ({ name, ok: true, status: "buen_estado" })),
-  },
-];
+/* =============== Grupos base (Desde Config) =============== */
+function getInitialGroups(): CkGroup[] {
+  return CHECKLIST_CONFIG.map((g) => ({
+    titulo: g.title,
+    items: g.items.map((item) => {
+      // Por defecto, buscamos la opción "verde" (okValue=true) o la primera
+      const defaultOpt = item.options.find((o) => o.color === "green") || item.options[0];
+      return {
+        name: item.name,
+        ok: defaultOpt?.okValue ?? true,
+        status: defaultOpt?.value ?? "",
+        nota: "",
+      };
+    }),
+  }));
+}
 
 /* =============== Hook SignaturePad sincronizado =============== */
 function useSignaturePad(open: boolean) {
@@ -689,12 +635,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   const [uDni, setUDni] = React.useState("");
   const [uNombre, setUNombre] = React.useState("");
   const [fechaIngreso, setFechaIngreso] = React.useState<string | null>(null); // NUEVO ESTADO
-  const [grupos, setGrupos] = React.useState<CkGroup[]>(
-    GRUPOS.map((g) => ({
-      titulo: g.titulo,
-      items: g.items.map((i) => ({ ...i })),
-    }))
-  );
+  const [grupos, setGrupos] = React.useState<CkGroup[]>(getInitialGroups());
   const [observaciones, setObservaciones] = React.useState(""); // Nuevo estado para observaciones
   const [saving, setSaving] = React.useState(false);
 
@@ -806,23 +747,13 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
 
     // Si es tipo ENTREGA, mostramos TODOS los items siempre (para definir el inventario)
     if (tipo === "entrega") {
-      setGrupos(
-        GRUPOS.map((g) => ({
-          titulo: g.titulo,
-          items: g.items.map((i) => ({ ...i })),
-        }))
-      );
+      setGrupos(getInitialGroups());
       return;
     }
 
     // Si es REGULAR, aplicamos el filtro basado en la última entrega
     if (!placa) {
-      setGrupos(
-        GRUPOS.map((g) => ({
-          titulo: g.titulo,
-          items: g.items.map((i) => ({ ...i })),
-        }))
-      );
+      setGrupos(getInitialGroups());
       return;
     }
 
@@ -845,12 +776,10 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         }
 
         if (!data || !data.grupos) {
-          setGrupos(
-            GRUPOS.map((g) => ({
-              titulo: g.titulo,
-              items: g.items.map((i) => ({ ...i })),
-            }))
-          );
+          if (!data || !data.grupos) {
+            setGrupos(getInitialGroups());
+            return;
+          }
           return;
         }
 
@@ -874,8 +803,21 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
 
         setGrupos((currentGrupos) => {
           return currentGrupos.map((g) => {
-            const baseItems = GRUPOS.find((x) => x.titulo === g.titulo)?.items || [];
-            const filteredItems = baseItems
+            const baseGroup = CHECKLIST_CONFIG.find((x) => x.title === g.titulo);
+            const baseItems = baseGroup?.items || [];
+
+            // Mapear los items base a la estructura CkItem
+            const initializedBaseItems = baseItems.map(item => {
+              const defaultOpt = item.options.find((o) => o.color === "green") || item.options[0];
+              return {
+                name: item.name,
+                ok: defaultOpt?.okValue ?? true,
+                status: defaultOpt?.value ?? "",
+                nota: "",
+              };
+            });
+
+            const filteredItems = initializedBaseItems
               .filter((item) => !noEntregados.has(item.name))
               .map((item) => ({ ...item }));
 
@@ -955,12 +897,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     setResponsable(profile?.nombre ?? "");
     setUDni("");
     setUNombre("");
-    setGrupos(
-      GRUPOS.map((g) => ({
-        titulo: g.titulo,
-        items: g.items.map((i) => ({ ...i })),
-      }))
-    );
+    setGrupos(getInitialGroups());
     setObservaciones("");
     setPlacaSearch("");
     setPlacaOpen(false);
@@ -1287,205 +1224,86 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
             </div>
 
             {/* Grupos */}
-            <div className="mt-5 grid gap-4">
+            <div className="mt-8 grid gap-6">
               {grupos.map((g, gi) => (
-                <div key={g.titulo} className="rounded-xl border">
-                  <div className="flex items-center justify-between border-b px-4 py-3">
-                    <h4 className="text-sm font-semibold">{g.titulo}</h4>
+                <div key={g.titulo} className="rounded-xl border border-gray-100 bg-white">
+                  <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3 bg-slate-100">
+                    <h4 className="text-sm font-bold text-slate-800 uppercase tracking-tight">{g.titulo}</h4>
                   </div>
 
-                  <div className="grid gap-2 p-3 sm:grid-cols-2">
+                  <div className="grid gap-x-6 gap-y-4 p-4 sm:grid-cols-2">
                     {g.items.map((it, ii) => {
-                      // Determinar color según estado
+                      // Encontrar la configuración de este item
+                      const groupConfig = CHECKLIST_CONFIG.find(c => c.title === g.titulo);
+                      const itemConfig = groupConfig?.items.find(i => i.name === it.name);
+                      const validOptions = itemConfig?.options || [];
+
+                      // Filtrar opciones disponibles según tipo de checklist
+                      const visibleOptions = validOptions.filter(opt => {
+                        if (opt.showForType === "always") return true;
+                        if (opt.showForType === "entrega" && tipo === "entrega") return true;
+                        if (opt.showForType === "regular" && tipo === "regular") return true;
+                        return false;
+                      });
+
+                      // Encontrar opción actual para estilos
+                      const currentOpt = visibleOptions.find(o => o.value === it.status) || validOptions.find(o => o.value === it.status);
+
+                      // Determinar color según estado (usando la config si existe, sino fallback)
                       const getItemColor = () => {
-                        const status = it.status || "";
-                        if (it.ok && (status === "vigente" || status === "funcional" || status === "buen_estado" || !status)) {
-                          return "border-emerald-300 bg-emerald-50";
+                        if (currentOpt) {
+                          switch (currentOpt.color) {
+                            // Usamos bordes muy sutiles o transparentes si es "white" para reducir el ruido visual
+                            case 'green': return "border-emerald-200 bg-emerald-50/50";
+                            case 'yellow': return "border-yellow-200 bg-yellow-50/50";
+                            case 'orange': return "border-orange-200 bg-orange-50/50";
+                            case 'red': return "border-rose-200 bg-rose-50/50";
+                            case 'slate': case 'gray': return "border-slate-200 bg-slate-50/50";
+                            default: return "border-gray-100 bg-white";
+                          }
                         }
-                        if (status === "por_vencer" || status === "defecto_leve" || status === "rayado") {
-                          return "border-yellow-300 bg-yellow-50";
-                        }
-                        if (status === "vencido" || status === "deteriorado" || status === "abollado") {
-                          return "border-orange-300 bg-orange-50";
-                        }
-                        if (status === "faltante" || status === "danio_severo") {
-                          return "border-rose-300 bg-rose-50";
-                        }
-                        if (status === "no_entregado") {
-                          return "border-slate-300 bg-slate-50";
-                        }
-                        return it.ok ? "border-emerald-300 bg-emerald-50" : "border-rose-300 bg-rose-50";
+                        return "border-rose-200 bg-rose-50/50";
                       };
 
                       return (
                         <div
                           key={it.name}
-                          className={`rounded-lg border p-3 transition ${getItemColor()}`}
+                          className={`rounded-xl border p-3 transition-colors ${getItemColor()}`}
                         >
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                            <span className="text-sm font-medium">{it.name}</span>
-                            {/* Selector de estado según grupo */}
-                            {g.titulo === "DOCUMENTOS Y SEGURIDAD" ? (
-                              // Estados para items con vencimiento
-                              <div className="flex flex-wrap gap-1 sm:justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: true, status: "vigente" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "vigente"
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Vigente
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "por_vencer" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "por_vencer"
-                                    ? "bg-yellow-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Por Vencer
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "vencido" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "vencido"
-                                    ? "bg-orange-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Vencido
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "faltante" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "faltante"
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Faltante
-                                </button>
-                                {tipo === "entrega" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setItem(gi, ii, { ok: false, status: "no_entregado" })}
-                                    className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "no_entregado"
-                                      ? "bg-slate-700 text-white"
-                                      : "bg-white text-gray-600 border hover:bg-gray-50"
-                                      }`}
-                                  >
-                                    No entregado
-                                  </button>
-                                )}
+                          <div className="flex flex-row items-center justify-between gap-3">
+                            <span className="text-sm font-medium flex-1 text-gray-700">{it.name}</span>
+
+                            {/* Dropdown Selector */}
+                            <div className="relative w-[160px] shrink-0">
+                              <select
+                                value={it.status}
+                                onChange={(e) => {
+                                  const val = e.target.value;
+                                  const selectedOpt = validOptions.find(o => o.value === val);
+                                  // Update item state
+                                  setItem(gi, ii, {
+                                    ok: selectedOpt?.okValue ?? false,
+                                    status: val
+                                  });
+                                }}
+                                // Aumentamos py para mayor altura táctil (celular)
+                                className="w-full appearance-none rounded-lg border border-gray-200 bg-white pl-3 pr-8 py-2.5 text-sm text-gray-700 focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer"
+                              >
+                                {visibleOptions.map(opt => (
+                                  <option key={opt.value} value={opt.value}>
+                                    {opt.label}
+                                  </option>
+                                ))}
+                              </select>
+                              {/* Custom Arrow */}
+                              <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2">
+                                <ChevronDown className="h-4 w-4 text-gray-400" />
                               </div>
-                            ) : g.titulo === "ACCESORIOS Y FUNCIONAMIENTO" ? (
-                              // Estados para items funcionales
-                              <div className="flex flex-wrap gap-1 sm:justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: true, status: "funcional" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "funcional"
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Funcional
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "defecto_leve" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "defecto_leve"
-                                    ? "bg-yellow-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Defecto Leve
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "deteriorado" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "deteriorado"
-                                    ? "bg-orange-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Deteriorado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "faltante" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "faltante"
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Faltante
-                                </button>
-                                {tipo === "entrega" && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setItem(gi, ii, { ok: false, status: "no_entregado" })}
-                                    className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "no_entregado"
-                                      ? "bg-slate-700 text-white"
-                                      : "bg-white text-gray-600 border hover:bg-gray-50"
-                                      }`}
-                                  >
-                                    No entregado
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              // Estados para inspección visual
-                              <div className="flex flex-wrap gap-1 sm:justify-end">
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: true, status: "buen_estado" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${it.ok && it.status === "buen_estado"
-                                    ? "bg-emerald-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Buen Estado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "rayado" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "rayado"
-                                    ? "bg-yellow-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Rayado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "abollado" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "abollado"
-                                    ? "bg-orange-500 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Abollado
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => setItem(gi, ii, { ok: false, status: "danio_severo" })}
-                                  className={`rounded px-2 py-1.5 text-[10px] font-bold transition flex-1 sm:flex-initial text-center ${!it.ok && it.status === "danio_severo"
-                                    ? "bg-rose-600 text-white"
-                                    : "bg-white text-gray-600 border hover:bg-gray-50"
-                                    }`}
-                                >
-                                  Daño Severo
-                                </button>
-                              </div>
-                            )}
+                            </div>
                           </div>
 
-                          {/* Campo de observación: visible si el estado NO es verde */}
-                          {it.status && !["vigente", "funcional", "buen_estado"].includes(it.status) && (
+                          {/* Campo de observación: visible si el estado NO es conforme o vigente */}
+                          {it.status && !["vigente", "conforme", "funcional", "buen_estado"].includes(it.status) && (
                             <div className="mt-2 text-[11px] font-medium text-gray-600">
                               Observación adicional:
                               <input
