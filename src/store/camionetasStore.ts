@@ -333,12 +333,25 @@ export const camionetasStore = {
     const inserted = sFromRow(data as SolicitudRow);
 
     // Registrar reserva ligada a la solicitud
-    await this.crearReserva({
-      placa,
-      inicioISO: inserted.usoInicio,
-      finISO: inserted.usoFin,
-      solicitudId: inserted.id,
-    });
+    try {
+      await this.crearReserva({
+        placa,
+        inicioISO: inserted.usoInicio,
+        finISO: inserted.usoFin,
+        solicitudId: inserted.id,
+      });
+    } catch (err: any) {
+      // Si falla la reserva (por ejemplo, choque de horario con constraint),
+      // borramos la solicitud recién creada para no dejar "huérfanos".
+      await supabase.from("solicitudes").delete().eq("id", inserted.id);
+
+      // Verificamos si es error de constraint de Supabase (código 23P01 u otros de exclusion)
+      // O simplemente lanzamos mensaje genérico si detectamos conflicto
+      console.error("Error creando reserva, rollback solicitud:", err);
+      throw new Error(
+        "La camioneta fue reservada por otro usuario mientras confirmabas. Por favor intenta nuevamente."
+      );
+    }
 
     this.solicitudes = [inserted, ...this.solicitudes];
     return inserted;
@@ -378,12 +391,32 @@ export const camionetasStore = {
     const s = sFromRow(updated as SolicitudRow);
 
     // Crear reserva para esta asignación
-    await this.crearReserva({
-      placa,
-      inicioISO: s.usoInicio,
-      finISO: s.usoFin,
-      solicitudId: s.id,
-    });
+    try {
+      await this.crearReserva({
+        placa,
+        inicioISO: s.usoInicio,
+        finISO: s.usoFin,
+        solicitudId: s.id,
+      });
+    } catch (err: any) {
+      // Rollback: regresamos la solicitud a estado anterior o simplemente lanzamos error.
+      // Como ya se hizo update en BD (estado=Reservada), deberíamos revertirlo a 'Pendiente'
+      // o dejarlo para que el usuario intente de nuevo.
+      // Para seguridad, revertimos el update local y remoto.
+
+      await supabase
+        .from("solicitudes")
+        .update({
+          estado: sLocal.estado, // estado original
+          vehiculo: sLocal.vehiculo ?? null,
+          recojo: sLocal.recojo ?? null,
+        })
+        .eq("id", solicitudId);
+
+      throw new Error(
+        "No se pudo asignar: La camioneta tiene un cruce de horarios con otra reserva."
+      );
+    }
 
     const idx = this.solicitudes.findIndex((x) => x.id === solicitudId);
     if (idx >= 0) this.solicitudes[idx] = s;

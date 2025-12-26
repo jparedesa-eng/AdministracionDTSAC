@@ -32,12 +32,16 @@ const OPTS_DOCS: ChecklistOption[] = [
 ];
 
 // Helper to create simple Conforme/Ausente/Deteriorado sets + custom additions
-const createOpts = (extras: ChecklistOption[] = []): ChecklistOption[] => {
-    return [
+const createOpts = (extras: ChecklistOption[] = [], includeNoEntregado: boolean = false): ChecklistOption[] => {
+    const opts = [
         { value: "conforme", label: "Conforme", color: "green", okValue: true, showForType: "always" },
-        ...extras,
-        NO_ENTREGADO
-    ];
+        ...extras
+    ] as ChecklistOption[];
+
+    if (includeNoEntregado) {
+        opts.push(NO_ENTREGADO);
+    }
+    return opts;
 };
 
 // Common Definitions from User Request
@@ -70,43 +74,43 @@ export const CHECKLIST_CONFIG: ChecklistGroupConfig[] = [
         items: [
             {
                 name: "SEGURO DE RUEDAS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO], true)
             },
             {
                 name: "GATA",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO], true)
             },
             {
                 name: "LLAVE DE RUEDAS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO]) // "Deteriorado" implied typical for accessories if not explicitly Roto
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO], true) // "Deteriorado" implied typical for accessories if not explicitly Roto
             },
             {
                 name: "CONOS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO], true)
             },
             {
                 name: "TACOS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO], true)
             },
             {
                 name: "FORRO ASIENTOS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO, OPT_DESGASTE])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO, OPT_DESGASTE], true)
             },
             {
                 name: "PISOS",
-                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO, OPT_DESGASTE])
+                options: createOpts([OPT_AUSENTE, OPT_DETERIORADO, OPT_ROTO, OPT_DESGASTE], true)
             },
             {
-                name: "LUNAS",
-                options: createOpts([OPT_CON_DANIO, OPT_RAYADO, OPT_QUINADO])
+                name: "LUNAS DE PUERTAS",
+                options: createOpts([OPT_CON_DANIO, OPT_RAYADO, OPT_QUINADO], true)
             },
             {
                 name: "FUNCIONAMIENTO DE LUCES",
-                options: createOpts([OPT_INOPERATIVA])
+                options: createOpts([OPT_INOPERATIVA], true)
             },
             {
                 name: "ALARMA DE RETROCESO",
-                options: createOpts([OPT_INOPERATIVA])
+                options: createOpts([OPT_INOPERATIVA], true)
             },
         ],
     },

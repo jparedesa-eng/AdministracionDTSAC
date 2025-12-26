@@ -89,10 +89,35 @@ export default function ChecklistCamaras() {
     const [isAuditModalOpen, setIsAuditModalOpen] = useState(false);
     const [optionsModalOpen, setOptionsModalOpen] = useState(false);
     const [selectedCameraId, setSelectedCameraId] = useState<string | null>(null);
+    const [activeTab, setActiveTab] = useState<'MENU' | 'STATUS' | 'ISSUES'>('MENU');
+    const [menuPosition, setMenuPosition] = useState<{ x: number, y: number } | null>(null);
     const [newIncidentDesc, setNewIncidentDesc] = useState('');
+
     const [tempOperativa, setTempOperativa] = useState(true);
     const [tempCalidad, setTempCalidad] = useState(5);
     const [isSavingModal, setIsSavingModal] = useState(false);
+
+    // Modal UI Aux State
+    const [incidentType, setIncidentType] = useState('Otros');
+
+    useEffect(() => {
+        if (optionsModalOpen) {
+            setActiveTab('MENU');
+            setIncidentType('Otros');
+            setNewIncidentDesc('');
+        }
+    }, [optionsModalOpen]);
+
+    const INCIDENT_TYPES = [
+        "Caída de Señal",
+        "Falla de Video / Negra",
+        "Desenfoque / Borrosa",
+        "Vandalismo / Daño Físico",
+        "Obstrucción Visual",
+        "PTZ No Responde",
+        "Intermitencia",
+        "Otros"
+    ];
 
     // Auto-select first central
     useEffect(() => {
@@ -252,7 +277,8 @@ export default function ChecklistCamaras() {
         if (!supervisorName) return setToast({ type: "error", message: "Ingrese el nombre del responsable." });
 
         try {
-            setToast({ type: "success", message: "Sincronizando..." });
+            setToast({ type: "success", message: "Sincronizando auditoría completa..." });
+
             let checklistId = currentChecklistId;
             if (!checklistId) {
                 checklistId = await createChecklist({
@@ -265,24 +291,41 @@ export default function ChecklistCamaras() {
                 setCurrentChecklistId(checklistId);
             }
 
-            // Sync all local changes (new or edited)
-            const promises = Object.entries(localDetalles).map(async ([camaraId, data]) => {
-                const existing = detalles.find(d => d.checklist_id === checklistId && d.camara_id === camaraId);
+            // Iterate over ALL filtered cameras to ensure complete snapshot
+            const promises = filteredCameras.map(async (cam) => {
+                const camaraId = cam.id;
+
+                // Determine source of truth: Local State -> DB State -> Default
+                let finalOperativa = true;
+                let finalCalidad = 5;
+
+                const localState = localDetalles[camaraId];
+                const dbState = detalles.find(d => d.checklist_id === checklistId && d.camara_id === camaraId);
+
+                if (localState) {
+                    finalOperativa = localState.operativa;
+                    finalCalidad = localState.calidad;
+                } else if (dbState) {
+                    finalOperativa = dbState.operativa;
+                    finalCalidad = dbState.calidad_imagen || 5;
+                }
+
                 await upsertChecklistDetalle({
-                    id: existing?.id,
+                    id: dbState?.id,
                     checklist_id: checklistId!,
                     camara_id: camaraId,
-                    operativa: data.operativa,
-                    calidad_imagen: data.calidad || 5,
+                    operativa: finalOperativa,
+                    calidad_imagen: finalCalidad,
                 });
             });
 
             await Promise.all(promises);
             await refreshDetalles(checklistId);
-            setToast({ type: "success", message: "Auditoría sincronizada correctamente." });
+            setToast({ type: "success", message: `Auditoría sincronizada: ${filteredCameras.length} equipos procesados.` });
             setIsAuditModalOpen(false);
             setLocalDetalles({}); // Clear buffer
         } catch (error: any) {
+            console.error(error);
             setToast({ type: "error", message: error.message || "Error al sincronizar." });
         }
     };
@@ -528,25 +571,27 @@ export default function ChecklistCamaras() {
         const isOperativa = d?.operativa !== false;
         const quality = d?.calidad_imagen ?? 5;
         const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
+        const incidentCount = reportes.filter(r => r.camara_id === cam.id).length;
 
         const checklistTime = d?.created_at ? new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--";
 
         return (
             <div
                 key={cam.id}
-                onClick={() => {
-                    if (!inAudit) {
-                        setSelectedCameraId(cam.id);
-                        setTempOperativa(isOperativa);
-                        setTempCalidad(quality);
-                        setOptionsModalOpen(true);
-                    }
+                onClick={(e) => {
+                    setMenuPosition({ x: e.clientX, y: e.clientY });
+                    setSelectedCameraId(cam.id);
+                    setTempOperativa(isOperativa);
+                    setTempCalidad(quality);
+                    setActiveTab('MENU');
+                    setOptionsModalOpen(true);
                 }}
                 className={`group bg-white p-4 rounded-2xl border transition-all cursor-pointer relative ${!isOperativa
                     ? 'bg-rose-50/80 border-rose-200'
                     : 'border-slate-200 hover:shadow-lg hover:border-blue-400'
                     }`}
             >
+                {/* Header */}
                 <div className="flex justify-between items-start mb-2">
                     <div className="space-y-0">
                         <div className="flex items-center gap-2">
@@ -555,61 +600,44 @@ export default function ChecklistCamaras() {
                         </div>
                         <h4 className={`text-[11px] font-black uppercase leading-tight truncate w-28 ${!isOperativa ? 'text-rose-800' : 'text-slate-800 group-hover:text-blue-600'}`}>{cam.nombre}</h4>
                     </div>
-                    {inAudit ? (
-                        <div className="flex bg-slate-100/50 p-1 rounded-xl border border-slate-200/50 scale-100 origin-right">
-                            <button
-                                onClick={(e) => { e.stopPropagation(); if (!isOperativa) handleToggleOperativa(cam.id, isOperativa); }}
-                                className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${isOperativa ? 'bg-white text-slate-900 shadow-sm border border-slate-200' : 'text-slate-400'}`}
-                            >
-                                OK
-                            </button>
-                            <button
-                                onClick={(e) => { e.stopPropagation(); if (isOperativa) handleToggleOperativa(cam.id, isOperativa); }}
-                                className={`px-4 py-2 rounded-lg font-black text-[10px] uppercase transition-all ${!isOperativa ? 'bg-red-600 text-white shadow-lg' : 'text-slate-400'}`}
-                            >
-                                FAIL
-                            </button>
+
+                    {/* Incident Badge */}
+                    {incidentCount > 0 && (
+                        <div className="bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full text-[9px] font-black flex items-center gap-1 shadow-sm border border-amber-200">
+                            <AlertTriangle size={10} /> {incidentCount}
                         </div>
-                    ) : (
-                        <div className={`w-2 h-2 rounded-full ${isOperativa ? 'bg-emerald-500' : 'bg-rose-500'}`} />
                     )}
                 </div>
 
-                {!isOperativa ? (
-                    <div className="py-2.5 flex items-center justify-center gap-2 border-t border-rose-100 mt-2">
-                        <XCircle size={12} className="text-rose-500" />
-                        <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Falla de Conexión</span>
-                    </div>
+                {/* Status Indicator / Actions Overlay */}
+                {!inAudit ? (
+                    <>
+                        {!isOperativa ? (
+                            <div className="py-2.5 flex items-center justify-center gap-2 border-t border-rose-100 mt-2">
+                                <XCircle size={12} className="text-rose-500" />
+                                <span className="text-[9px] font-black text-rose-500 uppercase tracking-widest">Falla de Conexión</span>
+                            </div>
+                        ) : (
+                            <div className="flex items-center justify-between pt-2 border-t border-slate-100/50 mt-1">
+                                <div className="flex items-center gap-2">
+                                    <SignalMeter quality={quality} active={isOperativa} />
+                                    <span className={`text-[8px] font-black uppercase ${meta.color}`}>
+                                        {meta.label}
+                                    </span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    <Clock size={8} className="text-slate-300" />
+                                    <span className="text-[8px] font-bold text-slate-400">{checklistTime}</span>
+                                </div>
+                            </div>
+                        )}
+                    </>
                 ) : (
-                    <div className="flex items-center justify-between pt-2 border-t border-slate-100/50 mt-1">
-                        <div className="flex items-center gap-2">
-                            <SignalMeter quality={quality} active={isOperativa} />
-                            <span className={`text-[8px] font-black uppercase ${meta.color}`}>
-                                {meta.label}
-                            </span>
-                        </div>
-                        <div className="flex items-center gap-1">
-                            <Clock size={8} className="text-slate-300" />
-                            <span className="text-[8px] font-bold text-slate-400">{checklistTime}</span>
-                        </div>
-                    </div>
-                )}
-
-                {inAudit && isOperativa && (
-                    <div className="mt-3 pt-3 border-t border-slate-100/50 flex flex-col gap-2">
-                        <label className="text-[7px] font-black text-slate-400 uppercase tracking-widest text-center">Calidad de Imagen</label>
-                        <div className="grid grid-cols-3 gap-1.5 p-1 bg-slate-50 rounded-xl border border-slate-200/30">
-                            {[1, 3, 5].map(q => (
-                                <button
-                                    key={q}
-                                    onClick={(e) => { e.stopPropagation(); handleSetCalidad(cam.id, q); }}
-                                    className={`py-2 rounded-lg text-[7px] font-black uppercase transition-all ${quality === q
-                                        ? `${QUALITY_LABELS[q as QualityValue]?.bg} text-white shadow-md`
-                                        : 'bg-white text-slate-400 border border-slate-200 hover:text-slate-600'}`}
-                                >
-                                    {QUALITY_LABELS[q as QualityValue]?.label}
-                                </button>
-                            ))}
+                    /* Audit Mode Inline Actions */
+                    <div className="mt-2 pt-2 border-t border-slate-100 flex justify-between items-center">
+                        <div className="flex bg-slate-100/50 p-1 rounded-lg border border-slate-200/50">
+                            <button onClick={(e) => { e.stopPropagation(); if (!isOperativa) handleToggleOperativa(cam.id, isOperativa); }} className={`px-3 py-1.5 rounded-md font-black text-[9px] uppercase ${isOperativa ? 'bg-white shadow-sm' : 'text-slate-400'}`}>OK</button>
+                            <button onClick={(e) => { e.stopPropagation(); if (isOperativa) handleToggleOperativa(cam.id, isOperativa); }} className={`px-3 py-1.5 rounded-md font-black text-[9px] uppercase ${!isOperativa ? 'bg-red-600 text-white shadow-sm' : 'text-slate-400'}`}>FAIL</button>
                         </div>
                     </div>
                 )}
@@ -630,7 +658,7 @@ export default function ChecklistCamaras() {
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Turno</th>
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</th>
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Calidad</th>
-                                <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Última Auditoría</th>
+                                <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Incidencias</th>
                             </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-100">
@@ -639,15 +667,18 @@ export default function ChecklistCamaras() {
                                 const isOperativa = d?.operativa !== false;
                                 const quality = d?.calidad_imagen ?? 5;
                                 const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
-                                const checklistTime = d?.created_at ? new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--";
+
+                                const incidentCount = reportes.filter(r => r.camara_id === cam.id).length;
 
                                 return (
                                     <tr
                                         key={cam.id}
-                                        onClick={() => {
+                                        onClick={(e) => {
+                                            setMenuPosition({ x: e.clientX, y: e.clientY });
                                             setSelectedCameraId(cam.id);
                                             setTempOperativa(isOperativa);
                                             setTempCalidad(quality);
+                                            setActiveTab('MENU');
                                             setOptionsModalOpen(true);
                                         }}
                                         className="hover:bg-slate-50 transition-colors cursor-pointer"
@@ -669,7 +700,15 @@ export default function ChecklistCamaras() {
                                                 <span className={`text-[10px] font-black uppercase ${meta.color}`}>{meta.label}</span>
                                             </div>
                                         </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-500 font-bold">{checklistTime}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-500">
+                                            {incidentCount > 0 ? (
+                                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-700 px-2 py-1 rounded-full text-[10px] font-black">
+                                                    <AlertTriangle size={12} /> {incidentCount}
+                                                </span>
+                                            ) : (
+                                                <span className="text-slate-300 text-[10px] uppercase font-bold">-</span>
+                                            )}
+                                        </td>
                                     </tr>
                                 );
                             })}
@@ -955,105 +994,247 @@ export default function ChecklistCamaras() {
 
             {/* Modal Actions */}
             {optionsModalOpen && selectedCameraId && (
-                <div className="fixed inset-0 bg-slate-900/40 flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[2rem] w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in duration-200">
-                        <div className="p-8 border-b border-slate-100 flex justify-between items-center">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center ${tempOperativa ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
-                                    <Signal size={24} />
+                <>
+                    {/* CONDITIONAL RENDERING: Context Menu vs Full Modal */}
+                    {activeTab === 'MENU' ? (
+                        /* CONTEXTUAL MENU (No Blur, Positioned) */
+                        <>
+                            {/* Transparent Backdrop to close on click-outside */}
+                            <div
+                                className="fixed inset-0 z-[60]"
+                                onClick={() => setOptionsModalOpen(false)}
+                            />
+
+                            {/* Positioned Menu */}
+                            <div
+                                style={{
+                                    top: Math.min(menuPosition?.y || 0, window.innerHeight - 200), // Prevent going off bottom
+                                    left: Math.min(menuPosition?.x || 0, window.innerWidth - 250) // Prevent going off right
+                                }}
+                                className="fixed z-[61] w-64 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-1"
+                            >
+                                <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo}</p>
+                                    <p className="text-[11px] font-bold text-slate-700 truncate">{camaras.find(c => c.id === selectedCameraId)?.nombre}</p>
                                 </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">{camaras.find(c => c.id === selectedCameraId)?.nombre}</h3>
-                                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo} • {camaras.find(c => c.id === selectedCameraId)?.nave_fundo}</p>
-                                </div>
-                            </div>
-                            <button onClick={() => setOptionsModalOpen(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-full transition-all"><X size={24} /></button>
-                        </div>
-                        <div className="p-8 space-y-8">
-                            <div className="grid grid-cols-2 gap-6">
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus</label>
-                                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 h-14">
-                                        <button onClick={() => setTempOperativa(true)} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase transition-all ${tempOperativa ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>Online</button>
-                                        <button onClick={() => setTempOperativa(false)} className={`flex-1 py-3 rounded-lg text-xs font-black uppercase transition-all ${!tempOperativa ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>Falla</button>
+
+                                <button
+                                    onClick={() => setActiveTab('STATUS')}
+                                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
+                                >
+                                    <div className="bg-blue-50 text-blue-600 p-1.5 rounded-md group-hover:bg-blue-100 transition-colors"><Activity size={16} /></div>
+                                    <div>
+                                        <h4 className="text-[11px] font-black text-slate-700 uppercase">Estado y Calidad</h4>
                                     </div>
-                                </div>
-                                <div className="space-y-3">
-                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Calidad de Video</label>
-                                    <select
-                                        disabled={!tempOperativa}
-                                        value={tempCalidad}
-                                        onChange={(e) => setTempCalidad(parseInt(e.target.value))}
-                                        className="w-full bg-slate-50 border border-slate-200 rounded-xl p-3 text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-30 disabled:cursor-not-allowed"
-                                    >
-                                        {Object.entries(QUALITY_LABELS).map(([v, data]) => <option key={v} value={v}>{data.label}</option>)}
-                                    </select>
-                                </div>
-                            </div>
-
-                            <div className="space-y-4">
-                                <div className="flex items-center gap-2 text-blue-600">
-                                    <MessageSquarePlus size={18} />
-                                    <h4 className="text-[11px] font-black uppercase tracking-widest">Reportar Incidencia Técnica</h4>
-                                </div>
-                                <textarea
-                                    value={newIncidentDesc}
-                                    onChange={e => setNewIncidentDesc(e.target.value)}
-                                    placeholder="Describa el síntoma o la razón de la falla..."
-                                    className="w-full h-24 p-5 bg-slate-50 border border-slate-200 rounded-2xl text-sm outline-none focus:ring-2 focus:ring-blue-500 transition-all resize-none"
-                                />
-                            </div>
-
-                            <div className="pt-4 border-t border-slate-100 flex gap-3">
-                                <button
-                                    onClick={() => setOptionsModalOpen(false)}
-                                    className="flex-1 px-6 py-4 rounded-xl text-xs font-black uppercase tracking-widest text-slate-400 hover:bg-slate-50 transition-all"
-                                >
-                                    Cancelar
                                 </button>
+
                                 <button
-                                    disabled={isSavingModal}
-                                    onClick={async () => {
-                                        if (isSavingModal) return;
-                                        setIsSavingModal(true);
-                                        try {
-                                            // Persist status and quality
-                                            const existing = detalles.find(d => d.checklist_id === currentChecklistId && d.camara_id === selectedCameraId);
-                                            await upsertChecklistDetalle({
-                                                id: existing?.id,
-                                                checklist_id: currentChecklistId!,
-                                                camara_id: selectedCameraId,
-                                                operativa: tempOperativa,
-                                                calidad_imagen: tempCalidad,
-                                            });
-
-                                            // Persist incident if description exists
-                                            if (newIncidentDesc.trim()) {
-                                                await createReporte({
-                                                    camara_id: selectedCameraId,
-                                                    tipo_incidente: tempOperativa ? 'Otros' : 'Caída de Señal',
-                                                    descripcion: newIncidentDesc,
-                                                    usuario_id: user?.id || null
-                                                });
-                                                setNewIncidentDesc('');
-                                            }
-
-                                            setToast({ type: "success", message: "Cambios guardados correctamente." });
-                                            setOptionsModalOpen(false);
-                                        } catch (error) {
-                                            setToast({ type: "error", message: "Error al guardar los cambios." });
-                                        } finally {
-                                            setIsSavingModal(false);
-                                        }
-                                    }}
-                                    className={`flex-[2] bg-blue-600 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${isSavingModal ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700 active:scale-95 shadow-lg shadow-blue-200'}`}
+                                    onClick={() => setActiveTab('ISSUES')}
+                                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
                                 >
-                                    {isSavingModal ? 'Guardando...' : 'Guardar Cambios'}
+                                    <div className="bg-amber-50 text-amber-600 p-1.5 rounded-md group-hover:bg-amber-100 transition-colors"><AlertTriangle size={16} /></div>
+                                    <div className="flex-1">
+                                        <div className="flex justify-between items-center">
+                                            <h4 className="text-[11px] font-black text-slate-700 uppercase">Reportar Incidencia</h4>
+                                            {reportes.filter(r => r.camara_id === selectedCameraId).length > 0 && <span className="bg-amber-100 text-amber-700 px-1.5 rounded text-[8px] font-black">{reportes.filter(r => r.camara_id === selectedCameraId).length}</span>}
+                                        </div>
+                                    </div>
                                 </button>
+                            </div>
+                        </>
+                    ) : (
+                        /* FULL LARGE MODAL (Status or Issues) - WITH BLUR */
+                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+                            <div className="bg-white rounded-[2rem] w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+                                {/* Modal Header */}
+                                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                                    <div className="flex items-center gap-4">
+                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${tempOperativa ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
+                                            <Signal size={28} />
+                                        </div>
+                                        <div>
+                                            <div className="flex items-center gap-2">
+                                                <h3 className="text-xl font-bold text-slate-900 tracking-tight">{camaras.find(c => c.id === selectedCameraId)?.nombre}</h3>
+                                            </div>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo} • {camaras.find(c => c.id === selectedCameraId)?.nave_fundo}</p>
+                                        </div>
+                                    </div>
+                                    <button onClick={() => setOptionsModalOpen(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-full transition-all"><X size={24} /></button>
+                                </div>
+
+                                {/* Modal Body */}
+                                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 custom-scrollbar">
+
+                                    {/* TAB: STATUS */}
+                                    {activeTab === 'STATUS' && (
+                                        <div className="space-y-8 animate-in slide-in-from-right-8 fade-in duration-300">
+                                            <div className="grid grid-cols-2 gap-6">
+
+                                                <div className="space-y-3">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus Operativo</label>
+                                                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 h-14">
+                                                        <button onClick={() => setTempOperativa(true)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${tempOperativa ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
+                                                            <div className={`w-2 h-2 rounded-full ${tempOperativa ? 'bg-emerald-500' : 'bg-slate-300'}`} /> Online
+                                                        </button>
+                                                        <button onClick={() => setTempOperativa(false)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${!tempOperativa ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>
+                                                            <div className={`w-2 h-2 rounded-full ${!tempOperativa ? 'bg-rose-500' : 'bg-slate-300'}`} /> Falla
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Calidad de Video</label>
+                                                    <select
+                                                        disabled={!tempOperativa}
+                                                        value={tempCalidad}
+                                                        onChange={(e) => setTempCalidad(parseInt(e.target.value))}
+                                                        className="w-full h-14 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-slate-100"
+                                                    >
+                                                        {Object.entries(QUALITY_LABELS).map(([v, data]) => <option key={v} value={v}>{data.label}</option>)}
+                                                    </select>
+                                                </div>
+                                            </div>
+
+                                            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 text-blue-800 flex items-start gap-3">
+                                                <div className="mt-0.5"><ShieldCheck size={18} /></div>
+                                                <div>
+                                                    <h4 className="text-[11px] font-black uppercase tracking-wider mb-1">Auditoría en Progreso</h4>
+                                                    <p className="text-xs opacity-80 leading-relaxed">Cambios realizados aquí se reflejarán en el checklist actual ({selectedTurno}). Recuerde sincronizar al finalizar la ronda.</p>
+                                                </div>
+                                            </div>
+
+                                            <div className="pt-4 flex gap-3">
+                                                <button
+                                                    disabled={isSavingModal}
+                                                    onClick={async () => {
+                                                        if (isSavingModal) return;
+                                                        setIsSavingModal(true);
+                                                        try {
+                                                            const existing = detalles.find(d => d.checklist_id === currentChecklistId && d.camara_id === selectedCameraId);
+                                                            await upsertChecklistDetalle({
+                                                                id: existing?.id,
+                                                                checklist_id: currentChecklistId!,
+                                                                camara_id: selectedCameraId!,
+                                                                operativa: tempOperativa,
+                                                                calidad_imagen: tempCalidad,
+                                                            });
+                                                            setToast({ type: "success", message: "Estado actualizado." });
+                                                            setOptionsModalOpen(false);
+                                                        } catch (error) {
+                                                            setToast({ type: "error", message: "Error al guardar." });
+                                                        } finally {
+                                                            setIsSavingModal(false);
+                                                        }
+                                                    }}
+                                                    className="w-full bg-slate-900 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                                                >
+                                                    {isSavingModal ? 'Guardando...' : 'Guardar Estado'}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* TAB: ISSUES & HISTORY */}
+                                    {activeTab === 'ISSUES' && (
+                                        <div className="space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+
+                                            {/* New Report Form */}
+                                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                                <div className="flex items-center gap-2 mb-2">
+                                                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg"><MessageSquarePlus size={16} /></div>
+                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Nuevo Reporte Técnico</h4>
+                                                </div>
+
+                                                <div className="grid grid-cols-1 gap-4">
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase">Tipo de Incidente</label>
+                                                        <select
+                                                            value={incidentType}
+                                                            onChange={e => setIncidentType(e.target.value)}
+                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                                                        >
+                                                            {INCIDENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                        </select>
+                                                    </div>
+                                                    <div className="space-y-1.5">
+                                                        <label className="text-[9px] font-bold text-slate-400 uppercase">Descripción / Observaciones</label>
+                                                        <textarea
+                                                            value={newIncidentDesc}
+                                                            onChange={e => setNewIncidentDesc(e.target.value)}
+                                                            placeholder="Detalles técnicos de la falla..."
+                                                            className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <button
+                                                    disabled={!newIncidentDesc.trim() || isSavingModal}
+                                                    onClick={async () => {
+                                                        if (isSavingModal) return;
+                                                        setIsSavingModal(true);
+                                                        try {
+                                                            await createReporte({
+                                                                camara_id: selectedCameraId!,
+                                                                tipo_incidente: incidentType,
+                                                                descripcion: newIncidentDesc,
+                                                                usuario_id: user?.id || null
+                                                            });
+                                                            setNewIncidentDesc('');
+                                                            setToast({ type: "success", message: "Incidencia reportada." });
+                                                        } catch (error) {
+                                                            setToast({ type: "error", message: "Error al crear reporte." });
+                                                        } finally {
+                                                            setIsSavingModal(false);
+                                                        }
+                                                    }}
+                                                    className="w-full bg-amber-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                >
+                                                    {isSavingModal ? 'Registrando...' : 'Registrar Incidencia'}
+                                                </button>
+                                            </div>
+
+                                            {/* History List */}
+                                            <div className="space-y-4">
+                                                <div className="flex items-center justify-between">
+                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Historial de Reportes</h4>
+                                                    <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold">{reportes.filter(r => r.camara_id === selectedCameraId).length} Total</span>
+                                                </div>
+
+                                                <div className="space-y-3">
+                                                    {reportes.filter(r => r.camara_id === selectedCameraId).length === 0 ? (
+                                                        <div className="text-center py-8 opacity-50">
+                                                            <ShieldCheck size={32} className="mx-auto text-slate-300 mb-2" />
+                                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Sin historial de fallas</p>
+                                                        </div>
+                                                    ) : (
+                                                        reportes.filter(r => r.camara_id === selectedCameraId).map(rep => (
+                                                            <div key={rep.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4">
+                                                                <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${rep.resuelto ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                                <div className="flex-1 space-y-1">
+                                                                    <div className="flex justify-between items-start">
+                                                                        <span className="text-[10px] font-black uppercase text-slate-800">{rep.tipo_incidente}</span>
+                                                                        <span className="text-[9px] font-bold text-slate-400">{new Date(rep.fecha_reporte).toLocaleDateString()}</span>
+                                                                    </div>
+                                                                    <p className="text-[11px] text-slate-600 leading-snug">{rep.descripcion}</p>
+                                                                    <div className="pt-2 flex items-center gap-2">
+                                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${rep.resuelto ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                            {rep.resuelto ? 'Resuelto' : 'Pendiente'}
+                                                                        </span>
+                                                                        {rep.usuario_id && <span className="text-[8px] text-slate-400 uppercase font-bold flex items-center gap-1"><User size={8} /> Tech ID: {rep.usuario_id.slice(0, 4)}</span>}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    )}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                </div>
                             </div>
                         </div>
-                    </div>
-                </div>
+                    )}
+                </>
             )}
 
             {/* Modal: Checklist Auditoría */}
