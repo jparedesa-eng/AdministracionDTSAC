@@ -1,8 +1,9 @@
 // src/App.tsx
 import React from "react";
-import { Menu } from "lucide-react";
+// import { Menu } from "lucide-react"; // Removed
 import { Routes, Route, Outlet, Navigate } from "react-router-dom";
 import Sidebar from "./components/Sidebar";
+import Header from "./components/Header";
 
 /* Auth */
 import RequireAuth from "./auth/RequireAuth";
@@ -51,6 +52,7 @@ import GerenciasPage from "./pages/configuracion/GerenciasPage";
 import SedesPage from "./pages/configuracion/SedesPage";
 import CctvCentralesPage from "./pages/configuracion/CctvCentralesPage";
 import SupervisorST from "./pages/configuracion/SupervisorST";
+import AplicativosCelular from "./pages/configuracion/AplicativosCelular";
 
 /* Seguridad */
 import ProgramacionPuestos from "./pages/Seguridad/ProgramacionPuestos";
@@ -63,30 +65,35 @@ import Forbidden403 from "./pages/Errors/403";
 
 /* Layout protegido */
 function ProtectedLayout() {
-  const [isOpen, setIsOpen] = React.useState(false);
+  const [isMobileOpen, setIsMobileOpen] = React.useState(false);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(false);
+
+  const handleToggleSidebar = () => {
+    if (window.innerWidth < 768) {
+      setIsMobileOpen(!isMobileOpen);
+    } else {
+      setIsDesktopCollapsed(!isDesktopCollapsed);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50 text-gray-900">
-      {/* Top bar (móvil) */}
-      <header className="sticky top-0 z-30 flex items-center gap-3 border-b border-gray-100 bg-white px-3 py-2 md:hidden">
-        <button
-          type="button"
-          aria-label="Abrir menú"
-          onClick={() => setIsOpen(true)}
-          className="inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-700 transition-colors hover:bg-gray-100 active:bg-gray-200"
-        >
-          <Menu className="h-6 w-6" />
-        </button>
-
-        <span className="text-lg font-medium text-gray-700">Administración</span>
-      </header>
+      {/* Header (Top bar) */}
+      <Header
+        sidebarOpen={!isDesktopCollapsed}
+        setSidebarOpen={handleToggleSidebar}
+        isMobile={false}
+      />
 
       {/* Sidebar + contenido */}
-      <Sidebar open={isOpen} onClose={() => setIsOpen(false)} />
+      <Sidebar
+        open={isMobileOpen}
+        onClose={() => setIsMobileOpen(false)}
+        collapsed={isDesktopCollapsed}
+      />
 
-      <main className="md:pl-72">
+      <main className={`transition-all duration-300 ${!isDesktopCollapsed ? "md:pl-72" : "md:pl-20"}`}>
         <div className="min-h-[calc(100vh-48px)] md:min-h-screen flex flex-col bg-slate-100">
-          <div className="h-6 md:h-12" />
           <div className="flex-1 p-4 md:p-6">
             <Outlet />
           </div>
@@ -407,6 +414,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/configuracion/supervisores">
                 <SupervisorST />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/aplicativos-celular"
+            element={
+              <ProtectedRoute path="/configuracion/aplicativos-celular">
+                <AplicativosCelular />
               </ProtectedRoute>
             }
           />

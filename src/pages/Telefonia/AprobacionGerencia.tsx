@@ -9,6 +9,7 @@ import { UserCheck, Check, X, AlertCircle } from "lucide-react";
 export default function AprobacionGerencia() {
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
+    const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
 
     const loadData = async () => {
         try {
@@ -23,6 +24,9 @@ export default function AprobacionGerencia() {
     }, []);
 
     const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Gerencia");
+    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente Gerencia");
+
+    const displayedTickets = viewMode === "pending" ? pendingTickets : historyTickets;
 
     const handleOpenTicket = (ticket: Solicitud) => {
         setSelectedTicket(ticket);
@@ -59,61 +63,99 @@ export default function AprobacionGerencia() {
                 </div>
             </div>
 
+            {/* View Toggle */}
+            <div className="flex justify-center">
+                <div className="bg-gray-100 p-1 rounded-lg inline-flex">
+                    <button
+                        onClick={() => setViewMode("pending")}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "pending"
+                            ? "bg-white text-gray-900 shadow-sm"
+                            : "text-gray-500 hover:text-gray-700"
+                            }`}
+                    >
+                        Pendientes
+                    </button>
+                    <button
+                        onClick={() => setViewMode("history")}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "history"
+                            ? "bg-white text-gray-900 shadow-sm"
+                            : "text-gray-500 hover:text-gray-700"
+                            }`}
+                    >
+                        Historial
+                    </button>
+                </div>
+            </div>
+
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
-            <div className="bg-white border border-gray-200 rounded-xl shadow-sm overflow-hidden">
-                <table className="min-w-full divide-y divide-gray-200 text-sm">
-                    <thead className="bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fecha</th>
-                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Solicitante</th>
-                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo/Servicio</th>
-                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Validación IT</th>
-                            <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acción</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200">
-                        {pendingTickets.length === 0 ? (
-                            <tr>
-                                <td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                                    <div className="flex flex-col items-center justify-center">
-                                        <CheckCircleIcon className="w-12 h-12 text-blue-100 mb-2" />
-                                        <p>No hay solicitudes pendientes de aprobación gerencial</p>
-                                    </div>
-                                </td>
-                            </tr>
-                        ) : (
-                            pendingTickets.map(t => (
-                                <tr key={t.id} className="hover:bg-gray-50">
-                                    <td className="px-6 py-4 text-gray-500">
-                                        {new Date(t.created_at).toLocaleDateString()}
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="font-medium text-gray-900">{t.beneficiario_nombre}</div>
-                                        <div className="text-xs text-gray-500">{t.beneficiario_puesto}</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <div className="text-gray-900">{t.tipo_servicio}</div>
-                                        <div className="text-xs text-gray-500">Justificación: {t.justificacion?.substring(0, 30)}...</div>
-                                    </td>
-                                    <td className="px-6 py-4">
-                                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+            {/* CARD VIEW (FULL WIDTH ROW STYLE) */}
+            <div className="flex flex-col gap-3">
+                {displayedTickets.length === 0 ? (
+                    <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
+                        <div className="flex flex-col items-center justify-center">
+                            <CheckCircleIcon className="w-12 h-12 text-blue-100 mb-2" />
+                            <p>No hay solicitudes {viewMode === "pending" ? "pendientes de aprobación" : "en el historial"}</p>
+                        </div>
+                    </div>
+                ) : (
+                    displayedTickets.map(t => (
+                        <div
+                            key={t.id}
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-all group"
+                        >
+                            <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                                {/* LEFT: Solicitante */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                                            {new Date(t.created_at).toLocaleDateString()}
+                                        </span>
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
                                             {t.alternativa_modelo || "Sin Obs. IT"}
                                         </span>
-                                    </td>
-                                    <td className="px-6 py-4 text-right">
-                                        <button
-                                            onClick={() => handleOpenTicket(t)}
-                                            className="text-blue-600 hover:text-blue-900 font-medium text-xs bg-blue-50 px-3 py-1 rounded-lg transition-colors border border-blue-100 hover:border-blue-200"
-                                        >
-                                            Decidir
-                                        </button>
-                                    </td>
-                                </tr>
-                            ))
-                        )}
-                    </tbody>
-                </table>
+                                    </div>
+                                    <h3 className="text-base font-bold text-gray-900 truncate" title={t.beneficiario_nombre || ""}>
+                                        {t.beneficiario_nombre}
+                                    </h3>
+                                    <p className="text-sm text-gray-500">{t.beneficiario_puesto}</p>
+                                    {viewMode === "history" && (
+                                        <div className="mt-2">
+                                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${t.estado === "Rechazada" ? "bg-red-50 text-red-700 border-red-100" :
+                                                t.estado === "Pendiente Admin" ? "bg-green-50 text-green-700 border-green-100" :
+                                                    "bg-gray-50 text-gray-700 border-gray-100"
+                                                }`}>
+                                                {t.estado}
+                                            </span>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* MIDDLE: Detalle */}
+                                <div className="md:w-2/5 md:border-l md:border-r border-gray-100 md:px-6 py-2 md:py-0">
+                                    <div className="flex justify-between items-baseline mb-1">
+                                        <span className="text-xs text-gray-500 uppercase tracking-wide">Servicio Solicitado</span>
+                                        <span className="text-sm font-semibold text-gray-900">{t.tipo_servicio}</span>
+                                    </div>
+                                    <p className="text-sm text-gray-600 italic bg-gray-50 p-2 rounded border border-gray-100 line-clamp-1" title={t.justificacion || ""}>
+                                        {t.justificacion}
+                                    </p>
+                                </div>
+
+                                {/* RIGHT: Action */}
+                                <div className="w-full md:w-auto">
+                                    <button
+                                        onClick={() => handleOpenTicket(t)}
+                                        className="w-full md:w-auto px-6 py-2.5 bg-white text-blue-700 font-medium text-sm rounded-lg border border-blue-200 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center justify-center gap-2"
+                                    >
+                                        <UserCheck className="w-4 h-4" />
+                                        {viewMode === "pending" ? "Decidir Aprobación" : "Ver Detalle"}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
+                )}
             </div>
 
             {selectedTicket && (
@@ -131,6 +173,7 @@ export default function AprobacionGerencia() {
                                 <p><span className="text-gray-500">Solicitante:</span> {selectedTicket.beneficiario_nombre}</p>
                                 <p><span className="text-gray-500">Área:</span> {selectedTicket.beneficiario_area}</p>
                                 <p><span className="text-gray-500">Puesto:</span> {selectedTicket.beneficiario_puesto}</p>
+                                <p><span className="text-gray-500">Línea Ref:</span> {selectedTicket.beneficiario_n_linea_ref || "N/A"}</p>
                                 <p><span className="text-gray-500">Periodo:</span> {selectedTicket.periodo_uso}</p>
                             </div>
                             <div className="pt-2 border-t border-gray-200 mt-2">
@@ -146,25 +189,47 @@ export default function AprobacionGerencia() {
                         </div>
 
                         <div className="space-y-4 pt-2">
-                            <div className="flex gap-4">
-                                <button
-                                    onClick={() => handleDecision(false)}
-                                    className="flex-1 bg-white border-2 border-red-100 text-red-600 rounded-xl py-3 font-medium hover:bg-red-50 hover:border-red-200 transition-all flex justify-center items-center gap-2"
-                                >
-                                    <X className="w-5 h-5" />
-                                    Rechazar
-                                </button>
-                                <button
-                                    onClick={() => handleDecision(true)}
-                                    className="flex-1 bg-blue-600 text-white rounded-xl py-3 font-medium hover:bg-blue-700 shadow-md transition-all flex justify-center items-center gap-2"
-                                >
-                                    <Check className="w-5 h-5" />
-                                    Aprobar
-                                </button>
-                            </div>
-                            <p className="text-xs text-center text-gray-400">
-                                Al aprobar, la solicitud pasará a Administración para compra o despacho.
-                            </p>
+                            {viewMode === "pending" ? (
+                                <div className="flex flex-col gap-3">
+                                    <div className="flex gap-4">
+                                        <button
+                                            onClick={() => handleDecision(false)}
+                                            className="flex-1 bg-white border-2 border-red-100 text-red-600 rounded-xl py-2.5 font-medium hover:bg-red-50 hover:border-red-200 transition-all flex justify-center items-center gap-2"
+                                        >
+                                            <X className="w-5 h-5" />
+                                            Rechazar
+                                        </button>
+                                        <button
+                                            onClick={() => handleDecision(true)}
+                                            className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 font-medium hover:bg-blue-700 shadow-sm transition-all flex justify-center items-center gap-2"
+                                        >
+                                            <Check className="w-5 h-5" />
+                                            Aprobar
+                                        </button>
+                                    </div>
+                                    <button
+                                        onClick={() => setSelectedTicket(null)}
+                                        className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                                    >
+                                        Cancelar
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-3">
+                                    <button
+                                        onClick={() => setSelectedTicket(null)}
+                                        className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                                    >
+                                        Cerrar
+                                    </button>
+                                </div>
+                            )}
+
+                            {viewMode === "pending" && (
+                                <p className="text-xs text-center text-gray-400">
+                                    Al aprobar, la solicitud pasará a Administración para compra o despacho.
+                                </p>
+                            )}
                         </div>
                     </div>
                 </Modal>

@@ -1,31 +1,55 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore } from "../../store/telefoniaStore";
+import type { ValidationResult } from "../../store/telefoniaStore";
+import { aplicativosStore } from "../../store/aplicativosStore";
 
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import {
-    Loader2,
+    Calendar,
     CheckCircle2,
-    LayoutGrid,
-    Search,
-    User,
-    Smartphone,
+    ChevronRight,
     FileText,
     History,
-    ChevronRight,
+    Loader2,
     Plus,
-    Calendar,
-    MapPin
+    Search,
+    Smartphone,
+    X,
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
 
-// Pasos del Wizard
-const STEPS = [
-    { id: 1, label: "Beneficiario", icon: User },
-    { id: 2, label: "Servicio", icon: Smartphone },
-    { id: 3, label: "Justificación", icon: FileText },
+
+const COMMON_ROLES = [
+    "Gerente General",
+    "Gerente Central",
+    "Gerente",
+    "Jefe",
+    "Superintendente",
+    "Coordinador",
+    "Supervisor",
+    "Analista",
+    "Asistente",
+    "Auxiliar",
+    "Practicante",
+    "Operario",
+    "Otros"
 ];
+
+const StatusBadge = ({ estado }: { estado: string }) => {
+    let color = "bg-gray-100 text-gray-800 border-gray-200";
+    if (estado === "Entregado") color = "bg-green-100 text-green-800 border-green-200";
+    else if (estado === "Rechazada") color = "bg-red-100 text-red-800 border-red-200";
+    else if (estado === "Programar Entrega") color = "bg-blue-100 text-blue-800 border-blue-200";
+    else if (estado?.includes("Pendiente")) color = "bg-amber-100 text-amber-800 border-amber-200";
+
+    return (
+        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${color}`}>
+            {estado}
+        </span>
+    );
+};
 
 export default function SolicitarTelefonia() {
     const { user } = useAuth();
@@ -37,8 +61,13 @@ export default function SolicitarTelefonia() {
     const [currentStep, setCurrentStep] = useState(1);
     const [historyLoading, setHistoryLoading] = useState(false);
 
+    // Validation State
+    const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
+    const [validating, setValidating] = useState(false);
+
     // Modal controls
     const [isWizardOpen, setIsWizardOpen] = useState(false);
+    const [appSearch, setAppSearch] = useState("");
 
     // Form State
     const [formData, setFormData] = useState({
@@ -47,6 +76,9 @@ export default function SolicitarTelefonia() {
         area: "",
         puesto: "",
         n_linea: "",
+        numero_telefono: "",
+        motivo_reposicion: "",
+        tiene_evidencia: false,
         tipo_servicio: "PAQUETE ASIGNADO",
         periodo_uso: "PERMANENTE",
         fecha_inicio: new Date().toISOString().slice(0, 10),
@@ -58,17 +90,19 @@ export default function SolicitarTelefonia() {
     });
 
     const [selectedApps, setSelectedApps] = useState<string[]>([]);
+    const [availableApps, setAvailableApps] = useState<{ id: string, nombre: string }[]>([]);
 
-    const AVAILABLE_APPS = [
-        "WhatsApp",
-        "Correo Corporativo",
-        "Teams",
-        "NISIRA",
-        "AgroMaps",
-        "Checklist App",
-        "Google Maps",
-        "Waze",
-    ];
+    useEffect(() => {
+        const loadApps = async () => {
+            try {
+                const apps = await aplicativosStore.fetchAll();
+                setAvailableApps(apps);
+            } catch (error) {
+                console.error("Error loading apps", error);
+            }
+        };
+        loadApps();
+    }, []);
 
     // Cargar historial
     const loadHistory = async () => {
@@ -86,15 +120,56 @@ export default function SolicitarTelefonia() {
         loadHistory();
     }, []);
 
-    // Filtrar mis tickets
+    // Detail Modal State
+    const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
+
+    // Filter mis tickets
     const myTickets = useMemo(() => {
         if (!user?.id) return [];
         return telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
-    }, [user?.id, telefoniaStore.solicitudes]); // Re-added dependency to ensure updates
+    }, [user?.id, telefoniaStore.solicitudes]);
 
 
     const handleChange = (field: string, value: any) => {
-        setFormData((prev) => ({ ...prev, [field]: value }));
+        setFormData(prev => {
+            const newState = { ...prev, [field]: value };
+
+            // Reset conditional fields if main selection changes
+            if (field === "n_linea") {
+                newState.numero_telefono = "";
+                newState.motivo_reposicion = "";
+                newState.tiene_evidencia = false;
+            }
+
+            // Reset fecha_fin if switching to PERMANENTE
+            if (field === "periodo_uso" && value === "PERMANENTE") {
+                newState.fecha_fin = "";
+            }
+
+            return newState;
+        });
+    };
+
+    const handleValidateRenewal = async () => {
+        if (!formData.numero_telefono || formData.numero_telefono.length < 9) {
+            setToast({ type: "error", message: "Ingrese un número válido para validar." });
+            return;
+        }
+        setValidating(true);
+        setValidationResult(null);
+        try {
+            const res = await telefoniaStore.validateRenovacion(formData.numero_telefono);
+            setValidationResult(res);
+            if (res.valid) {
+                setToast({ type: "success", message: "Renovación disponible." });
+            } else {
+                setToast({ type: "warning", message: res.message });
+            }
+        } catch (e: any) {
+            setToast({ type: "error", message: "Error al validar renovación. Posiblemente no exista historial." });
+        } finally {
+            setValidating(false);
+        }
     };
 
     const toggleApp = (app: string) => {
@@ -147,6 +222,19 @@ export default function SolicitarTelefonia() {
             if (!formData.dni || formData.dni.length !== 8) return "Ingrese un DNI válido";
             if (!formData.nombre) return "Ingrese el nombre del beneficiario";
             if (!formData.area) return "Ingrese el área";
+            if (!formData.n_linea) return "Seleccione el motivo de solicitud";
+
+            if ((formData.n_linea === "Renovación" || formData.n_linea === "Reposición") && !formData.numero_telefono) {
+                return "Debe ingresar el número de teléfono.";
+            }
+            if (formData.n_linea === "Reposición") {
+                if (!formData.motivo_reposicion) {
+                    return "Seleccione el motivo de la reposición.";
+                }
+                if (!formData.tiene_evidencia) {
+                    return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
+                }
+            }
         }
         if (step === 2) {
             if (!formData.fecha_inicio) return "Ingrese fecha de inicio";
@@ -197,7 +285,12 @@ export default function SolicitarTelefonia() {
                 fundo_planta: formData.fundo_planta,
                 cultivo: formData.cultivo,
                 cantidad_lineas: Number(formData.cantidad_lineas),
-                justificacion: formData.justificacion,
+                justificacion: `
+                    ${formData.motivo_reposicion ? `[Motivo: ${formData.motivo_reposicion}] ` : ""}
+                    ${formData.numero_telefono ? `[Num: ${formData.numero_telefono}] ` : ""}
+                    ${formData.tiene_evidencia ? `[Con Evidencia] ` : ""}
+                    ${formData.justificacion}
+                `.trim().replace(/\s+/g, ' '),
                 aplicativos: selectedApps,
                 estado: "Pendiente IT",
                 created_by: user?.id,
@@ -207,6 +300,7 @@ export default function SolicitarTelefonia() {
             // Reset form
             setFormData({
                 dni: "", nombre: "", area: "", puesto: "", n_linea: "",
+                numero_telefono: "", motivo_reposicion: "", tiene_evidencia: false,
                 tipo_servicio: "PAQUETE ASIGNADO", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: ""
@@ -225,105 +319,160 @@ export default function SolicitarTelefonia() {
     };
 
     // Components for steps
-    const StepIndicator = () => (
-        <div className="flex border-b mb-8">
-            {STEPS.map((step) => {
-                const isActive = step.id === currentStep;
-                const isCompleted = step.id < currentStep;
-                return (
-                    <div
-                        key={step.id}
-                        className={`flex-1 flex flex-col items-center p-3 border-b-2 transition-colors ${isActive ? "border-indigo-600 text-indigo-600" :
-                            isCompleted ? "border-green-500 text-green-600" : "border-transparent text-gray-400"
-                            }`}
-                    >
-                        <div className={`flex items-center justify-center w-8 h-8 rounded-full mb-1 ${isActive ? "bg-indigo-100" : isCompleted ? "bg-green-100" : "bg-gray-100"
-                            }`}>
-                            <step.icon className="w-4 h-4" />
-                        </div>
-                        <span className="text-xs md:text-sm font-medium">{step.label}</span>
-                    </div>
-                );
-            })}
-        </div>
-    );
+
 
     const renderStepContent = () => {
         switch (currentStep) {
             case 1:
                 return (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">DNI (Trabajador)</label>
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
+                        <div className="grid grid-cols-12 gap-4">
+                            <div className="col-span-12 md:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">DNI</label>
                                 <div className="flex gap-2">
                                     <input
                                         type="text"
                                         maxLength={8}
-                                        className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
                                         value={formData.dni}
                                         onChange={(e) => handleChange("dni", e.target.value)}
-                                        placeholder="Ingrese DOI/DNI"
+                                        placeholder="00000000"
                                     />
                                     <button
                                         type="button"
                                         onClick={handleSearchDni}
                                         disabled={searchingDni}
-                                        className="mt-1 inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm leading-4 font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50"
+                                        className="inline-flex items-center px-3 border border-gray-300 rounded bg-gray-50 hover:bg-white text-gray-600 transition-colors"
                                     >
                                         {searchingDni ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />}
                                     </button>
                                 </div>
                             </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-sm font-medium text-gray-700">Nombre del Trabajador</label>
+                            <div className="col-span-12 md:col-span-5">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo</label>
                                 <input
                                     type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-gray-50"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-gray-50/50 outline-none focus:border-indigo-500 transition-all"
                                     value={formData.nombre}
                                     onChange={(e) => handleChange("nombre", e.target.value)}
-                                // readOnly // Let users edit if they want, or keep readOnly if strictly from DNI
+                                    placeholder="Nombre del beneficiario"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Área / Gerencia</label>
+                            <div className="col-span-12 md:col-span-4">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Área</label>
                                 <input
                                     type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-gray-50"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-gray-50/50 outline-none focus:border-indigo-500 transition-all"
                                     value={formData.area}
                                     onChange={(e) => handleChange("area", e.target.value)}
+                                    placeholder="Gerencia / Área"
                                 />
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Puesto</label>
-                                <input
-                                    type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-gray-50"
+                            <div className="col-span-12 md:col-span-6">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Puesto</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.puesto}
                                     onChange={(e) => handleChange("puesto", e.target.value)}
-                                />
+                                >
+                                    <option value="">Seleccione Puesto...</option>
+                                    {COMMON_ROLES.map(role => (
+                                        <option key={role} value={role}>{role}</option>
+                                    ))}
+                                </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">N° Línea (Referencia)</label>
-                                <input
-                                    type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                    placeholder="Opcional"
+                            <div className="col-span-12 md:col-span-6">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Solicitud</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.n_linea}
                                     onChange={(e) => handleChange("n_linea", e.target.value)}
-                                />
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="Línea Nueva">Solicitar Línea Nueva</option>
+                                    <option value="Renovación">Renovación de Equipo</option>
+                                    <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
+                                </select>
                             </div>
+
+                            {/* CONDITIONAL FIELDS */}
+                            {(formData.n_linea === "Renovación" || formData.n_linea === "Reposición") && (
+                                <div className="col-span-12 md:col-span-6 animate-in fade-in slide-in-from-top-2">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Número de Celular</label>
+                                    <div className="relative">
+                                        <Smartphone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+                                        <input
+                                            type="tel"
+                                            className="block w-full rounded border-gray-300 border py-2 pl-9 pr-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                            value={formData.numero_telefono}
+                                            onChange={(e) => handleChange("numero_telefono", e.target.value)}
+                                            placeholder="999 999 999"
+                                        />
+                                    </div>
+                                    {formData.n_linea === "Renovación" && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={handleValidateRenewal}
+                                                disabled={validating || !formData.numero_telefono}
+                                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                                            >
+                                                {validating ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
+                                                Validar Antigüedad
+                                            </button>
+                                            {validationResult && (
+                                                <div className={`mt-2 p-2 rounded text-xs border ${validationResult.valid ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
+                                                    <p className="font-semibold">{validationResult.message}</p>
+                                                    {validationResult.equipo && <p>Equipo anterior: {validationResult.equipo}</p>}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {formData.n_linea === "Reposición" && (
+                                <>
+                                    <div className="col-span-12 md:col-span-6 animate-in fade-in slide-in-from-top-2">
+                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Reposición</label>
+                                        <select
+                                            className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                            value={formData.motivo_reposicion}
+                                            onChange={(e) => handleChange("motivo_reposicion", e.target.value)}
+                                        >
+                                            <option value="">Seleccione Motivo...</option>
+                                            <option value="ROBO">Robo</option>
+                                            <option value="PERDIDA">Pérdida</option>
+                                            <option value="DETERIORO">Deterioro</option>
+                                        </select>
+                                    </div>
+                                    <div className="col-span-12 animate-in fade-in slide-in-from-top-2">
+                                        <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-lg">
+                                            <input
+                                                type="checkbox"
+                                                id="chkEvidencia"
+                                                checked={formData.tiene_evidencia}
+                                                onChange={(e) => handleChange("tiene_evidencia", e.target.checked)}
+                                                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                            />
+                                            <label htmlFor="chkEvidencia" className="text-sm text-gray-700 select-none cursor-pointer">
+                                                Confirmo que tengo la <strong>evidencia (Denuncia Policial o Reporte)</strong> lista para entregar.
+                                            </label>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     </div>
                 );
             case 2:
                 return (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Tipo de Servicio</label>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Servicio</label>
                                 <select
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.tipo_servicio}
                                     onChange={(e) => handleChange("tipo_servicio", e.target.value)}
                                 >
@@ -333,9 +482,9 @@ export default function SolicitarTelefonia() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Periodo de Uso</label>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Periodo</label>
                                 <select
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.periodo_uso}
                                     onChange={(e) => handleChange("periodo_uso", e.target.value)}
                                 >
@@ -344,92 +493,161 @@ export default function SolicitarTelefonia() {
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Fecha Inicio</label>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cantidad</label>
+                                <input
+                                    type="number"
+                                    min={1}
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.cantidad_lineas}
+                                    onChange={(e) => handleChange("cantidad_lineas", e.target.value)}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha Inicio</label>
                                 <input
                                     type="date"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
                                     value={formData.fecha_inicio}
                                     onChange={(e) => handleChange("fecha_inicio", e.target.value)}
                                 />
                             </div>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Fecha Término</label>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha Fin</label>
                                 <input
                                     type="date"
                                     disabled={formData.periodo_uso !== "CAMPAÑA"}
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 disabled:bg-gray-100"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
                                     value={formData.fecha_fin}
                                     onChange={(e) => handleChange("fecha_fin", e.target.value)}
                                 />
                             </div>
+
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Fundo / Planta</label>
-                                <input
-                                    type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fundo / Planta</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.fundo_planta}
                                     onChange={(e) => handleChange("fundo_planta", e.target.value)}
-                                />
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="PLANTA FRESCO">PLANTA FRESCO</option>
+                                    <option value="PLANTA AREQUITA">PLANTA AREQUITA</option>
+                                    <option value="FUNDO MUCHIK">FUNDO MUCHIK</option>
+                                    <option value="COMPOSITAN">COMPOSITAN</option>
+                                    <option value="EL ARENAL">EL ARENAL</option>
+                                    <option value="CERRO PRIETO">CERRO PRIETO</option>
+                                    <option value="OTROS">OTROS</option>
+                                </select>
                             </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Cultivo</label>
-                                <input
-                                    type="text"
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            <div className="md:col-span-3">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cultivo</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.cultivo}
                                     onChange={(e) => handleChange("cultivo", e.target.value)}
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700">Cantidad</label>
-                                <input
-                                    type="number"
-                                    min={1}
-                                    className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                    value={formData.cantidad_lineas}
-                                    onChange={(e) => handleChange("cantidad_lineas", e.target.value)}
-                                />
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="ARANDANO">ARANDANO</option>
+                                    <option value="PALTA">PALTA</option>
+                                    <option value="ESPARRAGO">ESPARRAGO</option>
+                                    <option value="UVA">UVA</option>
+                                    <option value="MANGO">MANGO</option>
+                                    <option value="PIMIENTO">PIMIENTO</option>
+                                    <option value="OTROS">OTROS</option>
+                                </select>
                             </div>
                         </div>
                     </div>
                 );
             case 3:
+                const filteredApps = availableApps.filter(app =>
+                    app.nombre.toLowerCase().includes(appSearch.toLowerCase()) &&
+                    !selectedApps.includes(app.nombre)
+                );
+
                 return (
-                    <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
+                    <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">Justificación</label>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Justificación del Requerimiento</label>
                             <textarea
-                                rows={3}
-                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                placeholder="Motivo de la solicitud..."
+                                rows={2}
+                                className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all resize-none"
+                                placeholder="Especifique el motivo de la solicitud..."
                                 value={formData.justificacion}
                                 onChange={(e) => handleChange("justificacion", e.target.value)}
                             />
                         </div>
 
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-2">Seleccione los Aplicativos Requeridos</label>
-                            <p className="text-xs text-gray-500 mb-3">Marque los aplicativos que necesita tener instalados o configurados.</p>
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aplicativos Necesarios</label>
 
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                                {AVAILABLE_APPS.map((app) => {
-                                    const isSelected = selectedApps.includes(app);
-                                    return (
-                                        <div
-                                            key={app}
-                                            onClick={() => toggleApp(app)}
-                                            className={`relative cursor-pointer rounded-lg border p-3 flex flex-col items-center justify-center text-center gap-2 transition-all ${isSelected
-                                                ? "border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-500"
-                                                : "border-gray-200 hover:bg-gray-50 text-gray-600"
-                                                }`}
-                                        >
-                                            <LayoutGrid className={`h-6 w-6 ${isSelected ? "text-indigo-600" : "text-gray-400"}`} />
-                                            <span className="text-xs font-medium">{app}</span>
-                                            {isSelected && <CheckCircle2 className="h-4 w-4 text-indigo-600 absolute top-2 right-2" />}
-                                        </div>
-                                    )
-                                })}
+                            {/* Selected Apps List (Professional View) */}
+                            <div className="border border-gray-200 rounded-md bg-gray-50/50 mb-3 overflow-hidden">
+                                {selectedApps.length === 0 ? (
+                                    <div className="p-3 text-sm text-gray-400 italic text-center text-xs">
+                                        No se han seleccionado aplicativos
+                                    </div>
+                                ) : (
+                                    <div className="divide-y divide-gray-100">
+                                        {selectedApps.map(app => (
+                                            <div key={app} className="flex justify-between items-center p-2.5 bg-white hover:bg-gray-50 transition-colors">
+                                                <div className="flex items-center gap-2">
+                                                    <div className="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+                                                    <span className="text-sm font-medium text-gray-700">{app}</span>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleApp(app)}
+                                                    className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                                                    title="Quitar aplicativo"
+                                                >
+                                                    <X className="w-4 h-4" />
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                             </div>
+
+                            {/* Search & Add */}
+                            <div className="relative group">
+                                <Search className="absolute left-3 top-2.5 h-4 w-4 text-gray-400 group-focus-within:text-indigo-500 transition-colors" />
+                                <input
+                                    type="text"
+                                    className="block w-full rounded border-gray-300 border py-2 pl-9 pr-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                    placeholder="Buscar aplicativos para agregar..."
+                                    value={appSearch}
+                                    onChange={(e) => setAppSearch(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Dropdown / Output List */}
+                            {(appSearch || filteredApps.length > 0) && (
+                                <div className="mt-2 max-h-48 overflow-y-auto border border-gray-200 rounded-lg shadow-sm">
+                                    {filteredApps.length > 0 ? (
+                                        <div className="grid grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 gap-px bg-gray-200">
+                                            {filteredApps.map((app) => (
+                                                <button
+                                                    key={app.id}
+                                                    type="button"
+                                                    onClick={() => {
+                                                        toggleApp(app.nombre);
+                                                        setAppSearch(""); // Optional: clear search on add? maybe better to keep it if adding multiple
+                                                    }}
+                                                    className="flex items-center justify-between w-full p-2.5 bg-white hover:bg-gray-50 transition-colors text-left group"
+                                                >
+                                                    <span className="text-sm text-gray-700">{app.nombre}</span>
+                                                    <Plus className="w-4 h-4 text-gray-400 group-hover:text-indigo-600" />
+                                                </button>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <div className="p-4 text-center text-sm text-gray-500">
+                                            No se encontraron aplicativos.
+                                        </div>
+                                    )}
+                                </div>
+                            )}
                         </div>
                     </div>
                 );
@@ -438,16 +656,20 @@ export default function SolicitarTelefonia() {
         }
     };
 
+    const handleOpenDetail = (ticket: any) => {
+        setSelectedDetail(ticket);
+    };
+
     return (
-        <div className="max-w-7xl mx-auto py-8 px-4 sm:px-6 lg:px-8">
+        <div className="max-w-7xl mx-auto py-6 px-4 md:px-8">
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
             {/* Header + Action */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Solicitud de Telefonía</h1>
-                    <p className="text-gray-500 text-sm mt-1">
-                        Gestione sus requerimientos de equipos y líneas.
+                    <h1 className="text-xl font-bold text-gray-900 tracking-tight">Solicitud de Telefonía</h1>
+                    <p className="text-gray-500 text-xs">
+                        Gestión de equipos y líneas corporativas
                     </p>
                 </div>
                 {!isWizardOpen && (
@@ -456,150 +678,255 @@ export default function SolicitarTelefonia() {
                             setIsWizardOpen(true);
                             setCurrentStep(1);
                         }}
-                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-medium shadow-sm transition-colors"
+                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
-                        <Plus className="w-5 h-5" />
-                        Nuevo Ticket
+                        <Plus className="w-4 h-4" />
+                        Nueva Solicitud
                     </button>
                 )}
             </div>
 
             {isWizardOpen && (
                 // WIZARD FORM VIEW
-                <div className="bg-white rounded-xl border border-gray-200 shadow-sm p-6 mb-8 animate-in fade-in slide-in-from-top-4 duration-300">
-                    <div className="mb-8 border-b pb-4">
-                        <h2 className="text-xl font-bold text-gray-900">Nueva Solicitud</h2>
-                        <p className="text-gray-500 text-sm mt-1">
-                            Complete los pasos para registrar un requerimiento.
-                        </p>
+                <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
+                    {/* Header with Inline Stepper */}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-100 pb-4">
+                        <h2 className="text-lg font-bold text-gray-900">Nueva Solicitud</h2>
+                        <div className="flex items-center gap-1 text-xs sm:text-sm text-gray-500">
+                            <div className={`flex items-center gap-1 ${currentStep >= 1 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 1 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>1</div>
+                                <span>Beneficiario</span>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+
+                            <div className={`flex items-center gap-1 ${currentStep >= 2 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 2 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>2</div>
+                                <span>Servicio</span>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+
+                            <div className={`flex items-center gap-1 ${currentStep >= 3 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 3 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>3</div>
+                                <span>Justificación</span>
+                            </div>
+                        </div>
                     </div>
+                    {/* Removed Old StepIndicator component */}
 
-                    <StepIndicator />
-
-                    <form onSubmit={handleSubmit} className="mt-6">
-                        <div className="min-h-[320px]">
+                    <form onSubmit={handleSubmit} className="mt-8">
+                        <div className="min-h-[200px]">
                             {renderStepContent()}
                         </div>
 
-                        <div className="flex justify-between pt-6 border-t mt-8">
-                            <div className="flex gap-2">
-                                <button
-                                    type="button"
-                                    onClick={() => {
-                                        setIsWizardOpen(false);
-                                        setCurrentStep(1);
-                                    }}
-                                    className="px-4 py-2 border border-red-200 text-red-600 rounded-lg hover:bg-red-50 text-sm font-medium transition-colors"
-                                >
-                                    Cancelar
-                                </button>
+                        <div className="flex justify-between pt-4 border-t mt-6">
+                            <button
+                                type="button"
+                                onClick={() => {
+                                    setIsWizardOpen(false);
+                                    setCurrentStep(1);
+                                }}
+                                className="px-3 py-1.5 text-red-600 rounded hover:bg-red-50 text-sm font-medium transition-colors"
+                            >
+                                Cancelar
+                            </button>
 
+                            <div className="flex gap-2">
                                 {currentStep > 1 && (
                                     <button
                                         type="button"
                                         onClick={prevStep}
-                                        className="px-4 py-2 border border-gray-300 rounded-lg text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
+                                        className="px-4 py-1.5 border border-gray-300 rounded text-gray-700 hover:bg-gray-50 text-sm font-medium transition-colors"
                                     >
                                         Atrás
                                     </button>
                                 )}
-                            </div>
 
-                            {currentStep < 3 ? (
-                                <button
-                                    type="button"
-                                    onClick={nextStep}
-                                    className="px-6 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 text-sm font-medium inline-flex items-center gap-2 transition-colors"
-                                >
-                                    Siguiente <ChevronRight className="w-4 h-4" />
-                                </button>
-                            ) : (
-                                <button
-                                    type="submit"
-                                    disabled={submitting}
-                                    className="px-6 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50 transition-colors"
-                                >
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />}
-                                    Finalizar Solicitud
-                                </button>
-                            )}
+                                {currentStep < 3 ? (
+                                    <button
+                                        type="button"
+                                        onClick={nextStep}
+                                        className="px-4 py-1.5 bg-gray-900 text-white rounded hover:bg-gray-800 text-sm font-medium inline-flex items-center gap-2 transition-colors shadow-sm"
+                                    >
+                                        Siguiente <ChevronRight className="w-3 h-3" />
+                                    </button>
+                                ) : (
+                                    <button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="px-4 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50 transition-colors shadow-sm"
+                                    >
+                                        {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}
+                                        Finalizar
+                                    </button>
+                                )}
+                            </div>
                         </div>
                     </form>
                 </div>
             )}
 
-            {/* List of Requests */}
-            <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-                <div className="px-6 py-4 border-b border-gray-100 flex items-center gap-2 bg-gray-50/50">
-                    <History className="h-5 w-5 text-gray-500" />
-                    <h2 className="text-lg font-semibold text-gray-900">Mis Solicitudes</h2>
-                </div>
-
-                {historyLoading ? (
-                    <div className="p-12 flex justify-center">
-                        <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
-                    </div>
-                ) : myTickets.length === 0 ? (
-                    <div className="p-16 text-center">
-                        <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
-                            <FileText className="h-8 w-8 text-gray-400" />
-                        </div>
-                        <h3 className="text-lg font-medium text-gray-900">No tienes solicitudes</h3>
-                        <p className="text-gray-500 mt-1 max-w-sm mx-auto">
-                            Aún no has registrado solicitudes de telefonía. Presiona "Nuevo Ticket" para comenzar.
-                        </p>
-                    </div>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fecha</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Beneficiario</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Servicio</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Lugar/Cultivo</th>
-                                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
-                                </tr>
-                            </thead>
-                            <tbody className="bg-white divide-y divide-gray-200">
-                                {myTickets.map((t) => (
-                                    <tr key={t.id} className="hover:bg-gray-50 transition-colors">
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div className="flex items-center gap-2">
-                                                <Calendar className="w-4 h-4 text-gray-400" />
-                                                {new Date(t.created_at).toLocaleDateString()}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-gray-900">{t.beneficiario_nombre}</div>
-                                            <div className="text-xs text-gray-500">{t.beneficiario_puesto}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="text-sm text-gray-900">{t.tipo_servicio}</div>
-                                            <div className="text-xs text-gray-500">{t.cantidad_lineas} Línea(s) - {t.periodo_uso}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                                            <div className="flex items-center gap-1">
-                                                <MapPin className="w-3 h-3 text-gray-400" />
-                                                {t.fundo_planta}
-                                            </div>
-                                            <div className="text-xs text-gray-400 ml-4">{t.cultivo}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${t.estado === 'Entregado' ? 'bg-green-100 text-green-800' :
-                                                t.estado === 'Rechazada' ? 'bg-red-100 text-red-800' :
-                                                    'bg-yellow-100 text-yellow-800'
-                                                }`}>
-                                                {t.estado}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
+            {/* List of Requests - CARD VIEW */}
+            <div className="flex items-center gap-2 mb-4 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
+                <History className="h-5 w-5 text-gray-500" />
+                <h2 className="text-lg font-semibold text-gray-900">Mis Solicitudes</h2>
             </div>
+
+            {historyLoading ? (
+                <div className="p-12 flex justify-center">
+                    <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
+                </div>
+            ) : myTickets.length === 0 ? (
+                <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
+                        <FileText className="h-8 w-8 text-gray-400" />
+                    </div>
+                    <h3 className="text-lg font-medium text-gray-900">No tienes solicitudes</h3>
+                    <p className="text-gray-500 mt-1 max-w-sm mx-auto">
+                        Aún no has registrado solicitudes de telefonía. Presiona "Nuevo Ticket" para comenzar.
+                    </p>
+                </div>
+            ) : (
+                <div className="flex flex-col gap-3">
+                    {myTickets.map((t) => (
+                        <div
+                            key={t.id}
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-all group"
+                        >
+                            <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                                {/* LEFT: Main Info */}
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-3 mb-1">
+                                        <span className="text-xs text-gray-400 font-medium border border-gray-100 px-2 py-0.5 rounded-md bg-gray-50 flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" />
+                                            {new Date(t.created_at).toLocaleDateString()}
+                                        </span>
+                                        <StatusBadge estado={t.estado} />
+                                    </div>
+                                    <h3 className="text-base font-bold text-gray-900 truncate" title={t.beneficiario_nombre || ""}>
+                                        {t.beneficiario_nombre}
+                                    </h3>
+                                    <p className="text-sm text-gray-500">{t.beneficiario_puesto}</p>
+                                </div>
+
+                                {/* MIDDLE: Technial Details */}
+                                <div className="md:flex-1 md:border-l md:border-r border-gray-100 md:px-6 py-2 md:py-0 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
+                                    <div>
+                                        <span className="text-gray-400 text-xs block">Servicio</span>
+                                        <span className="font-medium text-gray-700">{t.tipo_servicio}</span>
+                                    </div>
+                                    <div>
+                                        <span className="text-gray-400 text-xs block">Cantidad</span>
+                                        <span className="font-medium text-gray-700">{t.cantidad_lineas} Línea(s)</span>
+                                    </div>
+                                    <div className="col-span-2">
+                                        <span className="text-gray-400 text-xs block">Ubicación</span>
+                                        <span className="font-medium text-gray-700 truncate">{t.fundo_planta}</span>
+                                    </div>
+                                </div>
+
+                                {/* RIGHT: Action */}
+                                <div className="w-full md:w-auto flex items-center justify-end">
+                                    <button
+                                        onClick={() => handleOpenDetail(t)}
+                                        className="px-4 py-2 bg-gray-50 text-blue-600 font-medium text-sm rounded-lg border border-blue-100 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center gap-2"
+                                    >
+                                        Ver Detalle
+                                        <ChevronRight className="w-4 h-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+
+            {/* DETAIL MODAL */}
+            {selectedDetail && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
+                    <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl animate-in zoom-in-95 duration-200 relative">
+                        <button
+                            onClick={() => setSelectedDetail(null)}
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                        >
+                            <X className="w-6 h-6" />
+                        </button>
+
+                        <div className="mb-6">
+                            <h3 className="text-lg font-bold text-gray-900 mb-1">Detalle de Solicitud</h3>
+                            <p className="text-sm text-gray-500">ID: {selectedDetail.id?.slice(0, 8)}...</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-3">
+                                <div className="grid grid-cols-2 gap-4 text-sm">
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Beneficiario</p>
+                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_nombre}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500 text-xs">DNI</p>
+                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_dni}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Área</p>
+                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_area}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Puesto</p>
+                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_puesto}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-gray-500 text-xs">Línea Referencia</p>
+                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_n_linea_ref || "N/A"}</p>
+                                    </div>
+                                    {selectedDetail.justificacion && (
+                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 col-span-2">
+                                            <label className="block text-xs text-gray-400 font-medium uppercase mb-1">Justificación / Detalles</label>
+                                            <p className="font-medium text-gray-900">{selectedDetail.justificacion}</p>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="border-t pt-4 space-y-3 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Tipo de Servicio:</span>
+                                    <span className="font-medium text-gray-900">{selectedDetail.tipo_servicio || "-"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Periodo:</span>
+                                    <span className="font-medium text-gray-900">{selectedDetail.periodo_uso || "-"}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-gray-600">Fundo / Planta:</span>
+                                    <span className="font-medium text-gray-900">{selectedDetail.fundo_planta || "-"}</span>
+                                </div>
+                                {selectedDetail.aplicativos && selectedDetail.aplicativos.length > 0 && (
+                                    <div>
+                                        <span className="block text-gray-600 mb-1">Aplicativos:</span>
+                                        <div className="flex flex-wrap gap-1">
+                                            {selectedDetail.aplicativos.map((app: string) => (
+                                                <span key={app} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
+                                                    {app}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        <div className="mt-8 flex justify-end">
+                            <button
+                                onClick={() => setSelectedDetail(null)}
+                                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

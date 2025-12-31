@@ -14,6 +14,13 @@ export type EstadoSolicitud =
     | "Rechazada"
     | "Cancelada";
 
+export interface ValidationResult {
+    valid: boolean;
+    lastDate?: string;
+    message: string;
+    equipo?: string;
+}
+
 export interface Equipo {
     id: string;
     marca: string;
@@ -22,6 +29,9 @@ export interface Equipo {
     color?: string | null;
     estado: EstadoEquipo;
     created_at?: string;
+    // Relations
+    chip_id?: string | null;
+    chip?: Chip | null;
 }
 
 export interface Chip {
@@ -30,6 +40,9 @@ export interface Chip {
     operador: string;
     estado: EstadoChip;
     created_at?: string;
+    // Relations
+    equipo_id?: string | null;
+    equipo?: Equipo | null;
 }
 
 export interface Solicitud {
@@ -41,8 +54,7 @@ export interface Solicitud {
     beneficiario_nombre?: string | null;
     beneficiario_area?: string | null;
     beneficiario_puesto?: string | null;
-    beneficiario_n_linea_ref?: string | null;
-
+    beneficiario_n_linea_ref?: string;
     tipo_servicio?: string | null;
     periodo_uso?: string | null;
     fecha_inicio_uso?: string | null;
@@ -89,16 +101,20 @@ export const telefoniaStore = {
     async fetchEquipos() {
         const { data, error } = await supabase
             .from("telefonia_equipos")
-            .select("*")
+            .select(`
+                *,
+                chip:telefonia_chips!telefonia_equipos_chip_id_fkey(*)
+            `)
             .order("created_at", { ascending: false });
         if (error) throw error;
         this.equipos = data as Equipo[];
     },
 
     async createEquipo(eq: Omit<Equipo, "id" | "created_at">) {
+        const { chip, ...payload } = eq;
         const { data, error } = await supabase
             .from("telefonia_equipos")
-            .insert([eq])
+            .insert([payload])
             .select()
             .single();
         if (error) throw error;
@@ -107,9 +123,10 @@ export const telefoniaStore = {
     },
 
     async updateEquipo(id: string, updates: Partial<Equipo>) {
+        const { chip, ...payload } = updates;
         const { data, error } = await supabase
             .from("telefonia_equipos")
-            .update(updates)
+            .update(payload)
             .eq("id", id)
             .select()
             .single();
@@ -122,16 +139,20 @@ export const telefoniaStore = {
     async fetchChips() {
         const { data, error } = await supabase
             .from("telefonia_chips")
-            .select("*")
+            .select(`
+                *,
+                equipo:telefonia_equipos!telefonia_chips_equipo_id_fkey(*)
+            `)
             .order("created_at", { ascending: false });
         if (error) throw error;
         this.chips = data as Chip[];
     },
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
+        const { equipo, ...payload } = chip;
         const { data, error } = await supabase
             .from("telefonia_chips")
-            .insert([chip])
+            .insert([payload])
             .select()
             .single();
         if (error) throw error;
@@ -140,9 +161,10 @@ export const telefoniaStore = {
     },
 
     async updateChip(id: string, updates: Partial<Chip>) {
+        const { equipo, ...payload } = updates;
         const { data, error } = await supabase
             .from("telefonia_chips")
-            .update(updates)
+            .update(payload)
             .eq("id", id)
             .select()
             .single();
@@ -172,8 +194,10 @@ export const telefoniaStore = {
     },
 
     async createSolicitud(sol: Partial<Solicitud>) {
-        // Omitting relations from insert
-        const { equipo, chip, id, created_at, ...payload } = sol;
+        // Omitting relations and mapping legacy/frontend-only fields
+        const { equipo, chip, id, created_at, ...rest } = sol;
+
+        const payload: any = { ...rest };
 
         const { data, error } = await supabase
             .from("telefonia_solicitudes")
@@ -213,4 +237,120 @@ export const telefoniaStore = {
         );
         return updated;
     },
+
+    // --- LINKING ---
+    async vincular(equipoId: string, chipId: string) {
+        // 1. Update Equipo -> set chip_id
+        const { error: errEq } = await supabase
+            .from("telefonia_equipos")
+            .update({ chip_id: chipId })
+            .eq("id", equipoId);
+        if (errEq) throw errEq;
+
+        // 2. Update Chip -> set equipo_id
+        const { error: errCh } = await supabase
+            .from("telefonia_chips")
+            .update({ equipo_id: equipoId })
+            .eq("id", chipId);
+        if (errCh) throw errCh;
+
+        // Refresh data to update UI
+        await this.fetchEquipos();
+        await this.fetchChips();
+    },
+
+    async desvincular(equipoId: string, chipId: string) {
+        // 1. Update Equipo -> clear chip_id
+        const { error: errEq } = await supabase
+            .from("telefonia_equipos")
+            .update({ chip_id: null })
+            .eq("id", equipoId);
+        if (errEq) throw errEq;
+
+        // 2. Update Chip -> clear equipo_id
+        const { error: errCh } = await supabase
+            .from("telefonia_chips")
+            .update({ equipo_id: null })
+            .eq("id", chipId);
+        if (errCh) throw errCh;
+
+        // Refresh data
+        await this.fetchEquipos();
+        await this.fetchChips();
+    },
+
+    // --- LOGIC / VALIDATIONS ---
+    async validateRenovacion(numero: string): Promise<ValidationResult> {
+        const { data, error } = await supabase
+            .from("telefonia_solicitudes")
+            .select(`
+                *,
+                equipo:telefonia_equipos(*)
+            `)
+            .eq("detalle_numero_telefono", numero)
+            .eq("estado", "Entregado")
+            .order("fecha_entrega", { ascending: false })
+            .limit(1);
+
+        if (error) throw error;
+
+        if (!data || data.length === 0) {
+            return {
+                valid: false,
+                message: "No se encontró historial de entregas para este número."
+            };
+        }
+
+        const lastSolicitud = data[0];
+        if (!lastSolicitud.fecha_entrega) {
+            return {
+                valid: false,
+                message: "El registro existe pero no tiene fecha de entrega."
+            };
+        }
+
+        const deliveryDate = new Date(lastSolicitud.fecha_entrega);
+        const today = new Date();
+
+        // Calcular diferencia en años
+        let yearsDiff = today.getFullYear() - deliveryDate.getFullYear();
+        const m = today.getMonth() - deliveryDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < deliveryDate.getDate())) {
+            yearsDiff--;
+        }
+
+        const infoEquipo = lastSolicitud.equipo
+            ? `${lastSolicitud.equipo.marca} ${lastSolicitud.equipo.modelo}`
+            : "Equipo desconocido";
+
+        if (yearsDiff >= 3) {
+            return {
+                valid: true,
+                lastDate: lastSolicitud.fecha_entrega,
+                equipo: infoEquipo,
+                message: `Última renovación: ${deliveryDate.toLocaleDateString()}. Han pasado ${yearsDiff} años.`
+            };
+        } else {
+            return {
+                valid: false,
+                lastDate: lastSolicitud.fecha_entrega,
+                equipo: infoEquipo,
+                message: `Última renovación: ${deliveryDate.toLocaleDateString()}. Solo han pasado ${yearsDiff} años (Regla: 3 años).`
+            };
+        }
+    },
+
+    async fetchHistorialEquipo(equipoId: string) {
+        const { data, error } = await supabase
+            .from("telefonia_solicitudes")
+            .select(`
+                *,
+                usuario:created_by ( nombre, area )
+            `)
+            .eq("equipo_asignado_id", equipoId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        return data as Solicitud[];
+    }
 };

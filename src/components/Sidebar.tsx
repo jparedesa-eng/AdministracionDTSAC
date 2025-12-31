@@ -6,7 +6,6 @@ import {
   Settings,
   HelpCircle,
   X,
-  LogOut,
   ChevronRight,
   ChevronDown,
   FilePlus2,
@@ -17,7 +16,6 @@ import {
   Users,
   Plane,
   CalendarDays,
-  MoreVertical,
   Smartphone,
   ShieldCheck,
   MapPin, // For Sedes
@@ -25,18 +23,19 @@ import {
   Briefcase
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 interface SidebarProps {
   open?: boolean; // Drawer en móvil
   onClose?: () => void; // Cerrar drawer en móvil
+  collapsed?: boolean; // Desktop collapsed state
 }
 
-export default function Sidebar({ open, onClose }: SidebarProps) {
+export default function Sidebar({ open, onClose, collapsed = false }: SidebarProps) {
   const location = useLocation();
-  const navigate = useNavigate();
-  const { logout, profile } = useAuth();
+  const { profile } = useAuth();
+
 
   // ======= PERMISOS desde profiles.allowed_views =======
   //
@@ -97,6 +96,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const canSeeConfigGerencias = hasAccess("/configuracion/gerencias");
   const canSeeConfigSedes = hasAccess("/configuracion/sedes");
   const canSeeConfigCentrales = hasAccess("/configuracion/centrales-cctv");
+  const canSeeAppsCelular = hasAccess("/configuracion/aplicativos-celular"); // 👈 NUEVO
 
   // Seguridad
   const canSeeSeg_Programacion = hasAccess("/seguridad/programacion");
@@ -141,7 +141,13 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
     setOpenSeguridad(inSeg);
   }, [location.pathname]);
 
-  const [showUserMenu, setShowUserMenu] = React.useState(false);
+  const SectionLabel: React.FC<{ children: React.ReactNode }> = ({
+    children,
+  }) => (
+    <div className={`mx-2 mb-2 mt-3 select-none px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${collapsed ? "hidden" : "block"}`}>
+      {children}
+    </div>
+  );
 
   // ======= Estilos =======
 
@@ -159,41 +165,33 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
   const iconIdle = "h-5 w-5 text-gray-500 group-hover:text-gray-700";
   const iconActive = "h-5 w-5 text-gray-700";
 
-  const handleLogout = () => {
-    logout();
-    navigate("/login", { replace: true });
-    onClose?.();
-  };
-
-  const SectionLabel: React.FC<{ children: React.ReactNode }> = ({
-    children,
-  }) => (
-    <div className="mx-2 mb-2 mt-3 select-none px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-      {children}
-    </div>
-  );
-
   const inConfigSection =
     location.pathname.startsWith("/config") ||
     location.pathname.startsWith("/configuracion");
 
   const SidebarBody = (
-    <div className="flex h-full w-72 flex-col bg-white">
+    <div className={`flex h-full flex-col bg-white transition-all duration-300 ${collapsed ? "w-20" : "w-72"}`}>
       {/* Brand */}
-      <div className="flex items-center justify-between border-b border-gray-100 px-4 py-4 md:justify-center">
+      <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between px-4"} border-b border-gray-100 py-4`}>
         <div className="flex items-center gap-2">
-          <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
+          {collapsed ? (
+            <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-8 object-contain" />
+          ) : (
+            <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
+          )}
         </div>
 
         {/* Cerrar (móvil) */}
-        <button
-          type="button"
-          aria-label="Cerrar menú"
-          onClick={onClose}
-          className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
-        >
-          <X className="h-5 w-5" />
-        </button>
+        {!collapsed && (
+          <button
+            type="button"
+            aria-label="Cerrar menú"
+            onClick={onClose}
+            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
+          >
+            <X className="h-5 w-5" />
+          </button>
+        )}
       </div>
 
       {/* Navegación */}
@@ -213,7 +211,7 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               {({ isActive }) => (
                 <>
                   <Home className={isActive ? iconActive : iconIdle} />
-                  <span className="font-medium">Dashboard</span>
+                  {!collapsed && <span className="font-medium">Dashboard</span>}
                 </>
               )}
             </NavLink>
@@ -275,26 +273,30 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       : iconIdle
                   }
                 />
-                <span className="font-medium">Camionetas</span>
-                <span className="ml-auto transition-transform">
-                  {openCamionetas ? (
-                    <ChevronDown
-                      className={
-                        location.pathname.startsWith("/camionetas")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  ) : (
-                    <ChevronRight
-                      className={
-                        location.pathname.startsWith("/camionetas")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  )}
-                </span>
+                {!collapsed && (
+                  <>
+                    <span className="font-medium">Camionetas</span>
+                    <span className="ml-auto transition-transform">
+                      {openCamionetas ? (
+                        <ChevronDown
+                          className={
+                            location.pathname.startsWith("/camionetas")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      ) : (
+                        <ChevronRight
+                          className={
+                            location.pathname.startsWith("/camionetas")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      )}
+                    </span>
+                  </>
+                )}
               </button>
 
               <AnimatePresence initial={false}>
@@ -311,9 +313,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/solicitar"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Solicitar (Creación de ticket)"
                       >
                         <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        Solicitar (Creación de ticket)
+                        {!collapsed && "Solicitar (Creación de ticket)"}
                       </NavLink>
                     )}
                     {canSeeCam_Admin && (
@@ -321,9 +324,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/administrar"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Administrar solicitudes"
                       >
                         <ListChecks className="h-4 w-4 text-gray-600" />
-                        Administrar solicitudes
+                        {!collapsed && "Administrar solicitudes"}
                       </NavLink>
                     )}
 
@@ -333,9 +337,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/garita"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Garita (Control QR)"
                       >
                         <ClipboardList className="h-4 w-4 text-gray-600" />
-                        Garita (Control QR)
+                        {!collapsed && "Garita (Control QR)"}
                       </NavLink>
                     )}
                     {canSeeCam_MiCamioneta && (
@@ -343,9 +348,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/mi-camioneta"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Mi Camioneta"
                       >
                         <Truck className="h-4 w-4 text-gray-600" />
-                        Mi Camioneta
+                        {!collapsed && "Mi Camioneta"}
                       </NavLink>
                     )}
 
@@ -354,9 +360,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/inventario"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Inventario Flota"
                       >
                         <Wrench className="h-4 w-4 text-gray-600" />
-                        Inventario Flota
+                        {!collapsed && "Inventario Flota"}
                       </NavLink>
                     )}
                     {canSeeCam_Conductores && (
@@ -364,9 +371,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/conductores"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Conductores"
                       >
                         <Users className="h-4 w-4 text-gray-600" />
-                        Conductores
+                        {!collapsed && "Conductores"}
                       </NavLink>
                     )}
                     {canSeeCam_RegGastos && (
@@ -374,9 +382,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/registros/gastos"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Registros Gastos"
                       >
                         <DollarSign className="h-4 w-4 text-gray-600" />
-                        Registros Gastos
+                        {!collapsed && "Registros Gastos"}
                       </NavLink>
                     )}
                     {canSeeCam_RegChecklist && (
@@ -384,9 +393,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/registros/checklist"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Registros Checklist"
                       >
                         <ClipboardList className="h-4 w-4 text-gray-600" />
-                        Registros Checklist
+                        {!collapsed && "Registros Checklist"}
                       </NavLink>
                     )}
                     {canSeeCam_Mantenimiento && (
@@ -394,9 +404,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/camionetas/mantenimiento"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Programación mantenimiento"
                       >
                         <CalendarDays className="h-4 w-4 text-gray-600" />
-                        Programación mantenimiento
+                        {!collapsed && "Programación mantenimiento"}
                       </NavLink>
                     )}
                   </motion.div>
@@ -435,26 +446,30 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       : iconIdle
                   }
                 />
-                <span className="font-medium">Pasajes &amp; Hospedaje</span>
-                <span className="ml-auto transition-transform">
-                  {openPasajes ? (
-                    <ChevronDown
-                      className={
-                        location.pathname.startsWith("/pasajes")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  ) : (
-                    <ChevronRight
-                      className={
-                        location.pathname.startsWith("/pasajes")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  )}
-                </span>
+                {!collapsed && (
+                  <>
+                    <span className="font-medium">Pasajes &amp; Hospedaje</span>
+                    <span className="ml-auto transition-transform">
+                      {openPasajes ? (
+                        <ChevronDown
+                          className={
+                            location.pathname.startsWith("/pasajes")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      ) : (
+                        <ChevronRight
+                          className={
+                            location.pathname.startsWith("/pasajes")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      )}
+                    </span>
+                  </>
+                )}
               </button>
 
               <AnimatePresence initial={false}>
@@ -471,9 +486,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/pasajes/solicitar"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Solicitar"
                       >
                         <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        Solicitar
+                        {!collapsed && "Solicitar"}
                       </NavLink>
                     )}
                     {canSeePas_Proveedor && (
@@ -481,9 +497,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/pasajes/proveedor"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Proveedor"
                       >
                         <DollarSign className="h-4 w-4 text-gray-600" />
-                        Proveedor
+                        {!collapsed && "Proveedor"}
                       </NavLink>
                     )}
                     {canSeePas_Gerencia && (
@@ -491,9 +508,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/pasajes/gerencia"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Gerencia (Aprobación)"
                       >
                         <ListChecks className="h-4 w-4 text-gray-600" />
-                        Gerencia (Aprobación)
+                        {!collapsed && "Gerencia (Aprobación)"}
                       </NavLink>
                     )}
                     {canSeePas_Gestion && (
@@ -501,9 +519,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/pasajes/gestion"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Gestión"
                       >
                         <Wrench className="h-4 w-4 text-gray-600" />
-                        Gestión
+                        {!collapsed && "Gestión"}
                       </NavLink>
                     )}
                     {canSeePas_Proveedores && (
@@ -511,9 +530,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/pasajes/proveedores"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Proveedores"
                       >
                         <Users className="h-4 w-4 text-gray-600" />
-                        Proveedores
+                        {!collapsed && "Proveedores"}
                       </NavLink>
                     )}
                   </motion.div>
@@ -553,26 +573,30 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       : iconIdle
                   }
                 />
-                <span className="font-medium">Telefonía</span>
-                <span className="ml-auto transition-transform">
-                  {openTelefonia ? (
-                    <ChevronDown
-                      className={
-                        location.pathname.startsWith("/telefonia")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  ) : (
-                    <ChevronRight
-                      className={
-                        location.pathname.startsWith("/telefonia")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  )}
-                </span>
+                {!collapsed && (
+                  <>
+                    <span className="font-medium">Telefonía</span>
+                    <span className="ml-auto transition-transform">
+                      {openTelefonia ? (
+                        <ChevronDown
+                          className={
+                            location.pathname.startsWith("/telefonia")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      ) : (
+                        <ChevronRight
+                          className={
+                            location.pathname.startsWith("/telefonia")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      )}
+                    </span>
+                  </>
+                )}
               </button>
 
               <AnimatePresence initial={false}>
@@ -589,9 +613,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/solicitar"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Solicitar"
                       >
                         <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        Solicitar
+                        {!collapsed && "Solicitar"}
                       </NavLink>
                     )}
                     {canSeeTel_Inventario && (
@@ -599,9 +624,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/inventario"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Inventario"
                       >
                         <Wrench className="h-4 w-4 text-gray-600" />
-                        Inventario
+                        {!collapsed && "Inventario"}
                       </NavLink>
                     )}
                     {canSeeTel_AprobIT && (
@@ -609,9 +635,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/aprobacion-it"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Aprobación IT"
                       >
                         <Wrench className="h-4 w-4 text-gray-600" />
-                        Aprobación IT
+                        {!collapsed && "Aprobación IT"}
                       </NavLink>
                     )}
                     {canSeeTel_AprobGerencia && (
@@ -619,9 +646,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/aprobacion-gerencia"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Aprobación Gerencia"
                       >
                         <ListChecks className="h-4 w-4 text-gray-600" />
-                        Aprobación Gerencia
+                        {!collapsed && "Aprobación Gerencia"}
                       </NavLink>
                     )}
                     {canSeeTel_AprobAdmin && (
@@ -629,9 +657,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/aprobacion-admin"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Aprobación Admin"
                       >
                         <DollarSign className="h-4 w-4 text-gray-600" />
-                        Aprobación Admin
+                        {!collapsed && "Aprobación Admin"}
                       </NavLink>
                     )}
                     {canSeeTel_Gestion && (
@@ -639,9 +668,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/telefonia/gestion"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Entregas / Historial"
                       >
                         <Truck className="h-4 w-4 text-gray-600" />
-                        Entregas / Historial
+                        {!collapsed && "Entregas / Historial"}
                       </NavLink>
                     )}
                   </motion.div>
@@ -680,26 +710,30 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       : iconIdle
                   }
                 />
-                <span className="font-medium">Seguridad Patrimonial</span>
-                <span className="ml-auto transition-transform">
-                  {openSeguridad ? (
-                    <ChevronDown
-                      className={
-                        location.pathname.startsWith("/seguridad")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  ) : (
-                    <ChevronRight
-                      className={
-                        location.pathname.startsWith("/seguridad")
-                          ? "h-4 w-4 text-white"
-                          : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                      }
-                    />
-                  )}
-                </span>
+                {!collapsed && (
+                  <>
+                    <span className="font-medium">Seguridad Patrimonial</span>
+                    <span className="ml-auto transition-transform">
+                      {openSeguridad ? (
+                        <ChevronDown
+                          className={
+                            location.pathname.startsWith("/seguridad")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      ) : (
+                        <ChevronRight
+                          className={
+                            location.pathname.startsWith("/seguridad")
+                              ? "h-4 w-4 text-white"
+                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                          }
+                        />
+                      )}
+                    </span>
+                  </>
+                )}
               </button>
 
               <AnimatePresence initial={false}>
@@ -716,9 +750,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/seguridad/programacion"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Programación de Puestos"
                       >
                         <CalendarDays className="h-4 w-4 text-gray-600" />
-                        Programación de Puestos
+                        {!collapsed && "Programación de Puestos"}
                       </NavLink>
                     )}
                     {canSeeSeg_Recursos && (
@@ -726,9 +761,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/seguridad/recursos"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Gestión de Recursos"
                       >
                         <Users className="h-4 w-4 text-gray-600" />
-                        Gestión de Recursos
+                        {!collapsed && "Gestión de Recursos"}
                       </NavLink>
                     )}
                     {canSeeSeg_ChecklistCamaras && (
@@ -736,9 +772,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/seguridad/checklist-camaras"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Checklist de Cámaras"
                       >
                         <ClipboardList className="h-4 w-4 text-gray-600" />
-                        Checklist de Cámaras
+                        {!collapsed && "Checklist de Cámaras"}
                       </NavLink>
                     )}
                     {canSeeSeg_InventarioCamaras && (
@@ -746,9 +783,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                         to="/seguridad/inventario-camaras"
                         className={({ isActive }) => submenuItem(isActive)}
                         onClick={onClose}
+                        title="Inventario de Cámaras"
                       >
                         <Wrench className="h-4 w-4 text-gray-600" />
-                        Inventario de Cámaras
+                        {!collapsed && "Inventario de Cámaras"}
                       </NavLink>
                     )}
                   </motion.div>
@@ -773,26 +811,30 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
               aria-controls="submenu-config"
             >
               <Settings className={inConfigSection ? iconActive : iconIdle} />
-              <span className="font-medium">Configuración</span>
-              <span className="ml-auto transition-transform">
-                {openConfigMenu ? (
-                  <ChevronDown
-                    className={
-                      inConfigSection
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                ) : (
-                  <ChevronRight
-                    className={
-                      inConfigSection
-                        ? "h-4 w-4 text-white"
-                        : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                    }
-                  />
-                )}
-              </span>
+              {!collapsed && (
+                <>
+                  <span className="font-medium">Configuración</span>
+                  <span className="ml-auto transition-transform">
+                    {openConfigMenu ? (
+                      <ChevronDown
+                        className={
+                          inConfigSection
+                            ? "h-4 w-4 text-white"
+                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                        }
+                      />
+                    ) : (
+                      <ChevronRight
+                        className={
+                          inConfigSection
+                            ? "h-4 w-4 text-white"
+                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                        }
+                      />
+                    )}
+                  </span>
+                </>
+              )}
             </button>
 
             <AnimatePresence initial={false}>
@@ -809,9 +851,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       to="/config"
                       className={({ isActive }) => submenuItem(isActive)}
                       onClick={onClose}
+                      title="General"
                     >
                       <Settings className="h-4 w-4 text-gray-600" />
-                      General
+                      {!collapsed && "General"}
                     </NavLink>
                   )}
 
@@ -820,9 +863,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       to="/configuracion/personal"
                       className={({ isActive }) => submenuItem(isActive)}
                       onClick={onClose}
+                      title="Personal"
                     >
                       <Users className="h-4 w-4 text-gray-600" />
-                      Personal
+                      {!collapsed && "Personal"}
                     </NavLink>
                   )}
 
@@ -831,9 +875,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       to="/configuracion/gerencias"
                       className={({ isActive }) => submenuItem(isActive)}
                       onClick={onClose}
+                      title="Gerencias"
                     >
                       <ClipboardList className="h-4 w-4 text-gray-600" />
-                      Gerencias
+                      {!collapsed && "Gerencias"}
                     </NavLink>
                   )}
 
@@ -842,9 +887,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       to="/configuracion/sedes"
                       className={({ isActive }) => submenuItem(isActive)}
                       onClick={onClose}
+                      title="Sedes"
                     >
                       <MapPin className="h-4 w-4 text-gray-600" />
-                      Sedes
+                      {!collapsed && "Sedes"}
                     </NavLink>
                   )}
 
@@ -853,9 +899,10 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                       to="/configuracion/centrales-cctv"
                       className={({ isActive }) => submenuItem(isActive)}
                       onClick={onClose}
+                      title="Centrales CCTV"
                     >
                       <Building2 className="h-4 w-4 text-gray-600" />
-                      Centrales CCTV
+                      {!collapsed && "Centrales CCTV"}
                     </NavLink>
                   )}
 
@@ -863,10 +910,23 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
                     to="/configuracion/supervisores"
                     className={({ isActive }) => submenuItem(isActive)}
                     onClick={onClose}
+                    title="Supervisores ST"
                   >
                     <Briefcase className="h-4 w-4 text-gray-600" />
-                    Supervisores ST
+                    {!collapsed && "Supervisores ST"}
                   </NavLink>
+
+                  {canSeeAppsCelular && (
+                    <NavLink
+                      to="/configuracion/aplicativos-celular"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Aplicativos MDM"
+                    >
+                      <Smartphone className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Aplicativos MDM"}
+                    </NavLink>
+                  )}
                 </motion.div>
               )}
             </AnimatePresence>
@@ -885,69 +945,21 @@ export default function Sidebar({ open, onClose }: SidebarProps) {
             {({ isActive }) => (
               <>
                 <HelpCircle className={isActive ? iconActive : iconIdle} />
-                <span className="font-medium">Ayuda</span>
+                {!collapsed && <span className="font-medium">Ayuda</span>}
               </>
             )}
           </NavLink>
         )}
       </nav>
 
-      {/* Usuario / footer */}
-      <div className="border-t border-gray-100 p-3">
-        <div className="relative flex items-center gap-3 rounded-xl p-2 hover:bg-gray-50 transition-colors">
-          <div className="grid h-10 w-10 place-items-center rounded-full bg-[#ff0000] text-white font-bold text-lg flex-shrink-0">
-            {profile?.nombre ? profile.nombre.charAt(0).toUpperCase() : "U"}
-          </div>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-semibold text-gray-900">
-              {profile?.nombre ?? "Usuario"}
-            </p>
-            <p className="truncate text-xs text-gray-500 font-medium">
-              {profile?.area ?? "—"}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={() => setShowUserMenu(!showUserMenu)}
-            className="flex h-8 w-8 items-center justify-center rounded-full text-gray-400 hover:bg-white hover:shadow-sm hover:text-gray-900 transition-all"
-          >
-            <MoreVertical className="h-4 w-4" />
-          </button>
-
-          {/* Menú desplegable "3 puntos" */}
-          <AnimatePresence>
-            {showUserMenu && (
-              <>
-                <div
-                  className="fixed inset-0 z-10"
-                  onClick={() => setShowUserMenu(false)}
-                />
-                <motion.div
-                  initial={{ opacity: 0, scale: 0.95, y: 10 }}
-                  animate={{ opacity: 1, scale: 1, y: 0 }}
-                  exit={{ opacity: 0, scale: 0.95, y: 10 }}
-                  className="absolute bottom-full right-2 mb-2 z-20 w-40 overflow-hidden rounded-xl border border-gray-100 bg-white shadow-xl"
-                >
-                  <button
-                    onClick={handleLogout}
-                    className="flex w-full items-center gap-2 px-4 py-3 text-left text-xs font-medium text-red-600 hover:bg-red-50 transition-colors"
-                  >
-                    <LogOut className="h-4 w-4" />
-                    Cerrar sesión
-                  </button>
-                </motion.div>
-              </>
-            )}
-          </AnimatePresence>
-        </div>
-      </div>
+      {/* Usuario / footer - REMOVED MOVED TO HEADER */}
     </div>
   );
 
   return (
     <>
       {/* Desktop */}
-      <aside className="fixed left-0 top-0 hidden h-screen w-72 border-r border-gray-100 bg-white md:block z-30">
+      <aside className={`fixed left-0 top-0 hidden h-screen border-r border-gray-100 bg-white md:block z-30 transition-all duration-300 ${collapsed ? "w-20" : "w-72"}`}>
         {SidebarBody}
       </aside>
 

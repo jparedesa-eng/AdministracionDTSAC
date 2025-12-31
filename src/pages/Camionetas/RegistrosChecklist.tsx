@@ -631,6 +631,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   const [placa, setPlaca] = React.useState("");
   const [km, setKm] = React.useState<string>("");
   const [lastKm, setLastKm] = React.useState<number | null>(null); // Nuevo estado para validación
+  const [kmError, setKmError] = React.useState<string | null>(null); // Estado para error de kilometraje
   const [responsable, setResponsable] = React.useState("");
   const [uDni, setUDni] = React.useState("");
   const [uNombre, setUNombre] = React.useState("");
@@ -839,7 +840,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
 
   // Nuevo efecto para obtener el último kilometraje
   React.useEffect(() => {
-    if (!placa) {
+    if (!placa || !fecha) {
       setLastKm(null);
       return;
     }
@@ -850,7 +851,8 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
           .from("checklists")
           .select("kilometraje")
           .eq("placa", placa)
-          .order("created_at", { ascending: false })
+          .lt("fecha", fecha) // Buscar anterior a la fecha seleccionada
+          .order("fecha", { ascending: false })
           .limit(1)
           .maybeSingle();
 
@@ -868,7 +870,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         console.error(err);
       }
     })();
-  }, [placa]);
+  }, [placa, fecha]);
 
   // Buscar fecha_ingreso del inventario cuando cambia la placa (solo si no estamos editando o si cambia manualmente)
   React.useEffect(() => {
@@ -902,6 +904,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     setPlacaSearch("");
     setPlacaOpen(false);
     sig.clear();
+    setKmError(null);
   };
 
   const handleUDniChange = (raw: string) => {
@@ -937,11 +940,11 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
 
     const valKm = km ? Number(km) : 0;
     if (valKm < 0) {
-      alert("El kilometraje no puede ser negativo.");
+      setKmError("El kilometraje no puede ser negativo.");
       return;
     }
     if (lastKm !== null && valKm < lastKm) {
-      alert(`El kilometraje ingresado (${valKm}) no puede ser menor al último registrado (${lastKm}).`);
+      setKmError(`El kilometraje ingresado (${valKm}) no puede ser menor al último registrado (${lastKm}).`);
       return;
     }
 
@@ -1136,15 +1139,20 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
             <div className="grid gap-1">
               <label className="text-sm font-medium">
                 Kilometraje
-                {lastKm !== null && <span className="ml-1 text-xs font-normal text-gray-500">(Último: {lastKm})</span>}
+                {lastKm !== null && <span className="ml-1 text-xs font-normal text-gray-500">(Último previo: {lastKm})</span>}
               </label>
               <input
                 type="number"
                 value={km}
-                onChange={(e) => setKm(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+                onChange={(e) => {
+                  setKm(e.target.value);
+                  setKmError(null);
+                }}
+                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-1 ${kmError ? "border-red-500 focus:ring-red-500" : "border-gray-200 focus:ring-gray-200"
+                  }`}
                 placeholder="Ej: 45231"
               />
+              {kmError && <span className="text-xs text-red-500 font-medium">{kmError}</span>}
             </div>
 
             <div className="grid gap-1">
