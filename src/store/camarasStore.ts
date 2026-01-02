@@ -61,7 +61,8 @@ export async function refreshCamaras(): Promise<void> {
     const { data, error } = await supabase
         .from("camaras")
         .select("*")
-        .order("codigo", { ascending: true });
+        .order("codigo", { ascending: true })
+        .limit(10000);
 
     if (error) {
         state.error = error.message;

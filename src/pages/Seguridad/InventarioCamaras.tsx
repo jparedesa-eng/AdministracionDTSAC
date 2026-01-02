@@ -121,8 +121,15 @@ function TabCamaras({
     const filtered = camaras.filter(c => {
         const matchSearch = c.codigo.toLowerCase().includes(search.toLowerCase()) ||
             c.nombre.toLowerCase().includes(search.toLowerCase());
-        const matchSede = !filterSede || c.sede_id === filterSede;
-        const matchCentral = !filterCentral || c.central_id === filterCentral;
+
+        // Trim IDs for robust comparison
+        const cSedeId = (c.sede_id || "").trim();
+        const fSedeId = filterSede.trim();
+        const cCentralId = (c.central_id || "").trim();
+        const fCentralId = filterCentral.trim();
+
+        const matchSede = !fSedeId || cSedeId === fSedeId;
+        const matchCentral = !fCentralId || cCentralId === fCentralId;
         const matchTipo = !filterTipo || c.tipo_componente === filterTipo;
         const matchUbicacion = !filterUbicacion || c.ubicacion === filterUbicacion;
         const matchEstado = filterEstado === "all" ||
