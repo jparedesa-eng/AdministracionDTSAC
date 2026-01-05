@@ -265,12 +265,7 @@ function formatForDateTimeLocal(iso?: string | null): string {
     return "";
   }
 }
-const KNOWN_STATUSES = [
-  "vigente", "por_vencer", "vencido", "faltante",
-  "funcional", "defecto_leve", "deteriorado",
-  "buen_estado", "rayado", "abollado", "danio_severo",
-  "no_entregado"
-];
+const KNOWN_STATUSES = CHECKLIST_CONFIG.flatMap(g => g.items.flatMap(i => i.options.flatMap(o => [o.value, o.label, o.label.toUpperCase()])));
 
 function normalizeItem(name: string, ok: boolean, rawStatus?: string, rawNota?: string): CkItem {
   let status = String(rawStatus ?? "");
@@ -477,29 +472,51 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
           ${g.items
             .map(
               (it) => {
-                // Mapeo de estados para el PDF
-                const statusMap: Record<string, { label: string; text: string; bg: string; border: string }> = {
-                  "vigente": { label: "Vigente", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
-                  "por_vencer": { label: "Por Vencer", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
-                  "vencido": { label: "Vencido", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
-                  "faltante": { label: "Faltante", text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
-                  "funcional": { label: "Funcional", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
-                  "defecto_leve": { label: "Defecto Leve", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
-                  "deteriorado": { label: "Deteriorado", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
-                  "buen_estado": { label: "Buen Estado", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
-                  "rayado": { label: "Rayado", text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
-                  "abollado": { label: "Abollado", text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
-                  "danio_severo": { label: "Daño Severo", text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
-                  "no_entregado": { label: "No Entregado", text: "#374151", bg: "#F3F4F6", border: "#D1D5DB" },
-                };
-
+                // Lógica unificada con CHECKLIST_CONFIG
                 const statusKey = it.status || it.nota || "";
 
-                const s = statusMap[statusKey] || (it.ok
-                  ? { label: "OK", text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" }
-                  : { label: it.nota || "NO", text: "#B91C1C", bg: "#FEF2F2", border: "#FCA5A5" });
+                // Buscar la opción en la configuración (case insensitive para titulo)
+                const groupConfig = CHECKLIST_CONFIG.find(gc => gc.title.toUpperCase() === g.titulo.toUpperCase());
+                const itemConfig = groupConfig?.items.find(ic => ic.name === it.name);
 
-                const hasPdfNote = it.nota && !statusMap[it.nota];
+                // Buscar opción por valor O por etiqueta
+                const option = itemConfig?.options.find(opt =>
+                  opt.value === statusKey ||
+                  opt.label.toUpperCase() === statusKey.toUpperCase()
+                );
+
+                // Mapa de colores para PDF (Hex codes)
+                const PDF_COLORS: Record<string, { text: string; bg: string; border: string }> = {
+                  green: { text: "#15803D", bg: "#ECFDF5", border: "#6EE7B7" },
+                  yellow: { text: "#A16207", bg: "#FEFCE8", border: "#FDE047" },
+                  orange: { text: "#C2410C", bg: "#FFF7ED", border: "#FDBA74" },
+                  red: { text: "#BE123C", bg: "#FFF1F2", border: "#FDA4AF" },
+                  gray: { text: "#374151", bg: "#F3F4F6", border: "#D1D5DB" }, // slate equiv
+                  slate: { text: "#374151", bg: "#F3F4F6", border: "#D1D5DB" },
+                };
+
+                // Determinar label y color
+                let label = "—";
+                let colorKey = "gray";
+
+                if (option) {
+                  label = option.label;
+                  colorKey = option.color;
+                } else if (it.ok) {
+                  // Fallback para OK (legacy o defecto)
+                  label = "OK";
+                  colorKey = "green";
+                } else {
+                  // Fallback para NO OK
+                  label = it.nota ? it.nota.toUpperCase() : (statusKey || "NO");
+                  colorKey = "red";
+                }
+
+                const s = PDF_COLORS[colorKey] || PDF_COLORS["gray"];
+
+                // Nota adicional: solo si la nota es diferente al statusKey (para no repetir label) y existe nota
+                // Y si encontramos opcion, verificamos que la nota no sea igual al label
+                const hasPdfNote = it.nota && it.nota !== statusKey && (!option || option.label.toUpperCase() !== it.nota.toUpperCase());
 
                 return `
               <div style="border:1px solid ${s.border}; border-radius:8px; padding:8px; font-size:12px; display:flex; flex-direction:column; gap:4px; background:${s.bg};">
@@ -508,7 +525,7 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
                     ${it.name}
                   </div>
                   <div style="display:flex; flex-direction:column; align-items:flex-end; gap:4px;">
-                    <span style="font-weight:700; font-size:11px; color:${s.text}">${s.label}</span>
+                    <span style="font-weight:700; font-size:11px; color:${s.text}">${label}</span>
                   </div>
                 </div>
                 ${hasPdfNote ? `<div style="color:#6B7280; font-size:11px; border-top:1px solid ${s.border}; margin-top:2px; padding-top:2px; font-style:italic;">Obs: ${it.nota}</div>` : ""}
@@ -1974,31 +1991,45 @@ export default function RegistrosChecklist() {
                         </div>
                         <div className="grid gap-2 p-3 sm:grid-cols-2">
                           {g.items.map((it) => {
+                            const statusKey = it.status || it.nota || "";
+
+
                             const getStatusDisplay = () => {
-                              const statusKey = it.status || it.nota || "";
-                              const statusMap: Record<string, { label: string; color: string }> = {
-                                "vigente": { label: "Vigente", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-                                "por_vencer": { label: "Por Vencer", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-                                "vencido": { label: "Vencido", color: "bg-orange-100 text-orange-700 border-orange-200" },
-                                "faltante": { label: "Faltante", color: "bg-rose-100 text-rose-700 border-rose-200" },
-                                "funcional": { label: "Funcional", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-                                "defecto_leve": { label: "Defecto Leve", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-                                "deteriorado": { label: "Deteriorado", color: "bg-orange-100 text-orange-700 border-orange-200" },
-                                "buen_estado": { label: "Buen Estado", color: "bg-emerald-100 text-emerald-700 border-emerald-200" },
-                                "rayado": { label: "Rayado", color: "bg-yellow-100 text-yellow-700 border-yellow-200" },
-                                "abollado": { label: "Abollado", color: "bg-orange-100 text-orange-700 border-orange-200" },
-                                "danio_severo": { label: "Daño Severo", color: "bg-rose-100 text-rose-700 border-rose-200" },
-                                "no_entregado": { label: "No Entregado", color: "bg-slate-100 text-slate-700 border-slate-200" }
+                              // Buscar en config (case insensitive para el grupo)
+                              const groupConfig = CHECKLIST_CONFIG.find(gc => gc.title.toUpperCase() === g.titulo.toUpperCase());
+                              const itemConfig = groupConfig?.items.find(ic => ic.name === it.name);
+
+                              // Buscar opción por valor O por etiqueta (para retrocompatibilidad)
+                              const option = itemConfig?.options.find(opt =>
+                                opt.value === statusKey ||
+                                opt.label.toUpperCase() === statusKey.toUpperCase()
+                              );
+
+                              const VIEW_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+                                green: { bg: "bg-emerald-100", text: "text-emerald-700", border: "border-emerald-200" },
+                                yellow: { bg: "bg-yellow-100", text: "text-yellow-700", border: "border-yellow-200" },
+                                orange: { bg: "bg-orange-100", text: "text-orange-700", border: "border-orange-200" },
+                                red: { bg: "bg-rose-100", text: "text-rose-700", border: "border-rose-200" },
+                                gray: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
+                                slate: { bg: "bg-slate-100", text: "text-slate-700", border: "border-slate-200" },
                               };
-                              if (statusMap[statusKey]) return statusMap[statusKey];
-                              return it.ok
-                                ? { label: "OK", color: "bg-emerald-100 text-emerald-700 border-emerald-200" }
-                                : { label: it.nota || "NO", color: "bg-rose-100 text-rose-700 border-rose-200" };
+
+                              if (option) {
+                                const c = VIEW_COLORS[option.color] || VIEW_COLORS["gray"];
+                                return { label: option.label, color: `${c.bg} ${c.text} ${c.border}` };
+                              }
+
+                              // Fallback logic improved
+                              if (it.ok) {
+                                return { label: "OK", color: "bg-emerald-100 text-emerald-700 border-emerald-200" };
+                              } else {
+                                // Si es un statusKey conocido pero no lo encontramos en la config (caso raro), intentamos formatearlo
+                                return { label: it.nota || statusKey || "NO", color: "bg-rose-100 text-rose-700 border-rose-200" };
+                              }
                             };
                             const status = getStatusDisplay();
-                            const hasObservation = it.nota && ![
-                              "vigente", "por_vencer", "vencido", "faltante", "funcional", "defecto_leve", "deteriorado", "buen_estado", "rayado", "abollado", "danio_severo", "no_entregado"
-                            ].includes(it.nota);
+                            // Mostrar observación si existe y no es redundante con el statusKey usado para encontrar la opción
+                            const hasObservation = it.nota && it.nota !== statusKey;
 
                             return (
                               <div key={it.name} className="flex flex-col gap-1 rounded-lg border border-gray-100 px-3 py-2">

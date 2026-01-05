@@ -137,6 +137,21 @@ function TabCamaras({
             (filterEstado === "inactiva" && !c.activa);
 
         return matchSearch && matchSede && matchCentral && matchTipo && matchUbicacion && matchEstado;
+    }).sort((a, b) => {
+        const partsA = a.codigo.split('-');
+        const partsB = b.codigo.split('-');
+
+        // Try to extract the number part (CAM-XXX-...)
+        if (partsA.length >= 2 && partsB.length >= 2) {
+            const numA = parseInt(partsA[1], 10);
+            const numB = parseInt(partsB[1], 10);
+
+            if (!isNaN(numA) && !isNaN(numB)) {
+                return numA - numB;
+            }
+        }
+
+        return a.codigo.localeCompare(b.codigo);
     });
 
     // Pagination Logic

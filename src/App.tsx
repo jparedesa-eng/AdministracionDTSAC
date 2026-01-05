@@ -59,6 +59,11 @@ import ProgramacionPuestos from "./pages/Seguridad/ProgramacionPuestos";
 import GestionRecursos from "./pages/Seguridad/GestionRecursos";
 import ChecklistCamaras from "./pages/Seguridad/ChecklistCamaras";
 import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
+import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen";
+import { ReportingManager } from "./pages/Seguridad/ReportingManager";
+import { AgentReportView } from "./pages/Seguridad/AgentReportView";
+import { INITIAL_AGENTS, INITIAL_POSTS } from "./mockData";
+import type { AlertSchedule, Agent, Post } from "./pages/types";
 
 /* Errores */
 import Forbidden403 from "./pages/Errors/403";
@@ -90,10 +95,11 @@ function ProtectedLayout() {
         open={isMobileOpen}
         onClose={() => setIsMobileOpen(false)}
         collapsed={isDesktopCollapsed}
+        onToggle={handleToggleSidebar}
       />
 
       <main className={`transition-all duration-300 ${!isDesktopCollapsed ? "md:pl-72" : "md:pl-20"}`}>
-        <div className="min-h-[calc(100vh-48px)] md:min-h-screen flex flex-col bg-slate-100">
+        <div className="min-h-screen flex flex-col bg-slate-100 pt-16">
           <div className="flex-1 p-4 md:p-6">
             <Outlet />
           </div>
@@ -104,6 +110,9 @@ function ProtectedLayout() {
 }
 
 export default function App() {
+  const [schedules, setSchedules] = React.useState<AlertSchedule[]>([]);
+  const [agents] = React.useState<Agent[]>(INITIAL_AGENTS);
+  const [posts] = React.useState<Post[]>(INITIAL_POSTS);
   return (
     <Routes>
       {/* RUTAS PÚBLICAS: login en / y /login */}
@@ -475,6 +484,34 @@ export default function App() {
             element={
               <ProtectedRoute path="/seguridad/inventario-camaras">
                 <InventarioCamaras />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/monitoreo-pt"
+            element={
+              <ProtectedRoute path="/seguridad/monitoreo-pt">
+                <MonitoreoPT />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/reporting-manager"
+            element={
+              <ProtectedRoute path="/seguridad/reporting-manager">
+                <ReportingManager />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/agent-report"
+            element={
+              <ProtectedRoute path="/seguridad/agent-report">
+                <AgentReportView
+                  schedules={schedules}
+                  setSchedules={setSchedules}
+                  posts={posts}
+                />
               </ProtectedRoute>
             }
           />

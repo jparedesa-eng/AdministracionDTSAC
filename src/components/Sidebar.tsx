@@ -20,7 +20,9 @@ import {
   ShieldCheck,
   MapPin, // For Sedes
   Building2,
-  Briefcase
+  Briefcase,
+  PanelLeft,
+  Monitor
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { NavLink, useLocation } from "react-router-dom";
@@ -30,9 +32,10 @@ interface SidebarProps {
   open?: boolean; // Drawer en móvil
   onClose?: () => void; // Cerrar drawer en móvil
   collapsed?: boolean; // Desktop collapsed state
+  onToggle?: () => void; // Toggle desktop sidebar
 }
 
-export default function Sidebar({ open, onClose, collapsed = false }: SidebarProps) {
+export default function Sidebar({ open, onClose, collapsed = false, onToggle }: SidebarProps) {
   const location = useLocation();
   const { profile } = useAuth();
 
@@ -103,6 +106,20 @@ export default function Sidebar({ open, onClose, collapsed = false }: SidebarPro
   const canSeeSeg_Recursos = hasAccess("/seguridad/recursos");
   const canSeeSeg_ChecklistCamaras = hasAccess("/seguridad/checklist-camaras");
   const canSeeSeg_InventarioCamaras = hasAccess("/seguridad/inventario-camaras");
+  const canSeeSeg_MonitoreoPT = hasAccess("/seguridad/monitoreo-pt");
+  const canSeeSeg_ReportingManager = hasAccess("/seguridad/reporting-manager");
+  const canSeeSeg_AgentReport = hasAccess("/seguridad/agent-report");
+
+  // Show section if any subsection is visible
+  const showSeguridad = showAny(
+    "/seguridad/programacion",
+    "/seguridad/recursos",
+    "/seguridad/checklist-camaras",
+    "/seguridad/inventario-camaras",
+    "/seguridad/monitoreo-pt",
+    "/seguridad/reporting-manager",
+    "/seguridad/agent-report"
+  );
 
   const canSeeAyuda = hasAccess("/ayuda");
 
@@ -141,13 +158,24 @@ export default function Sidebar({ open, onClose, collapsed = false }: SidebarPro
     setOpenSeguridad(inSeg);
   }, [location.pathname]);
 
+  // Fix: Maintain exact vertical height to prevent content jumping
   const SectionLabel: React.FC<{ children: React.ReactNode }> = ({
     children,
-  }) => (
-    <div className={`mx-2 mb-2 mt-3 select-none px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400 ${collapsed ? "hidden" : "block"}`}>
-      {children}
-    </div>
-  );
+  }) => {
+    if (collapsed) {
+      // Matches expanded state: mt-3 mb-2 + h-[17px] (approx line-height of text-[11px])
+      return (
+        <div className="mx-3 mt-3 mb-2 flex h-[17px] items-center">
+          <div className="h-px w-full bg-gray-200" />
+        </div>
+      );
+    }
+    return (
+      <div className="mx-2 mb-2 mt-3 flex h-[17px] items-center select-none px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
+        {children}
+      </div>
+    );
+  };
 
   // ======= Estilos =======
 
@@ -172,25 +200,55 @@ export default function Sidebar({ open, onClose, collapsed = false }: SidebarPro
   const SidebarBody = (
     <div className={`flex h-full flex-col bg-white transition-all duration-300 ${collapsed ? "w-20" : "w-72"}`}>
       {/* Brand */}
-      <div className={`flex items-center ${collapsed ? "justify-center" : "justify-between px-4"} border-b border-gray-100 py-4`}>
-        <div className="flex items-center gap-2">
-          {collapsed ? (
-            <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-8 object-contain" />
-          ) : (
-            <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
-          )}
-        </div>
-
-        {/* Cerrar (móvil) */}
-        {!collapsed && (
+      {/* Brand - Fixed height to prevent layout shifts */}
+      <div className={`flex items-center h-16 shrink-0 ${collapsed ? "justify-center" : "justify-between px-4"} border-b border-gray-100`}>
+        {collapsed ? (
           <button
-            type="button"
-            aria-label="Cerrar menú"
-            onClick={onClose}
-            className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
+            onClick={onToggle}
+            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+            title="Expandir barra lateral"
           >
-            <X className="h-5 w-5" />
+            <PanelLeft className="h-5 w-5 rotate-180" />
           </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2">
+              <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
+            </div>
+
+            {/* Desktop Toggle Button (only if passed) */}
+            {onToggle && (
+              <button
+                onClick={onToggle}
+                className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
+                title="Ocultar barra lateral"
+              >
+                <PanelLeft className="h-5 w-5" />
+              </button>
+            )}
+
+            {/* Cerrar (móvil) - Only shown if !collapsed (which is implied here inside !collapsed block, but logic is shared. Wait, mobile uses 'open' prop, logic above handles collapsed state for desktop.
+               The original code had the Close button inside the main div but distinct.
+               My replacement above handles the DESKTOP collapsed logic.
+               The MOBILE CLOSE button was previously:
+               {!collapsed && ( <button ... hidden md:inline-flex ... /> )}
+               Wait, mobile drawer is "fixed inset 0".
+               Let's re-verify where the Mobile Close button was.
+               It was checking !collapsed.
+               Actually, for mobile, 'collapsed' prop might be false (default), but 'open' is true.
+               The mobile drawer uses the SAME content 'SidebarBody'.
+               So in mobile view, 'collapsed' is usually false.
+               So we need to make sure the "Mobile Close" button is also rendered here or preserved.
+            */}
+            <button
+              type="button"
+              aria-label="Cerrar menú"
+              onClick={onClose}
+              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </>
         )}
       </div>
 
@@ -681,119 +739,146 @@ export default function Sidebar({ open, onClose, collapsed = false }: SidebarPro
           )}
 
         {/* Seguridad Patrimonial */}
-        {showAny(
-          "/seguridad/*",
-          "/seguridad/programacion",
-          "/seguridad/recursos",
-          "/seguridad/checklist-camaras",
-          "/seguridad/inventario-camaras"
-        ) && (
-            <>
-              <SectionLabel>Seguridad Patrimonial</SectionLabel>
-              <button
-                type="button"
-                onClick={() => setOpenSeguridad((v) => !v)}
-                className={[
-                  baseItem,
+        {showSeguridad && (
+          <>
+            <SectionLabel>Seguridad Patrimonial</SectionLabel>
+            <button
+              type="button"
+              onClick={() => setOpenSeguridad((v) => !v)}
+              className={[
+                baseItem,
+                location.pathname.startsWith("/seguridad")
+                  ? activeClass
+                  : idleClass,
+                "mt-1",
+              ].join(" ")}
+              aria-expanded={openSeguridad}
+              aria-controls="submenu-seguridad"
+            >
+              <ShieldCheck
+                className={
                   location.pathname.startsWith("/seguridad")
-                    ? activeClass
-                    : idleClass,
-                  "mt-1",
-                ].join(" ")}
-                aria-expanded={openSeguridad}
-                aria-controls="submenu-seguridad"
-              >
-                <ShieldCheck
-                  className={
-                    location.pathname.startsWith("/seguridad")
-                      ? iconActive
-                      : iconIdle
-                  }
-                />
-                {!collapsed && (
-                  <>
-                    <span className="font-medium">Seguridad Patrimonial</span>
-                    <span className="ml-auto transition-transform">
-                      {openSeguridad ? (
-                        <ChevronDown
-                          className={
-                            location.pathname.startsWith("/seguridad")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      ) : (
-                        <ChevronRight
-                          className={
-                            location.pathname.startsWith("/seguridad")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      )}
-                    </span>
-                  </>
-                )}
-              </button>
+                    ? iconActive
+                    : iconIdle
+                }
+              />
+              {!collapsed && (
+                <>
+                  <span className="font-medium">Seguridad Patrimonial</span>
+                  <span className="ml-auto transition-transform">
+                    {openSeguridad ? (
+                      <ChevronDown
+                        className={
+                          location.pathname.startsWith("/seguridad")
+                            ? "h-4 w-4 text-white"
+                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                        }
+                      />
+                    ) : (
+                      <ChevronRight
+                        className={
+                          location.pathname.startsWith("/seguridad")
+                            ? "h-4 w-4 text-white"
+                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
+                        }
+                      />
+                    )}
+                  </span>
+                </>
+              )}
+            </button>
 
-              <AnimatePresence initial={false}>
-                {openSeguridad && (
-                  <motion.div
-                    id="submenu-seguridad"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                  >
-                    {canSeeSeg_Programacion && (
-                      <NavLink
-                        to="/seguridad/programacion"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Programación de Puestos"
-                      >
-                        <CalendarDays className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Programación de Puestos"}
-                      </NavLink>
-                    )}
-                    {canSeeSeg_Recursos && (
-                      <NavLink
-                        to="/seguridad/recursos"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Gestión de Recursos"
-                      >
-                        <Users className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Gestión de Recursos"}
-                      </NavLink>
-                    )}
-                    {canSeeSeg_ChecklistCamaras && (
-                      <NavLink
-                        to="/seguridad/checklist-camaras"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Checklist de Cámaras"
-                      >
-                        <ClipboardList className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Checklist de Cámaras"}
-                      </NavLink>
-                    )}
-                    {canSeeSeg_InventarioCamaras && (
-                      <NavLink
-                        to="/seguridad/inventario-camaras"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Inventario de Cámaras"
-                      >
-                        <Wrench className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Inventario de Cámaras"}
-                      </NavLink>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
+            <AnimatePresence initial={false}>
+              {openSeguridad && (
+                <motion.div
+                  id="submenu-seguridad"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: "auto", opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
+                >
+                  {canSeeSeg_Programacion && (
+                    <NavLink
+                      to="/seguridad/programacion"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Programación de Puestos"
+                    >
+                      <CalendarDays className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Programación de Puestos"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_Recursos && (
+                    <NavLink
+                      to="/seguridad/recursos"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Gestión de Recursos"
+                    >
+                      <Users className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Gestión de Recursos"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_ChecklistCamaras && (
+                    <NavLink
+                      to="/seguridad/checklist-camaras"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Checklist de Cámaras"
+                    >
+                      <ClipboardList className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Checklist de Cámaras"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_InventarioCamaras && (
+                    <NavLink
+                      to="/seguridad/inventario-camaras"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Inventario de Cámaras"
+                    >
+                      <Wrench className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Inventario de Cámaras"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_MonitoreoPT && (
+                    <NavLink
+                      to="/seguridad/monitoreo-pt"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Monitoreo PT"
+                    >
+                      <Monitor className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Monitoreo PT"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_ReportingManager && (
+                    <NavLink
+                      to="/seguridad/reporting-manager"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Reporte Puestos"
+                    >
+                      <ShieldCheck className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Reporte Puestos"}
+                    </NavLink>
+                  )}
+                  {canSeeSeg_AgentReport && (
+                    <NavLink
+                      to="/seguridad/agent-report"
+                      className={({ isActive }) => submenuItem(isActive)}
+                      onClick={onClose}
+                      title="Terminal Agente"
+                    >
+                      <Smartphone className="h-4 w-4 text-gray-600" />
+                      {!collapsed && "Terminal Agente"}
+                    </NavLink>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </>
+        )}
 
         {/* Preferencias / Configuración (agrupado) */}
         {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias || canSeeConfigSedes || canSeeConfigCentrales) && (
