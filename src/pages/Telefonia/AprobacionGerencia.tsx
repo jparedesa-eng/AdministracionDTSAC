@@ -4,7 +4,9 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { UserCheck, Check, X, AlertCircle } from "lucide-react";
+import { UserCheck, Check, X, FileDown } from "lucide-react";
+import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
+import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 export default function AprobacionGerencia() {
     const [toast, setToast] = useState<ToastState>(null);
@@ -163,32 +165,15 @@ export default function AprobacionGerencia() {
                     open={!!selectedTicket}
                     onClose={() => setSelectedTicket(null)}
                     title={`Autorización: ${selectedTicket.beneficiario_nombre}`}
+                    size="lg"
                 >
-                    <div className="space-y-6">
-                        <div className="bg-gray-50 p-4 rounded-lg text-sm space-y-2 border border-gray-100">
-                            <h4 className="font-semibold text-gray-900 mb-2 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-gray-500" /> Detalle de Solicitud
-                            </h4>
-                            <div className="grid grid-cols-2 gap-x-4 gap-y-2">
-                                <p><span className="text-gray-500">Solicitante:</span> {selectedTicket.beneficiario_nombre}</p>
-                                <p><span className="text-gray-500">Área:</span> {selectedTicket.beneficiario_area}</p>
-                                <p><span className="text-gray-500">Puesto:</span> {selectedTicket.beneficiario_puesto}</p>
-                                <p><span className="text-gray-500">Línea Ref:</span> {selectedTicket.beneficiario_n_linea_ref || "N/A"}</p>
-                                <p><span className="text-gray-500">Periodo:</span> {selectedTicket.periodo_uso}</p>
-                            </div>
-                            <div className="pt-2 border-t border-gray-200 mt-2">
-                                <p className="mb-1"><span className="text-gray-500">Propuesta IT / Modelo:</span></p>
-                                <div className="bg-white border border-gray-200 p-2 rounded text-gray-800 font-medium">
-                                    {selectedTicket.alternativa_modelo || "Sin especificación técnica específica"}
-                                </div>
-                            </div>
-                            <div className="pt-2 border-t border-gray-200 mt-2">
-                                <p><span className="text-gray-500">Justificación del Usuario:</span></p>
-                                <p className="text-gray-800 italic mt-1">{selectedTicket.justificacion}</p>
-                            </div>
+                    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                        <div className="pt-2">
+                            <TicketDetailContent ticket={selectedTicket} />
                         </div>
 
-                        <div className="space-y-4 pt-2">
+                        {/* Actions */}
+                        <div className="pt-4 border-t border-gray-100 sticky bottom-0 bg-white">
                             {viewMode === "pending" ? (
                                 <div className="flex flex-col gap-3">
                                     <div className="flex gap-4">
@@ -204,7 +189,7 @@ export default function AprobacionGerencia() {
                                             className="flex-1 bg-blue-600 text-white rounded-xl py-2.5 font-medium hover:bg-blue-700 shadow-sm transition-all flex justify-center items-center gap-2"
                                         >
                                             <Check className="w-5 h-5" />
-                                            Aprobar
+                                            Aprobar Solicitud
                                         </button>
                                     </div>
                                     <button
@@ -216,25 +201,35 @@ export default function AprobacionGerencia() {
                                 </div>
                             ) : (
                                 <div className="flex flex-col gap-3">
+                                    {selectedTicket.estado === "Entregado" && (
+                                        <button
+                                            onClick={() => generateTicketPDF(selectedTicket)}
+                                            className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-lg font-medium hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
+                                        >
+                                            <FileDown className="w-5 h-5" />
+                                            Exportar Ticket PDF
+                                        </button>
+                                    )}
                                     <button
                                         onClick={() => setSelectedTicket(null)}
                                         className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
                                     >
-                                        Cerrar
+                                        Cerrar Detalle
                                     </button>
                                 </div>
                             )}
 
                             {viewMode === "pending" && (
-                                <p className="text-xs text-center text-gray-400">
-                                    Al aprobar, la solicitud pasará a Administración para compra o despacho.
+                                <p className="text-xs text-center text-gray-400 mt-2">
+                                    Al aprobar, la solicitud pasará a Administración para gestión.
                                 </p>
                             )}
                         </div>
                     </div>
                 </Modal>
-            )}
-        </div>
+            )
+            }
+        </div >
     );
 }
 

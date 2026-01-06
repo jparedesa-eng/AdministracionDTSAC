@@ -4,7 +4,9 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { CheckCircle2, ShoppingCart, X, AlertCircle } from "lucide-react";
+import { CheckCircle2, ShoppingCart, X, FileDown } from "lucide-react";
+import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
+import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 export default function AprobacionAdmin() {
     const [toast, setToast] = useState<ToastState>(null);
@@ -178,73 +180,51 @@ export default function AprobacionAdmin() {
                     open={!!selectedTicket}
                     onClose={() => setSelectedTicket(null)}
                     title={`Gestión Administrativa: ${selectedTicket.beneficiario_nombre}`}
+                    size="lg"
                 >
-                    <div className="space-y-6">
-                        <div className="bg-amber-50 p-4 rounded-lg text-sm space-y-2 border border-amber-100">
-                            <h4 className="font-semibold text-amber-900 mb-2 flex items-center gap-2">
-                                <AlertCircle className="w-4 h-4 text-amber-600" /> Resumen de Aprobaciones
-                            </h4>
-                            <div className="space-y-1">
-                                <p className="flex justify-between border-b border-amber-200 pb-1">
-                                    <span className="text-amber-700">Validación IT:</span>
-                                    <span className="font-medium text-amber-900">{selectedTicket.alternativa_modelo}</span>
-                                </p>
-                                <p className="flex justify-between pt-1">
-                                    <span className="text-amber-700">V°B° Gerencia:</span>
-                                    <span className="font-medium text-green-700">Autorizado</span>
-                                </p>
-                            </div>
+                    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                        <div className="pt-2">
+                            <TicketDetailContent ticket={selectedTicket} />
                         </div>
 
-                        <div className="space-y-4 pt-2">
-                            <div className="text-sm text-gray-600">
-                                <p className="mb-2">¿Confirma que se cuenta con el presupuesto/stock para proceder con la entrega de:</p>
-                                <ul className="list-disc pl-5 space-y-1 bg-gray-50 p-3 rounded border border-gray-100">
-                                    <li><strong>Servicio:</strong> {selectedTicket.tipo_servicio}</li>
-                                    <li><strong>Equipo/Módelo:</strong> {selectedTicket.alternativa_modelo}</li>
-                                    <li><strong>Línea Ref:</strong> {selectedTicket.beneficiario_n_linea_ref || "N/A"}</li>
-                                    <li><strong>Cantidad:</strong> {selectedTicket.cantidad_lineas} Línea(s)</li>
-                                </ul>
-                            </div>
-
-                            <div className="flex flex-col gap-3 pt-2">
-                                {viewMode === "pending" ? (
-                                    <div className="flex gap-4">
+                        {/* Actions remain below */}
+                        <div className="pt-4 border-t border-gray-100 sticky bottom-0 bg-white">
+                            {viewMode === "pending" ? (
+                                <div className="flex gap-4">
+                                    <button
+                                        onClick={() => handleDecision(false)}
+                                        className="flex-1 bg-white border-2 border-red-100 text-red-600 rounded-xl py-3 font-medium hover:bg-red-50 hover:border-red-200 transition-all flex justify-center items-center gap-2"
+                                    >
+                                        <X className="w-5 h-5" />
+                                        Rechazar
+                                    </button>
+                                    <button
+                                        onClick={() => handleDecision(true)}
+                                        className="flex-1 bg-amber-600 text-white rounded-xl py-3 font-medium hover:bg-amber-700 shadow-md hover:shadow-lg transition-all flex justify-center items-center gap-2"
+                                    >
+                                        <ShoppingCart className="w-5 h-5" />
+                                        Autorizar Compra/Entrega
+                                    </button>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col gap-3">
+                                    {selectedTicket.estado === "Entregado" && (
                                         <button
-                                            onClick={() => handleDecision(false)}
-                                            className="flex-1 bg-white border-2 border-red-100 text-red-600 rounded-xl py-2.5 font-medium hover:bg-red-50 hover:border-red-200 transition-all flex justify-center items-center gap-2"
+                                            onClick={() => generateTicketPDF(selectedTicket)}
+                                            className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2.5 rounded-xl font-medium hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
                                         >
-                                            <X className="w-5 h-5" />
-                                            Rechazar
+                                            <FileDown className="w-5 h-5" />
+                                            Exportar Ticket PDF
                                         </button>
-                                        <button
-                                            onClick={() => handleDecision(true)}
-                                            className="flex-1 bg-amber-600 text-white rounded-xl py-2.5 font-medium hover:bg-amber-700 shadow-sm transition-all flex justify-center items-center gap-2"
-                                        >
-                                            <CheckCircle2 className="w-5 h-5" />
-                                            Autorizar Entrega
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="flex flex-col gap-3">
-                                        <button
-                                            onClick={() => setSelectedTicket(null)}
-                                            className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-                                        >
-                                            Cerrar
-                                        </button>
-                                    </div>
-                                )}
-
-                                {viewMode === "pending" && (
+                                    )}
                                     <button
                                         onClick={() => setSelectedTicket(null)}
-                                        className="w-full py-2 bg-gray-100 text-gray-600 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                                        className="w-full py-3 bg-gray-100 text-gray-600 rounded-xl font-medium hover:bg-gray-200 transition-colors"
                                     >
-                                        Cancelar y Cerrar
+                                        Cerrar Detalle
                                     </button>
-                                )}
-                            </div>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </Modal>

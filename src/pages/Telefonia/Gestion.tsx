@@ -9,8 +9,11 @@ import {
     Truck,
     Search,
     Calendar,
-    Eraser
+    Eraser,
+    FileDown
 } from "lucide-react";
+import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
+import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 // --- SIGNATURE PAD HOOK ---
 function useSignaturePad() {
@@ -311,81 +314,11 @@ export default function GestionTelefonia() {
                     open={!!selectedTicket}
                     onClose={() => setSelectedTicket(null)}
                     title={selectedTicket.estado === "Programar Entrega" ? "Confirmar y Asignar Entrega" : `Detalle: Ticket ${selectedTicket.id.slice(0, 8)}`}
+                    size="lg"
                 >
-                    <div className="space-y-6">
-                        {/* INFO HEADER */}
-                        <div className="flex items-start justify-between pb-4 border-b border-gray-100">
-                            <div className="flex items-center gap-3">
-                                <div className="h-10 w-10 rounded-full bg-gray-100 flex items-center justify-center text-gray-600 font-bold border border-gray-200">
-                                    {selectedTicket.beneficiario_nombre?.charAt(0) || "U"}
-                                </div>
-                                <div>
-                                    <h3 className="text-sm font-semibold text-gray-900">{selectedTicket.beneficiario_nombre}</h3>
-                                    <p className="text-xs text-gray-500">{selectedTicket.beneficiario_puesto}</p>
-                                </div>
-                            </div>
-                            <StatusBadge estado={selectedTicket.estado} />
-                        </div>
-
-                        {/* INFO GRID */}
-                        <div className="grid grid-cols-2 gap-4 text-sm">
-                            <div className="space-y-1">
-                                <p className="text-gray-500 flex items-center gap-1"><Calendar className="w-3 h-3" /> Periodo</p>
-                                <p className="font-medium text-gray-900">{selectedTicket.periodo_uso}</p>
-                            </div>
-                            <div className="space-y-1">
-                                <p className="text-gray-500 flex items-center gap-1"><Truck className="w-3 h-3" /> Fundo / Planta</p>
-                                <p className="font-medium text-gray-900">{selectedTicket.fundo_planta}</p>
-                            </div>
-
-                            {/* Current Equipment Display for Renovations/Replacements */}
-                            {selectedTicket.beneficiario_n_linea_ref && (
-                                <div className="col-span-2 bg-blue-50 p-2 rounded border border-blue-100 mt-1">
-                                    <p className="text-xs text-blue-800 font-semibold mb-1">
-                                        Equipo Actual (Ref: {selectedTicket.beneficiario_n_linea_ref})
-                                    </p>
-                                    {(() => {
-                                        // Find chip with this number
-                                        const chip = telefoniaStore.chips.find(c => c.numero_linea === selectedTicket.beneficiario_n_linea_ref);
-                                        // Find equipment with this chip assigned
-                                        const currentEquip = telefoniaStore.equipos.find(e => e.chip_id === chip?.id || (chip?.equipo_id && e.id === chip.equipo_id));
-
-                                        if (currentEquip) {
-                                            return (
-                                                <p className="text-sm text-gray-800">
-                                                    {currentEquip.marca} {currentEquip.modelo} <span className="text-gray-500">(IMEI: {currentEquip.imei})</span>
-                                                </p>
-                                            );
-                                        }
-                                        return <p className="text-xs text-gray-500 italic">No se encontró equipo asignado a esta línea en inventario.</p>;
-                                    })()}
-                                </div>
-                            )}
-
-                            <div className="col-span-2 space-y-1 pt-2">
-                                <p className="text-gray-500">Justificación</p>
-                                <p className="bg-gray-50 p-2 rounded text-gray-700 italic border border-gray-100">{selectedTicket.justificacion}</p>
-                            </div>
-
-                            {selectedTicket.alternativa_modelo && (
-                                <div className="col-span-2 space-y-1 pt-2">
-                                    <p className="text-gray-500">Modelo Sugerido / Aprobado</p>
-                                    <p className="bg-emerald-50 p-2 rounded text-emerald-800 border border-emerald-100 font-medium">
-                                        {selectedTicket.alternativa_modelo}
-                                    </p>
-                                </div>
-                            )}
-
-                            {selectedTicket.aplicativos && selectedTicket.aplicativos.length > 0 && (
-                                <div className="col-span-2 space-y-1 pt-2">
-                                    <p className="text-gray-500">Aplicativos Instalados</p>
-                                    <div className="flex flex-wrap gap-2">
-                                        {selectedTicket.aplicativos.map(app => (
-                                            <span key={app} className="bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded text-xs border border-indigo-100">{app}</span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                    <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
+                        <div className="pt-2">
+                            <TicketDetailContent ticket={selectedTicket} />
                         </div>
 
                         {/* ENTREGA ACTION - Only available if ready for delivery */}
@@ -481,6 +414,15 @@ export default function GestionTelefonia() {
                                             ) : (
                                                 <span>{selectedTicket.recibido_por}</span>
                                             )}
+                                        </div>
+                                        <div className="mt-4 pt-4 border-t border-gray-200">
+                                            <button
+                                                onClick={() => generateTicketPDF(selectedTicket)}
+                                                className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
+                                            >
+                                                <FileDown className="w-4 h-4" />
+                                                Exportar Ticket PDF
+                                            </button>
                                         </div>
                                     </div>
                                 )}

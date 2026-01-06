@@ -19,6 +19,7 @@ import {
     X,
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
+import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 
 const COMMON_ROLES = [
@@ -843,86 +844,25 @@ export default function SolicitarTelefonia() {
             {/* DETAIL MODAL */}
             {selectedDetail && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl max-w-lg w-full p-6 shadow-xl animate-in zoom-in-95 duration-200 relative">
+                    <div className="bg-white rounded-xl max-w-3xl w-full p-6 shadow-xl animate-in zoom-in-95 duration-200 relative">
                         <button
                             onClick={() => setSelectedDetail(null)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600"
+                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
                         >
                             <X className="w-6 h-6" />
                         </button>
 
-                        <div className="mb-6">
-                            <h3 className="text-lg font-bold text-gray-900 mb-1">Detalle de Solicitud</h3>
-                            <p className="text-sm text-gray-500">ID: {selectedDetail.id?.slice(0, 8)}...</p>
-                        </div>
+                        <div className="pt-2">
+                            <TicketDetailContent ticket={selectedDetail} />
 
-                        <div className="space-y-4">
-                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-100 space-y-3">
-                                <div className="grid grid-cols-2 gap-4 text-sm">
-                                    <div>
-                                        <p className="text-gray-500 text-xs">Beneficiario</p>
-                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_nombre}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-gray-500 text-xs">DNI</p>
-                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_dni}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-gray-500 text-xs">Área</p>
-                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_area}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-gray-500 text-xs">Puesto</p>
-                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_puesto}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-gray-500 text-xs">Línea Referencia</p>
-                                        <p className="font-medium text-gray-900">{selectedDetail.beneficiario_n_linea_ref || "N/A"}</p>
-                                    </div>
-                                    {selectedDetail.justificacion && (
-                                        <div className="bg-gray-50 p-3 rounded-lg border border-gray-100 col-span-2">
-                                            <label className="block text-xs text-gray-400 font-medium uppercase mb-1">Justificación / Detalles</label>
-                                            <p className="font-medium text-gray-900">{selectedDetail.justificacion}</p>
-                                        </div>
-                                    )}
-                                </div>
+                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
+                                <button
+                                    onClick={() => setSelectedDetail(null)}
+                                    className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                                >
+                                    Cerrar
+                                </button>
                             </div>
-
-                            <div className="border-t pt-4 space-y-3 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Tipo de Servicio:</span>
-                                    <span className="font-medium text-gray-900">{selectedDetail.tipo_servicio || "-"}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Periodo:</span>
-                                    <span className="font-medium text-gray-900">{selectedDetail.periodo_uso || "-"}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-gray-600">Fundo / Planta:</span>
-                                    <span className="font-medium text-gray-900">{selectedDetail.fundo_planta || "-"}</span>
-                                </div>
-                                {selectedDetail.aplicativos && selectedDetail.aplicativos.length > 0 && (
-                                    <div>
-                                        <span className="block text-gray-600 mb-1">Aplicativos:</span>
-                                        <div className="flex flex-wrap gap-1">
-                                            {selectedDetail.aplicativos.map((app: string) => (
-                                                <span key={app} className="text-xs bg-indigo-50 text-indigo-700 px-2 py-0.5 rounded border border-indigo-100">
-                                                    {app}
-                                                </span>
-                                            ))}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-
-                        <div className="mt-8 flex justify-end">
-                            <button
-                                onClick={() => setSelectedDetail(null)}
-                                className="bg-gray-900 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-800 transition-colors"
-                            >
-                                Cerrar
-                            </button>
                         </div>
                     </div>
                 </div>

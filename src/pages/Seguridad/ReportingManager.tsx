@@ -315,9 +315,9 @@ export const ReportingManager: React.FC = () => {
         }
     };
 
-    const handleUpdateCheckpoint = async (scheduleId: string, cpId: string, newStatus: CheckpointStatus, clearDistress: boolean = false) => {
+    const handleUpdateCheckpoint = async (cpId: string, newStatus: CheckpointStatus, clearDistress: boolean = false) => {
         try {
-            await updateCheckpoint(scheduleId, cpId, {
+            await updateCheckpoint(cpId, {
                 status: newStatus,
                 is_distress: clearDistress ? false : undefined, // only update if clearing
                 manual_override: true,
@@ -584,21 +584,21 @@ export const ReportingManager: React.FC = () => {
 
                             <div className="grid grid-cols-2 gap-3">
                                 <button
-                                    onClick={() => handleUpdateCheckpoint(activeIntervention.scheduleId, activeIntervention.checkpoint.id, 'COMPLETED', true)}
+                                    onClick={() => handleUpdateCheckpoint(activeIntervention.checkpoint.id, 'COMPLETED', true)}
                                     className="bg-emerald-600 text-white py-3 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 shadow-lg flex flex-col items-center gap-1"
                                 >
                                     <CheckCircle2 size={16} /> Validar Reportado
                                 </button>
                                 {activeIntervention.checkpoint.isDistress ? (
                                     <button
-                                        onClick={() => handleUpdateCheckpoint(activeIntervention.scheduleId, activeIntervention.checkpoint.id, 'COMPLETED', true)}
+                                        onClick={() => handleUpdateCheckpoint(activeIntervention.checkpoint.id, 'COMPLETED', true)}
                                         className="bg-slate-900 text-white py-3 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black flex flex-col items-center gap-1"
                                     >
                                         <ShieldCheck size={16} /> Anular SOS
                                     </button>
                                 ) : (
                                     <button
-                                        onClick={() => handleUpdateCheckpoint(activeIntervention.scheduleId, activeIntervention.checkpoint.id, 'MISSED')}
+                                        onClick={() => handleUpdateCheckpoint(activeIntervention.checkpoint.id, 'MISSED')}
                                         className="bg-slate-100 text-slate-600 py-3 rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-slate-200 flex flex-col items-center gap-1"
                                     >
                                         <RotateCcw size={16} /> Mantener No Reportado

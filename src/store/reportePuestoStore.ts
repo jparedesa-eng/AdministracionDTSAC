@@ -230,7 +230,6 @@ export async function updateSchedule(id: string, date: string, updates: Partial<
 
 // Update a checkpoint status (Intervention / Validation)
 export async function updateCheckpoint(
-    scheduleId: string,
     checkpointId: string,
     updates: Partial<ReportePuestoDetalle>,
     currentDateView: string // to refresh
