@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Search, Clock, MapPin, Truck, Ship, Plane, Navigation2 } from 'lucide-react';
+import { Search, Truck, Ship, Plane, Navigation2 } from 'lucide-react';
 
 export const ROUTE_MATRIX = [
     { proceso: 'CONSERVA', ruta: 'PLANTA AREQUIPA - CALLAO', origen: 'PLANTA AREQUIPA', destino: 'CALLAO', min: '34:00', max: '36:00', tipoEnvio: 'MARITIMO', tipoViaje: 'REGULAR' },

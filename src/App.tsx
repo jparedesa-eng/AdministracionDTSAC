@@ -62,8 +62,8 @@ import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
 import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen";
 import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
-import { INITIAL_AGENTS, INITIAL_POSTS } from "./mockData";
-import type { AlertSchedule, Agent, Post } from "./pages/types";
+import { INITIAL_POSTS } from "./mockData";
+import type { AlertSchedule, Post } from "./pages/types";
 
 /* Errores */
 import Forbidden403 from "./pages/Errors/403";
@@ -111,7 +111,7 @@ function ProtectedLayout() {
 
 export default function App() {
   const [schedules, setSchedules] = React.useState<AlertSchedule[]>([]);
-  const [agents] = React.useState<Agent[]>(INITIAL_AGENTS);
+
   const [posts] = React.useState<Post[]>(INITIAL_POSTS);
   return (
     <Routes>

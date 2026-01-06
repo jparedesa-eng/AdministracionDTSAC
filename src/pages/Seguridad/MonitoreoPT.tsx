@@ -15,10 +15,7 @@ import {
     Route as RouteIcon,
     Edit2,
     Clock,
-    Map as MapIcon,
     ClipboardCopy,
-    User,
-    Container,
     AlertTriangle,
     CheckCircle2,
     Save,
@@ -33,9 +30,7 @@ import {
     Edit3,
     FileSpreadsheet,
     MapPin,
-    PlayCircle,
-    StopCircle,
-    CalendarClock
+    PlayCircle
 } from 'lucide-react';
 
 const GLOBAL_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };

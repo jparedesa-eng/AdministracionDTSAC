@@ -1,14 +1,10 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { AlertSchedule, CheckpointStatus, Post, Checkpoint } from '../types';
+import type { AlertSchedule, CheckpointStatus, Post } from '../types';
 import {
-    Menu,
-    RefreshCcw,
-    Search,
     ChevronRight,
     RotateCcw,
     CheckCircle2,
-    Clock,
     Sun,
     Moon,
     Home,
@@ -17,9 +13,6 @@ import {
     AlertTriangle,
     Settings2,
     LogOut,
-    Fingerprint,
-    MapPin,
-    User,
     Shield,
     UserPlus,
     X,
