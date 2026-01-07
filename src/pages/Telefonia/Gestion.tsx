@@ -4,7 +4,6 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { LoadingScreen } from "../../components/ui/LoadingScreen";
 import {
     Truck,
     Search,
@@ -222,9 +221,10 @@ export default function GestionTelefonia() {
         </div>
     );
 
-    if (loading && telefoniaStore.solicitudes.length === 0) {
-        return <LoadingScreen text="Cargando solicitudes..." />;
-    }
+    // Removed early return for LoadingScreen to avoid "page reload" feel
+    // if (loading && telefoniaStore.solicitudes.length === 0) {
+    //     return <LoadingScreen text="Cargando solicitudes..." />;
+    // }
 
     return (
         <div className="h-full flex flex-col space-y-4">
