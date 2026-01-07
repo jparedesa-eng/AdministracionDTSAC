@@ -138,7 +138,10 @@ export const telefoniaStore = {
             .from("telefonia_equipos")
             .select(`
                 *,
-                chip:telefonia_chips!telefonia_equipos_chip_id_fkey(*)
+                chip:telefonia_chips!telefonia_equipos_chip_id_fkey(
+                    *,
+                    plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
+                )
             `)
             .order("created_at", { ascending: false });
         if (eqError) throw eqError;

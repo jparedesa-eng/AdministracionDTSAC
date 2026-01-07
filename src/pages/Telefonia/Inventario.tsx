@@ -561,8 +561,14 @@ export default function InventarioTelefonia() {
                                             {item.chip ? (
                                                 item.chip.plan ? (
                                                     <div className="text-xs">
+                                                        <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
+                                                                item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
+                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
+                                                            }`}>
+                                                            {item.chip.plan.operador}
+                                                        </div>
                                                         <div className="font-semibold text-gray-800">{item.chip.plan.nombre}</div>
-                                                        <div className="text-gray-500 text-[10px]">S/ {item.chip.plan.costo} - {item.chip.plan.gigas}</div>
+                                                        <div className="text-gray-500 text-[10px]">S/ {item.chip.plan.costo.toFixed(2)} - {item.chip.plan.gigas}</div>
                                                     </div>
                                                 ) : (
                                                     <span className="text-gray-400 italic text-xs">Sin Plan</span>
