@@ -87,6 +87,7 @@ export default function SolicitarTelefonia() {
         fundo_planta: "",
         cultivo: "",
         cantidad_lineas: 1,
+        paquete_asignado: "", // New field
         justificacion: "",
     });
 
@@ -238,6 +239,10 @@ export default function SolicitarTelefonia() {
             }
         }
         if (step === 2) {
+            if (!formData.tipo_servicio) return "Seleccione el tipo de servicio";
+            if (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && !formData.paquete_asignado) {
+                return "Seleccione un paquete asignado";
+            }
             if (!formData.fecha_inicio) return "Ingrese fecha de inicio";
             if (formData.periodo_uso === "CAMPAÑA" && !formData.fecha_fin) return "Ingrese fecha de fin para campaña";
             if (!formData.fundo_planta) return "Ingrese Fundo / Planta";
@@ -280,7 +285,15 @@ export default function SolicitarTelefonia() {
                 beneficiario_puesto: formData.puesto,
                 beneficiario_n_linea_ref: formData.n_linea,
                 tipo_servicio: formData.tipo_servicio,
-                periodo_uso: formData.periodo_uso,
+                paquete_asignado: ["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio)
+                    ? formData.paquete_asignado
+                    : null,
+                plan_costo: ["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio)
+                    ? telefoniaStore.planes.find(p => p.nombre === formData.paquete_asignado)?.costo || 0
+                    : null,
+                plan_datos: ["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio)
+                    ? telefoniaStore.planes.find(p => p.nombre === formData.paquete_asignado)?.gigas || ""
+                    : null,
                 fecha_inicio_uso: formData.fecha_inicio,
                 fecha_fin_uso: formData.periodo_uso === "CAMPAÑA" ? formData.fecha_fin : null,
                 fundo_planta: formData.fundo_planta,
@@ -293,7 +306,7 @@ export default function SolicitarTelefonia() {
                     ${formData.justificacion}
                 `.trim().replace(/\s+/g, ' '),
                 aplicativos: selectedApps,
-                estado: "Pendiente IT",
+                estado: "Pendiente Gerencia",
                 created_by: user?.id,
             });
 
@@ -302,9 +315,10 @@ export default function SolicitarTelefonia() {
             setFormData({
                 dni: "", nombre: "", area: "", puesto: "", n_linea: "",
                 numero_telefono: "", motivo_reposicion: "", tiene_evidencia: false,
-                tipo_servicio: "PAQUETE ASIGNADO", periodo_uso: "PERMANENTE",
+                tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
-                fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: ""
+                fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
+                paquete_asignado: ""
             });
             setSelectedApps([]);
             setCurrentStep(1);
@@ -473,15 +487,40 @@ export default function SolicitarTelefonia() {
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Servicio</label>
                                 <select
+                                    required
                                     className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.tipo_servicio}
-                                    onChange={(e) => handleChange("tipo_servicio", e.target.value)}
+                                    onChange={(e) => setFormData({ ...formData, tipo_servicio: e.target.value, paquete_asignado: "" })}
                                 >
-                                    <option value="PAQUETE ASIGNADO">PAQUETE ASIGNADO</option>
+                                    <option value="">Seleccione...</option>
+                                    <option value="CLARO">CLARO</option>
+                                    <option value="ENTEL">ENTEL</option>
+                                    <option value="MOVISTAR">MOVISTAR</option>
                                     <option value="SOLO CHIP">SOLO CHIP</option>
                                     <option value="REPOSICIÓN">REPOSICIÓN DE EQUIPO</option>
                                 </select>
                             </div>
+
+                            {["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && (
+                                <div>
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Paquete Asignado</label>
+                                    <select
+                                        required
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                        value={formData.paquete_asignado}
+                                        onChange={(e) => setFormData({ ...formData, paquete_asignado: e.target.value })}
+                                    >
+                                        <option value="">Seleccione Plan...</option>
+                                        {telefoniaStore.planes
+                                            .filter(p => p.operador === formData.tipo_servicio && p.active)
+                                            .map(p => (
+                                                <option key={p.id} value={p.nombre}>
+                                                    {p.nombre} ({p.gigas})
+                                                </option>
+                                            ))}
+                                    </select>
+                                </div>
+                            )}
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Periodo</label>
                                 <select

@@ -27,7 +27,7 @@ export const generateTicketPDF = async (ticket: Solicitud) => {
 
     // -- HEADER CON LOGO --
     // Intentar cargar logo
-    const logoUrl = await getDataUrl("/danper.svg");
+    const logoUrl = await getDataUrl("public/danper.svg");
 
     if (logoUrl) {
         // Asumiendo que es un SVG compatible o convertido. 

@@ -1,7 +1,6 @@
 import React from "react";
 import {
     Calendar,
-    User,
     Smartphone,
     FileText,
     CheckCircle2,
@@ -121,8 +120,13 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                 <div className="space-y-3">
                     <div>
                         <span className="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-1">Tipo de Servicio</span>
-                        <div className="font-semibold text-gray-800 flex items-center gap-2">
-                            {ticket.tipo_servicio}
+                        <div className="font-semibold text-gray-800 flex flex-col gap-0.5 mt-0.5">
+                            <span>{ticket.tipo_servicio}</span>
+                            {ticket.paquete_asignado && (
+                                <span className="text-xs text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100 w-fit">
+                                    {ticket.paquete_asignado}
+                                </span>
+                            )}
                         </div>
                     </div>
                     <div>

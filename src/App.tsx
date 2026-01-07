@@ -12,9 +12,6 @@ import Login from "./pages/Auth/Login";
 
 /* Páginas base */
 import Dashboard from "./pages/Dashboard";
-import Inventario from "./pages/Inventario";
-import Compras from "./pages/Compras";
-import Logistica from "./pages/Logistica";
 import Config from "./pages/Config";
 import Ayuda from "./pages/Ayuda";
 
@@ -27,8 +24,6 @@ import RegistrosChecklist from "./pages/Camionetas/RegistrosChecklist";
 import Conductores from "./pages/Camionetas/Conductores";
 import Garita from "./pages/Camionetas/Garita";
 import MiCamioneta from "./pages/Camionetas/MiCamioneta";
-
-/* Programación de mantenimiento */
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
 
 /* Pasajes & Hospedaje */
@@ -133,30 +128,6 @@ export default function App() {
           />
 
           {/* Rutas base */}
-          <Route
-            path="/inventario"
-            element={
-              <ProtectedRoute path="/inventario">
-                <Inventario />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/compras"
-            element={
-              <ProtectedRoute path="/compras">
-                <Compras />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/logistica"
-            element={
-              <ProtectedRoute path="/logistica">
-                <Logistica />
-              </ProtectedRoute>
-            }
-          />
           <Route
             path="/config"
             element={
