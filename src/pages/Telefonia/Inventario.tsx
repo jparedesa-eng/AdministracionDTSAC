@@ -878,6 +878,38 @@ export default function InventarioTelefonia() {
                             />
                         </div>
                     </div>
+
+                    {/* SPECS */}
+                    <div className="grid grid-cols-3 gap-2">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 uppercase">RAM</label>
+                            <input
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.ram || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, ram: e.target.value })}
+                                placeholder="Ej: 8GB"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 uppercase">Almacenamiento</label>
+                            <input
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.almacenamiento || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, almacenamiento: e.target.value })}
+                                placeholder="Ej: 128GB"
+                            />
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-gray-700 uppercase">Pantalla</label>
+                            <input
+                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.pantalla || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, pantalla: e.target.value })}
+                                placeholder="Ej: 6.5''"
+                            />
+                        </div>
+                    </div>
+
                     <div>
                         <label className="block text-sm font-medium text-gray-700">IMEI</label>
                         <input
@@ -908,22 +940,20 @@ export default function InventarioTelefonia() {
                             </select>
                         </div>
                     </div>
-                    {/* Only show State if editing, otherwise default Available */}
-                    {draftEquipo.id && (
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Estado</label>
-                            <select
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                value={draftEquipo.estado}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, estado: e.target.value as any })}
-                            >
-                                <option value="Disponible">Disponible</option>
-                                <option value="Asignado">Asignado</option>
-                                <option value="Mantenimiento">Mantenimiento</option>
-                                <option value="Baja">Baja</option>
-                            </select>
-                        </div>
-                    )}
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Estado</label>
+                        <select
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={draftEquipo.estado}
+                            onChange={(e) => setDraftEquipo({ ...draftEquipo, estado: e.target.value as any })}
+                        >
+                            <option value="Disponible">Disponible</option>
+                            <option value="Asignado">Asignado</option>
+                            <option value="Mantenimiento">Mantenimiento</option>
+                            <option value="Baja">Baja</option>
+                        </select>
+                    </div>
 
                     {!draftEquipo.id && (
                         <div className="bg-gray-50 p-3 rounded-lg border border-gray-200">
@@ -1021,6 +1051,27 @@ export default function InventarioTelefonia() {
                             <option value="Asignado">Asignado</option>
                             <option value="Baja">Baja</option>
                         </select>
+                    </div>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Plan Asignado</label>
+                        <select
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={draftChip.plan_id || ""}
+                            onChange={(e) => setDraftChip({ ...draftChip, plan_id: e.target.value || null })}
+                        >
+                            <option value="">-- Sin Plan --</option>
+                            {telefoniaStore.planes
+                                .filter(p => !draftChip.operador || p.operador === draftChip.operador)
+                                .map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.nombre} (S/ {p.costo.toFixed(2)}) - {p.gigas}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Se muestran solo los planes de {draftChip.operador || "todos los operadores"}.
+                        </p>
                     </div>
                     <div className="flex justify-end pt-4">
                         <button

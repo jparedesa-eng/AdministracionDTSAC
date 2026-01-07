@@ -48,6 +48,10 @@ export interface Equipo {
     // Relations
     chip_id?: string | null;
     chip?: Chip | null;
+    // Specs
+    ram?: string | null;
+    almacenamiento?: string | null;
+    pantalla?: string | null;
     // Helpers (Populated by store)
     asignacion_activa?: Solicitud | null;
 }
