@@ -69,6 +69,11 @@ export default function InventarioTelefonia() {
     const [linkTarget, setLinkTarget] = useState<{ type: 'equipo' | 'chip', item: any } | null>(null);
     const [selectedLinkOption, setSelectedLinkOption] = useState("");
 
+    // Linking Plan View
+    const [openLinkPlan, setOpenLinkPlan] = useState(false);
+    const [selectedChipLink, setSelectedChipLink] = useState<Chip | null>(null);
+    const [selectedPlanId, setSelectedPlanId] = useState<string>("");
+
     // eSIM / New Line flow
     const [includeEsim, setIncludeEsim] = useState(false);
     const [esimData, setEsimData] = useState({ numero: "", operador: "" });
@@ -352,6 +357,26 @@ export default function InventarioTelefonia() {
         }
     };
 
+    // --- PLAN LINKING HANDLERS ---
+    const handleOpenLinkPlan = (chip: Chip) => {
+        setSelectedChipLink(chip);
+        setSelectedPlanId(chip.plan_id || "");
+        setOpenLinkPlan(true);
+    };
+
+    const submitLinkPlan = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!selectedChipLink) return;
+        try {
+            await telefoniaStore.updateChip(selectedChipLink.id, { plan_id: selectedPlanId || null });
+            setToast({ type: "success", message: "Plan actualizado" });
+            setOpenLinkPlan(false);
+            loadData();
+        } catch (error) {
+            setToast({ type: "error", message: "Error al vincular plan" });
+        }
+    };
+
     // --- RENDER HELPERS ---
     const EstadoBadge = ({ estado }: { estado: string }) => {
         let color = "bg-gray-100 text-gray-800";
@@ -481,6 +506,7 @@ export default function InventarioTelefonia() {
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
                                         <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
                                     </tr>
@@ -489,6 +515,7 @@ export default function InventarioTelefonia() {
                                     <tr>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Número</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo Vinculado</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
                                         <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
@@ -528,6 +555,20 @@ export default function InventarioTelefonia() {
                                                 </div>
                                             ) : (
                                                 <span className="text-gray-400 italic text-xs">Sin vincular</span>
+                                            )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {item.chip ? (
+                                                item.chip.plan ? (
+                                                    <div className="text-xs">
+                                                        <div className="font-semibold text-gray-800">{item.chip.plan.nombre}</div>
+                                                        <div className="text-gray-500 text-[10px]">S/ {item.chip.plan.costo} - {item.chip.plan.gigas}</div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 italic text-xs">Sin Plan</span>
+                                                )
+                                            ) : (
+                                                <span className="text-gray-300">-</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4">
@@ -624,6 +665,25 @@ export default function InventarioTelefonia() {
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium">{item.numero_linea}</td>
                                         <td className="px-6 py-4 text-gray-600">{item.operador}</td>
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-2">
+                                                {item.plan ? (
+                                                    <div className="text-xs">
+                                                        <div className="font-semibold text-gray-800">{item.plan.nombre}</div>
+                                                        <div className="text-gray-500 text-[10px]">{item.plan.gigas} - S/ {item.plan.costo}</div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 text-xs italic">Sin Plan</span>
+                                                )}
+                                                <button
+                                                    onClick={() => handleOpenLinkPlan(item)}
+                                                    className="p-1 rounded bg-gray-100 hover:bg-indigo-50 text-gray-500 hover:text-indigo-600 transition-colors"
+                                                    title="Vincular/Cambiar Plan"
+                                                >
+                                                    <Wifi className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </td>
                                         <td className="px-6 py-4">
                                             {item.equipo ? (
                                                 <div className="flex items-center gap-1 text-gray-700 text-xs">
@@ -1305,6 +1365,50 @@ export default function InventarioTelefonia() {
                     </div>
                 </div>
             </Modal>
-        </div >
+
+            {/* MODAL LINK PLAN */}
+            <Modal
+                open={openLinkPlan}
+                onClose={() => setOpenLinkPlan(false)}
+                title="Vincular Plan Telefónico"
+            >
+                <form onSubmit={submitLinkPlan} className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        Selecciona el plan para el chip <strong>{selectedChipLink?.numero_linea}</strong> ({selectedChipLink?.operador})
+                    </p>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Plan</label>
+                        <select
+                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={selectedPlanId}
+                            onChange={(e) => setSelectedPlanId(e.target.value)}
+                        >
+                            <option value="">-- Sin Plan --</option>
+                            {telefoniaStore.planes
+                                .filter(p => !selectedChipLink?.operador || p.operador === selectedChipLink.operador)
+                                .map(p => (
+                                    <option key={p.id} value={p.id}>
+                                        {p.nombre} (S/ {p.costo.toFixed(2)}) - {p.gigas}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                        <p className="text-xs text-gray-500 mt-1">
+                            Mostrando planes de {selectedChipLink?.operador}.
+                        </p>
+                    </div>
+
+                    <div className="flex justify-end pt-4">
+                        <button
+                            type="submit"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+                        >
+                            Guardar Vinculación
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+        </div>
     );
 }
