@@ -675,13 +675,6 @@ export default function InventarioTelefonia() {
                                                 ) : (
                                                     <span className="text-gray-400 text-xs italic">Sin Plan</span>
                                                 )}
-                                                <button
-                                                    onClick={() => handleOpenLinkPlan(item)}
-                                                    className="p-1 rounded bg-gray-100 hover:bg-indigo-50 text-gray-500 hover:text-indigo-600 transition-colors"
-                                                    title="Vincular/Cambiar Plan"
-                                                >
-                                                    <Wifi className="w-3 h-3" />
-                                                </button>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -697,11 +690,22 @@ export default function InventarioTelefonia() {
                                         <td className="px-6 py-4"><EstadoBadge estado={item.estado} /></td>
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => handleEditChip(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500"><Pencil className="h-4 w-4" /></button>
+                                                <button onClick={() => handleEditChip(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar Chip"><Pencil className="h-4 w-4" /></button>
+
+                                                {/* Botón Vincular Plan */}
+                                                <button
+                                                    onClick={() => handleOpenLinkPlan(item)}
+                                                    className={`p-1.5 rounded-md transition-colors ${item.plan ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'hover:bg-gray-100 text-gray-500'}`}
+                                                    title={item.plan ? "Cambiar Plan" : "Vincular Plan"}
+                                                >
+                                                    <Wifi className="h-4 w-4" />
+                                                </button>
+
+                                                {/* Botón Vincular Equipo */}
                                                 {!item.equipo ? (
-                                                    <button onClick={() => handleOpenLink('chip', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500"><Link className="h-4 w-4" /></button>
+                                                    <button onClick={() => handleOpenLink('chip', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Equipo"><Link className="h-4 w-4" /></button>
                                                 ) : (
-                                                    <button onClick={() => handleUnlink('chip', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500"><Unlink className="h-4 w-4" /></button>
+                                                    <button onClick={() => handleUnlink('chip', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500" title="Desvincular Equipo"><Unlink className="h-4 w-4" /></button>
                                                 )}
                                             </div>
                                         </td>
