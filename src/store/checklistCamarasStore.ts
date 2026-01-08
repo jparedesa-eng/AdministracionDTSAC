@@ -328,6 +328,19 @@ export async function resolverReporte(id: string, notasResolucion?: string): Pro
     await refreshReportes();
 }
 
+export async function deleteReporte(id: string): Promise<void> {
+    const { error } = await supabase
+        .from("reportes_camaras")
+        .delete()
+        .eq("id", id);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    await refreshReportes();
+}
+
 export function getReportesPendientes(): ReporteCamara[] {
     return state.reportes.filter(r => !r.resuelto);
 }

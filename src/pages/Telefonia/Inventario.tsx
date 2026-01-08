@@ -17,10 +17,14 @@ import {
     Unlink,
     Wifi,
     Trash2,
+    CheckCircle,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight,
     ArrowLeftRight,
     UserPlus,
-    AlertTriangle,
-    CheckCircle
+    AlertTriangle
 } from "lucide-react";
 
 export default function InventarioTelefonia() {
@@ -78,8 +82,17 @@ export default function InventarioTelefonia() {
     const [includeEsim, setIncludeEsim] = useState(false);
     const [esimData, setEsimData] = useState({ numero: "", operador: "" });
 
-    const loadData = async () => {
-        setLoading(true);
+    // Pagination
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10); // 10, 20, 50, 0 (Todos)
+
+    // Reset page on tab/search change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [activeTab, q, itemsPerPage]);
+
+    const loadData = async (isRefresh = false) => {
+        if (!isRefresh) setLoading(true);
         try {
             await Promise.all([
                 telefoniaStore.fetchEquipos(),
@@ -332,7 +345,8 @@ export default function InventarioTelefonia() {
                 await telefoniaStore.desvincular(item.equipo_id, item.id);
             }
             setToast({ type: "success", message: "Desvinculado correctamente" });
-            loadData();
+            setToast({ type: "success", message: "Desvinculado correctamente" });
+            loadData(true);
         } catch (e: any) {
             setToast({ type: "error", message: "Error al desvincular" });
         }
@@ -349,7 +363,7 @@ export default function InventarioTelefonia() {
             }
             setToast({ type: "success", message: "Vinculado correctamente" });
             setShowLinkModal(false);
-            loadData();
+            loadData(true);
         } catch (e) {
             setToast({ type: "error", message: "Error al vincular" });
         } finally {
@@ -371,7 +385,7 @@ export default function InventarioTelefonia() {
             await telefoniaStore.updateChip(selectedChipLink.id, { plan_id: selectedPlanId || null });
             setToast({ type: "success", message: "Plan actualizado" });
             setOpenLinkPlan(false);
-            loadData();
+            loadData(true);
         } catch (error) {
             setToast({ type: "error", message: "Error al vincular plan" });
         }
@@ -417,6 +431,31 @@ export default function InventarioTelefonia() {
             p.operador.toLowerCase().includes(term)
         );
     }) || [];
+
+    // Pagination Logic
+    const getCurrentData = () => {
+        const data = activeTab === "equipos" ? filteredEquipos :
+            activeTab === "chips" ? filteredChips :
+                filteredPlanes;
+
+        if (itemsPerPage === 0) return data;
+
+        const start = (currentPage - 1) * itemsPerPage;
+        return data.slice(start, start + itemsPerPage);
+    };
+
+    const currentData = getCurrentData();
+    const totalItems = activeTab === "equipos" ? filteredEquipos.length :
+        activeTab === "chips" ? filteredChips.length :
+            filteredPlanes.length;
+
+    const totalPages = itemsPerPage === 0 ? 1 : Math.ceil(totalItems / itemsPerPage);
+
+    const handlePageChange = (newPage: number) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -481,7 +520,7 @@ export default function InventarioTelefonia() {
                             activeTab === "chips" ? handleNewChip :
                                 handleNewPlan
                     }
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white shadow hover:bg-gray-800 transition-colors"
+                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo {
@@ -497,7 +536,7 @@ export default function InventarioTelefonia() {
                     <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                 </div>
             ) : (
-                <div className="rounded-xl border border-gray-200 bg-white shadow-sm overflow-hidden text-sm">
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden text-sm">
                     <div className="overflow-x-auto">
                         <table className="min-w-full divide-y divide-gray-200">
                             <thead className="bg-gray-50">
@@ -532,12 +571,19 @@ export default function InventarioTelefonia() {
                                 )}
                             </thead>
                             <tbody className="divide-y divide-gray-200 bg-white">
-                                {activeTab === "equipos" ? filteredEquipos.map((item) => (
+                                {activeTab === "equipos" ? (currentData as Equipo[]).map((item) => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900">{item.marca} {item.modelo}</div>
                                             <div className="text-gray-500 font-mono text-xs mt-0.5">IMEI: {item.imei}</div>
                                             <div className="text-gray-400 text-xs mt-0.5">{item.color || "Sin color"}</div>
+                                            {(item.ram || item.almacenamiento || item.pantalla) && (
+                                                <div className="flex flex-wrap gap-1 mt-1 text-[10px] text-gray-500">
+                                                    {item.ram && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.ram}</span>}
+                                                    {item.almacenamiento && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.almacenamiento}</span>}
+                                                    {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1 items-start">
@@ -562,8 +608,8 @@ export default function InventarioTelefonia() {
                                                 item.chip.plan ? (
                                                     <div className="text-xs">
                                                         <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
-                                                                item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
-                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
+                                                            item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
+                                                                item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
                                                             }`}>
                                                             {item.chip.plan.operador}
                                                         </div>
@@ -667,7 +713,7 @@ export default function InventarioTelefonia() {
                                     </tr>
                                 )) : null}
 
-                                {activeTab === "chips" ? filteredChips.map((item) => (
+                                {activeTab === "chips" ? (currentData as Chip[]).map((item) => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 font-medium">{item.numero_linea}</td>
                                         <td className="px-6 py-4 text-gray-600">{item.operador}</td>
@@ -718,7 +764,7 @@ export default function InventarioTelefonia() {
                                     </tr>
                                 )) : null}
 
-                                {activeTab === "planes" && filteredPlanes.map((item) => (
+                                {activeTab === "planes" && (currentData as PlanTelefonico[]).map((item) => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <span className={`px-2 py-1 rounded text-xs font-bold ${item.operador === 'CLARO' ? 'bg-red-100 text-red-800' :
@@ -768,6 +814,65 @@ export default function InventarioTelefonia() {
                             </tbody>
                         </table>
                     </div>
+                    {/* Pagination Controls */}
+                    {!loading && totalItems > 0 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 font-medium uppercase">Filas:</span>
+                                <select
+                                    className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
+                                    value={itemsPerPage}
+                                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                    <option value={0}>Todos</option>
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => handlePageChange(1)}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Primera Página"
+                                >
+                                    <ChevronsLeft className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Página Anterior"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+
+                                <span className="text-xs font-medium px-4 text-gray-400">
+                                    {currentPage} / {totalPages}
+                                </span>
+
+                                <button
+                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Página Siguiente"
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(totalPages)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Última Página"
+                                >
+                                    <ChevronsRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
@@ -788,7 +893,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Estado del Equipo al Retorno</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={devolucionData.estado}
                             onChange={(e) => setDevolucionData({ ...devolucionData, estado: e.target.value })}
                         >
@@ -800,7 +905,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Observaciones</label>
                         <textarea
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             rows={3}
                             value={devolucionData.observaciones}
                             onChange={(e) => setDevolucionData({ ...devolucionData, observaciones: e.target.value })}
@@ -835,7 +940,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">DNI Beneficiario</label>
                         <input
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={asignacionData.dni}
                             onChange={(e) => setAsignacionData({ ...asignacionData, dni: e.target.value })}
                             placeholder="DNI"
@@ -845,7 +950,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
                         <input
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={asignacionData.nombre}
                             onChange={(e) => setAsignacionData({ ...asignacionData, nombre: e.target.value })}
                             placeholder="Nombre Apellido"
@@ -856,7 +961,7 @@ export default function InventarioTelefonia() {
                             <label className="block text-sm font-medium text-gray-700">Área</label>
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={asignacionData.area}
                                 onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
                             />
@@ -865,7 +970,7 @@ export default function InventarioTelefonia() {
                             <label className="block text-sm font-medium text-gray-700">Puesto</label>
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={asignacionData.puesto}
                                 onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
                             />
@@ -893,7 +998,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Motivo de la Baja</label>
                         <textarea
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             rows={3}
                             value={bajaData.motivo}
                             onChange={(e) => setBajaData({ ...bajaData, motivo: e.target.value })}
@@ -925,7 +1030,7 @@ export default function InventarioTelefonia() {
                             <label className="block text-sm font-medium text-gray-700">Marca</label>
                             <select
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.marca || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, marca: e.target.value })}
                             >
@@ -942,7 +1047,7 @@ export default function InventarioTelefonia() {
                             <label className="block text-sm font-medium text-gray-700">Modelo</label>
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.modelo || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, modelo: e.target.value })}
                             />
@@ -954,7 +1059,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">RAM</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.ram || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, ram: e.target.value })}
                                 placeholder="Ej: 8GB"
@@ -963,7 +1068,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">Almacenamiento</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.almacenamiento || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, almacenamiento: e.target.value })}
                                 placeholder="Ej: 128GB"
@@ -972,7 +1077,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">Pantalla</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.pantalla || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, pantalla: e.target.value })}
                                 placeholder="Ej: 6.5''"
@@ -984,7 +1089,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">IMEI</label>
                         <input
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
                             value={draftEquipo.imei || ""}
                             onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value })}
                         />
@@ -993,7 +1098,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Color</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.color || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, color: e.target.value })}
                             />
@@ -1001,7 +1106,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Condición Inicial</label>
                             <select
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.condicion || "Nuevo"}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, condicion: e.target.value as any })}
                             >
@@ -1014,7 +1119,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Estado</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftEquipo.estado}
                             onChange={(e) => setDraftEquipo({ ...draftEquipo, estado: e.target.value as any })}
                         >
@@ -1045,7 +1150,7 @@ export default function InventarioTelefonia() {
                                     <div>
                                         <label className="block text-xs font-medium text-gray-500 uppercase">Número</label>
                                         <input
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white"
+                                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white"
                                             value={esimData.numero}
                                             onChange={(e) => setEsimData({ ...esimData, numero: e.target.value })}
                                             placeholder="999..."
@@ -1054,7 +1159,7 @@ export default function InventarioTelefonia() {
                                     <div>
                                         <label className="block text-xs font-medium text-gray-500 uppercase">Operador</label>
                                         <select
-                                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white"
+                                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white"
                                             value={esimData.operador}
                                             onChange={(e) => setEsimData({ ...esimData, operador: e.target.value })}
                                         >
@@ -1072,7 +1177,7 @@ export default function InventarioTelefonia() {
                     <div className="flex justify-end pt-4">
                         <button
                             type="submit"
-                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                         >
                             Guardar
                         </button>
@@ -1091,7 +1196,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Número de Línea</label>
                         <input
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftChip.numero_linea || ""}
                             onChange={(e) => setDraftChip({ ...draftChip, numero_linea: e.target.value })}
                         />
@@ -1100,7 +1205,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Operador</label>
                         <select
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftChip.operador || ""}
                             onChange={(e) => setDraftChip({ ...draftChip, operador: e.target.value })}
                         >
@@ -1113,7 +1218,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Estado</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftChip.estado}
                             onChange={(e) => setDraftChip({ ...draftChip, estado: e.target.value as any })}
                         >
@@ -1125,7 +1230,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Plan Asignado</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftChip.plan_id || ""}
                             onChange={(e) => setDraftChip({ ...draftChip, plan_id: e.target.value || null })}
                         >
@@ -1146,7 +1251,7 @@ export default function InventarioTelefonia() {
                     <div className="flex justify-end pt-4">
                         <button
                             type="submit"
-                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                         >
                             Guardar
                         </button>
@@ -1166,7 +1271,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Operador</label>
                         <select
                             required
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftPlan.operador}
                             onChange={(e) => setDraftPlan({ ...draftPlan, operador: e.target.value as any })}
                         >
@@ -1183,7 +1288,7 @@ export default function InventarioTelefonia() {
                                 type="number"
                                 step="0.10"
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftPlan.costo}
                                 onChange={(e) => setDraftPlan({ ...draftPlan, costo: parseFloat(e.target.value) })}
                             />
@@ -1192,7 +1297,7 @@ export default function InventarioTelefonia() {
                             <label className="block text-sm font-medium text-gray-700">Gigas (Datos)</label>
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftPlan.gigas}
                                 onChange={(e) => setDraftPlan({ ...draftPlan, gigas: e.target.value })}
                                 placeholder="Ej: 10GB o Ilimitado"
@@ -1204,7 +1309,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Minutos</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftPlan.llamadas}
                                 onChange={(e) => setDraftPlan({ ...draftPlan, llamadas: e.target.value })}
                             />
@@ -1212,7 +1317,7 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-sm font-medium text-gray-700">SMS</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftPlan.sms}
                                 onChange={(e) => setDraftPlan({ ...draftPlan, sms: e.target.value })}
                             />
@@ -1222,7 +1327,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Nombre Visible (Opcional)</label>
                         <input
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftPlan.nombre || ""}
                             onChange={(e) => setDraftPlan({ ...draftPlan, nombre: e.target.value })}
                             placeholder={`Ej: Plan ${draftPlan.costo || 0}`}
@@ -1246,7 +1351,7 @@ export default function InventarioTelefonia() {
                     <div className="flex justify-end pt-4">
                         <button
                             type="submit"
-                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
                         >
                             Guardar
                         </button>
@@ -1335,7 +1440,7 @@ export default function InventarioTelefonia() {
                     </p>
 
                     <select
-                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                        className="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                         value={selectedLinkOption}
                         onChange={(e) => setSelectedLinkOption(e.target.value)}
                     >
@@ -1390,7 +1495,7 @@ export default function InventarioTelefonia() {
                     <div>
                         <label className="block text-sm font-medium text-gray-700">Plan</label>
                         <select
-                            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={selectedPlanId}
                             onChange={(e) => setSelectedPlanId(e.target.value)}
                         >
@@ -1412,7 +1517,7 @@ export default function InventarioTelefonia() {
                     <div className="flex justify-end pt-4">
                         <button
                             type="submit"
-                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white shadow-sm hover:bg-indigo-700"
+                            className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700"
                         >
                             Guardar Vinculación
                         </button>

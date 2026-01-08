@@ -11,9 +11,8 @@ import ProtectedRoute from "./auth/ProtectedRoute";
 import Login from "./pages/Auth/Login";
 
 /* Páginas base */
-import Dashboard from "./pages/Dashboard";
-import Config from "./pages/Config";
 import Ayuda from "./pages/Ayuda";
+import HomeRedirect from "./pages/HomeRedirect";
 
 /* Camionetas */
 import Solicitar from "./pages/Camionetas/Solicitar";
@@ -118,24 +117,11 @@ export default function App() {
       <Route element={<RequireAuth />}>
         <Route element={<ProtectedLayout />}>
           {/* Dashboard (home después de login) */}
-          <Route
-            path="/dashboard"
-            element={
-              <ProtectedRoute path="/dashboard">
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/home" element={<HomeRedirect />} />
+
 
           {/* Rutas base */}
-          <Route
-            path="/config"
-            element={
-              <ProtectedRoute path="/config">
-                <Config />
-              </ProtectedRoute>
-            }
-          />
+
           <Route
             path="/ayuda"
             element={

@@ -1,7 +1,6 @@
 // src/components/Sidebar.tsx
 import React from "react";
 import {
-  Home,
   Truck,
   Settings,
   HelpCircle,
@@ -65,7 +64,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
   // ======= Visibilidad por ítem =======
 
-  const canSeeDashboard = hasAccess("/");
+
 
   // Camionetas
   const canSeeCam_Solicitar = hasAccess("/camionetas/solicitar");
@@ -255,26 +254,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
       {/* Navegación */}
       <nav className="flex-1 overflow-y-auto p-2">
         {/* Inicio */}
-        {canSeeDashboard && (
-          <>
-            <SectionLabel>Inicio</SectionLabel>
-            <NavLink
-              to="/"
-              end
-              className={({ isActive }) =>
-                [baseItem, isActive ? activeClass : idleClass].join(" ")
-              }
-              onClick={onClose}
-            >
-              {({ isActive }) => (
-                <>
-                  <Home className={isActive ? iconActive : iconIdle} />
-                  {!collapsed && <span className="font-medium">Dashboard</span>}
-                </>
-              )}
-            </NavLink>
-          </>
-        )}
+
 
         {/* ===== Tickets ===== */}
         {(showAny(

@@ -3,6 +3,12 @@ import {
     Plus,
     Search,
     PencilLine,
+    Power,
+    Building2,
+    Camera,
+    MapPin,
+    Activity,
+    Monitor
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
@@ -59,11 +65,9 @@ export default function InventarioCamaras() {
                             const camara = camaras.find(c => c.id === id);
                             if (!camara) return;
                             await upsertCamara({
+                                ...camara,
                                 ...data,
                                 id,
-                                codigo: data.codigo || camara.codigo,
-                                nombre: data.nombre || camara.nombre,
-                                central_id: data.central_id || camara.central_id,
                             });
                             setToast({ type: "success", message: "Cámara actualizada." });
                         } catch (error: any) {
@@ -99,6 +103,10 @@ function TabCamaras({
     const [filterEstado, setFilterEstado] = useState<"all" | "activa" | "inactiva">("all");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Camara | null>(null);
+
+    // Status Modal State
+    const [statusModalOpen, setStatusModalOpen] = useState(false);
+    const [statusItem, setStatusItem] = useState<Camara | null>(null);
 
     // Pagination State
     const [page, setPage] = useState(1);
@@ -300,9 +308,22 @@ function TabCamaras({
             };
             onUpdate(editItem.id, updateData);
         } else {
-            onAdd(formData);
+            onAdd({ ...formData, activa: true });
         }
         setModalOpen(false);
+    };
+
+    const handleStatusClick = (item: Camara) => {
+        setStatusItem(item);
+        setStatusModalOpen(true);
+    };
+
+    const handleConfirmStatus = () => {
+        if (statusItem) {
+            onUpdate(statusItem.id, { activa: !statusItem.activa });
+            setStatusModalOpen(false);
+            setStatusItem(null);
+        }
     };
 
     return (
@@ -327,69 +348,108 @@ function TabCamaras({
             </div>
 
             {/* Filters Container */}
-            <div className="bg-white p-4 rounded-xl border border-gray-200">
+            <div className="bg-white p-6 rounded-2xl border border-gray-200">
                 <div className="flex flex-col gap-4">
-                    <div className="relative max-w-sm w-full">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                        <input
-                            type="text"
-                            placeholder="Buscar por código o nombre..."
-                            className="pl-9 w-full rounded-xl border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-10 bg-gray-50/50 outline-none"
-                            value={search}
-                            onChange={e => setSearch(e.target.value)}
-                        />
-                    </div>
 
                     {/* Filters Row */}
-                    <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-                        <select
-                            value={filterCentral}
-                            onChange={e => setFilterCentral(e.target.value)}
-                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
-                        >
-                            <option value="">Todas las Centrales</option>
-                            {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
-                        </select>
+                    {/* Filters Row */}
+                    <div className="flex flex-wrap items-center gap-6 mt-4">
 
-                        <select
-                            value={filterSede}
-                            onChange={e => setFilterSede(e.target.value)}
-                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
-                        >
-                            <option value="">Todas las Sedes</option>
-                            {filteredSedesForFilter.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                        </select>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Central</label>
+                            <div className="relative">
+                                <Monitor size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <select
+                                    value={filterCentral}
+                                    onChange={e => setFilterCentral(e.target.value)}
+                                    className="bg-white border border-slate-300 text-sm font-semibold pl-9 pr-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[180px] appearance-none"
+                                >
+                                    <option value="">Todas las Centrales</option>
+                                    {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                                </select>
+                            </div>
+                        </div>
 
-                        <select
-                            value={filterTipo}
-                            onChange={e => setFilterTipo(e.target.value)}
-                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
-                        >
-                            <option value="">Todos los Tipos</option>
-                            <option value="CAMARA FIJA">Cámara Fija</option>
-                            <option value="CAMARA DOMO">Cámara Domo</option>
-                        </select>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Sede</label>
+                            <div className="relative">
+                                <Building2 size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <select
+                                    value={filterSede}
+                                    onChange={e => setFilterSede(e.target.value)}
+                                    className="bg-white border border-slate-300 text-sm font-semibold pl-9 pr-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[180px] appearance-none"
+                                >
+                                    <option value="">Todas las Sedes</option>
+                                    {filteredSedesForFilter.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                                </select>
+                            </div>
+                        </div>
 
-                        <select
-                            value={filterUbicacion}
-                            onChange={e => setFilterUbicacion(e.target.value)}
-                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
-                        >
-                            <option value="">Todas las Ubicaciones</option>
-                            <option value="INTERIOR">Interior</option>
-                            <option value="EXTERIOR">Exterior</option>
-                        </select>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Tipo Equipo</label>
+                            <div className="relative">
+                                <Camera size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <select
+                                    value={filterTipo}
+                                    onChange={e => setFilterTipo(e.target.value)}
+                                    className="bg-white border border-slate-300 text-sm font-semibold pl-9 pr-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[160px] appearance-none"
+                                >
+                                    <option value="">Todos los Tipos</option>
+                                    <option value="CAMARA FIJA">Cámara Fija</option>
+                                    <option value="CAMARA DOMO">Cámara Domo</option>
+                                </select>
+                            </div>
+                        </div>
 
-                        <select
-                            value={filterEstado}
-                            onChange={e => setFilterEstado(e.target.value as any)}
-                            className="rounded-lg border border-gray-200 text-sm focus:ring-1 focus:ring-gray-200 focus:border-gray-400 h-9 outline-none"
-                        >
-                            <option value="all">Todos los Estados</option>
-                            <option value="activa">Activas</option>
-                            <option value="inactiva">Inactivas</option>
-                        </select>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Ubicación</label>
+                            <div className="relative">
+                                <MapPin size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <select
+                                    value={filterUbicacion}
+                                    onChange={e => setFilterUbicacion(e.target.value)}
+                                    className="bg-white border border-slate-300 text-sm font-semibold pl-9 pr-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[160px] appearance-none"
+                                >
+                                    <option value="">Todas las Ubicaciones</option>
+                                    <option value="INTERIOR">Interior</option>
+                                    <option value="EXTERIOR">Exterior</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Estado</label>
+                            <div className="relative">
+                                <Activity size={14} className="absolute left-3 top-3 text-slate-400" />
+                                <select
+                                    value={filterEstado}
+                                    onChange={e => setFilterEstado(e.target.value as any)}
+                                    className="bg-white border border-slate-300 text-sm font-semibold pl-9 pr-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[160px] appearance-none"
+                                >
+                                    <option value="all">Todos los Estados</option>
+                                    <option value="activa">Activas</option>
+                                    <option value="inactiva">Inactivas</option>
+                                </select>
+                            </div>
+                        </div>
+
+
+
                     </div>
+                </div>
+            </div>
+
+            {/* Search Bar */}
+            <div className="px-1">
+                <div className="relative">
+                    <Search className="absolute left-4 top-3.5 h-4 w-4 text-slate-400" />
+                    <input
+                        type="text"
+                        placeholder="Buscar por código o nombre..."
+                        className="w-full bg-white border border-slate-200 text-sm font-semibold pl-11 pr-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                        value={search}
+                        onChange={e => setSearch(e.target.value)}
+                    />
                 </div>
             </div>
 
@@ -407,7 +467,7 @@ function TabCamaras({
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Ubicación</th>
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Área</th>
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Nave/Fundo</th>
-                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Tiempo Respaldo (Hrs)</th>
+                                <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Tiempo Respaldo (Dias)</th>
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Marca</th>
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Fecha Inst.</th>
                                 <th className="px-3 py-2 text-[11px] uppercase tracking-wider text-center">Status</th>
@@ -457,12 +517,22 @@ function TabCamaras({
                                             </span>
                                         </td>
                                         <td className="px-3 py-1.5 text-right">
-                                            <button
-                                                onClick={() => handleOpen(c)}
-                                                className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
-                                            >
-                                                <PencilLine className="h-3.5 w-3.5" />
-                                            </button>
+                                            <div className="flex justify-end gap-1">
+                                                <button
+                                                    onClick={() => handleStatusClick(c)}
+                                                    className={`p-1 rounded transition-colors ${c.activa ? 'bg-rose-50 text-rose-600 hover:bg-rose-100' : 'bg-emerald-50 text-emerald-600 hover:bg-emerald-100'}`}
+                                                    title={c.activa ? "Desactivar Cámara" : "Activar Cámara"}
+                                                >
+                                                    <Power className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleOpen(c)}
+                                                    className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
+                                                    title="Editar"
+                                                >
+                                                    <PencilLine className="h-3.5 w-3.5" />
+                                                </button>
+                                            </div>
                                         </td>
                                     </tr>
                                 );
@@ -594,7 +664,7 @@ function TabCamaras({
                             />
                         </div>
                         <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tiempo de Respaldo (Hrs)</label>
+                            <label className="block text-sm font-medium text-gray-700 mb-1.5">Tiempo de Respaldo (Dias)</label>
                             <input
                                 type="number"
                                 className="w-full h-11 rounded-lg border border-gray-200 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 text-sm px-3 outline-none"
@@ -667,19 +737,7 @@ function TabCamaras({
                         </div>
                     </div>
 
-                    {editItem && (
-                        <div className="flex items-center gap-2 mt-2">
-                            <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    checked={editItem.activa}
-                                    onChange={(e) => onUpdate(editItem.id, { activa: e.target.checked })}
-                                    className="rounded text-red-600 focus:ring-red-500"
-                                />
-                                Cámara Activa
-                            </label>
-                        </div>
-                    )}
+
 
                     <div className="flex justify-end gap-3 pt-2">
                         <button onClick={() => setModalOpen(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-50 rounded-lg">Cancelar</button>
@@ -687,7 +745,40 @@ function TabCamaras({
                     </div>
                 </div>
             </Modal>
-        </div >
+
+            {/* Status Confirmation Modal */}
+            <Modal
+                open={statusModalOpen}
+                onClose={() => setStatusModalOpen(false)}
+                title={statusItem?.activa ? "Desactivar Cámara" : "Activar Cámara"}
+                size="sm"
+            >
+                <div className="mt-2">
+                    <p className="text-sm text-gray-500">
+                        ¿Estás seguro que deseas {statusItem?.activa ? "desactivar" : "activar"} la cámara <strong>{statusItem?.codigo}</strong>?
+                        {statusItem?.activa && " Esta acción ocultará la cámara de los checklists activos."}
+                    </p>
+                    <div className="mt-6 flex justify-end gap-3">
+                        <button
+                            onClick={() => setStatusModalOpen(false)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleConfirmStatus}
+                            className={`px-4 py-2 text-sm font-medium text-white rounded-lg focus:outline-none focus:ring-2 focus:ring-offset-2 ${statusItem?.activa
+                                ? "bg-red-600 hover:bg-red-700 focus:ring-red-500"
+                                : "bg-emerald-600 hover:bg-emerald-700 focus:ring-emerald-500"
+                                }`}
+                        >
+                            Confirmar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
     );
 }
+
 

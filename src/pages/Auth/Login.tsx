@@ -21,7 +21,7 @@ export default function Login() {
   // - si hay from válido, lo usamos
   const redirectTo =
     !rawFrom || rawFrom === "/" || rawFrom.startsWith("/login")
-      ? "/dashboard"
+      ? "/home"
       : rawFrom;
 
   const [username, setUsername] = React.useState("");

@@ -46,7 +46,7 @@ export default function ProtectedRoute({
   // Si hubo timeout del perfil, redirigir a dashboard con advertencia
   if (!profile && profileTimeout) {
     console.error("[ProtectedRoute] Failed to load profile - redirecting to dashboard");
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/home" replace />;
   }
 
   // Permiso OK → render

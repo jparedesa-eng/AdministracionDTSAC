@@ -19,7 +19,9 @@ import {
     AlertTriangle,
     XCircle,
     Grid,
-    List
+    List,
+    Search,
+    Trash2
 } from 'lucide-react';
 import { Toast, type ToastState } from "../../components/ui/Toast";
 import { useAuth } from "../../auth/AuthContext";
@@ -35,6 +37,7 @@ import {
     upsertChecklistDetalle,
     createReporte,
     refreshReportes,
+    deleteReporte,
 } from "../../store/checklistCamarasStore";
 
 const QUALITY_LABELS = {
@@ -77,6 +80,7 @@ export default function ChecklistCamaras() {
     const [selectedSede, setSelectedSede] = useState<string>("ALL");
     const [selectedZona, setSelectedZona] = useState<string>("ALL");
     const [selectedTurno, setSelectedTurno] = useState<string>("MAÑANA");
+    const [searchText, setSearchText] = useState("");
 
     // Checklist State
     const [currentChecklistId, setCurrentChecklistId] = useState<string | null>(null);
@@ -179,7 +183,7 @@ export default function ChecklistCamaras() {
         return zonas.sort();
     }, [camaras, selectedCentral, selectedSede]);
 
-    const filteredCameras = useMemo(() => {
+    const statsCameras = useMemo(() => {
         return camaras.filter(c => {
             const matchCentral = c.central_id === selectedCentral;
             const matchSede = selectedSede === 'ALL' || c.sede_id === selectedSede;
@@ -187,6 +191,16 @@ export default function ChecklistCamaras() {
             return matchCentral && matchSede && matchZona && c.activa;
         });
     }, [camaras, selectedCentral, selectedSede, selectedZona]);
+
+    const filteredCameras = useMemo(() => {
+        return statsCameras.filter(c => {
+            const matchSearch = !searchText ||
+                c.codigo.toLowerCase().includes(searchText.toLowerCase()) ||
+                c.nombre.toLowerCase().includes(searchText.toLowerCase());
+
+            return matchSearch;
+        });
+    }, [statsCameras, searchText]);
 
     const groupCamerasByZona = (cams: typeof camaras) => {
         return cams.reduce((acc, cam) => {
@@ -291,8 +305,8 @@ export default function ChecklistCamaras() {
                 setCurrentChecklistId(checklistId);
             }
 
-            // Iterate over ALL filtered cameras to ensure complete snapshot
-            const promises = filteredCameras.map(async (cam) => {
+            // Iterate over ALL stats cameras (current scope) to ensure complete snapshot
+            const promises = statsCameras.map(async (cam) => {
                 const camaraId = cam.id;
 
                 // Determine source of truth: Local State -> DB State -> Default
@@ -321,7 +335,7 @@ export default function ChecklistCamaras() {
 
             await Promise.all(promises);
             await refreshDetalles(checklistId);
-            setToast({ type: "success", message: `Auditoría sincronizada: ${filteredCameras.length} equipos procesados.` });
+            setToast({ type: "success", message: `Auditoría sincronizada: ${statsCameras.length} equipos procesados.` });
             setIsAuditModalOpen(false);
             setLocalDetalles({}); // Clear buffer
         } catch (error: any) {
@@ -342,7 +356,7 @@ export default function ChecklistCamaras() {
         let total = 0, ok = 0;
         let goodQ = 0, fairQ = 0, poorQ = 0;
 
-        filteredCameras.forEach(c => {
+        statsCameras.forEach(c => {
             total++;
             const d = getDetalleForCamara(c.id);
             if (d?.operativa !== false) {
@@ -359,7 +373,7 @@ export default function ChecklistCamaras() {
         const fallas = total - ok;
         const salud = total > 0 ? ((ok / total) * 100).toFixed(1) : "0.0";
         const incidentsForReport = reportes.filter(i => i.fecha_reporte.startsWith(selectedDate));
-        const camarasByZonaPDF = groupCamerasByZona(filteredCameras);
+        const camarasByZonaPDF = groupCamerasByZona(statsCameras);
 
         // Create a hidden container for the report
         const container = document.createElement('div');
@@ -405,7 +419,7 @@ export default function ChecklistCamaras() {
                         </div>
                     </div>
                     <div style="text-align: right;">
-                        <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 800; background: #f1f5f9; padding: 4px 12px; border-radius: 20px; display: inline-block;">SISTEMA: ${centralName}</p>
+                        <p style="margin: 0 0 4px 0; font-size: 11px; font-weight: 800; background: #f1f5f9; padding: 4px 12px; border-radius: 20px; display: inline-block;">SISTEMA: ${centralName} &nbsp; • &nbsp; TURNO: ${selectedTurno}</p>
                         <p style="margin: 0; font-size: 9px; font-weight: 700; color: #64748b;">${new Date(selectedDate + 'T12:00:00').toLocaleDateString('es-ES', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
                     </div>
                 </div>
@@ -428,6 +442,7 @@ export default function ChecklistCamaras() {
                         <p style="font-size: 20px; font-weight: 900; margin: 0;">${salud}%</p>
                     </div>
                     <div class="stat-item" style="display: flex; flex-direction: column; justify-content: center; gap: 2px;">
+                        <p style="font-size: 8px; font-weight: 800; color: #94a3b8; text-transform: uppercase; margin: 0 0 4px 0;">Calidad Imagen</p>
                         <div style="display: flex; justify-content: space-between; font-size: 8px; font-weight: 800;">
                             <span style="color: #10b981;">ÓPTIMA:</span> <span>${goodQ}</span>
                         </div>
@@ -451,6 +466,7 @@ export default function ChecklistCamaras() {
                                 <thead>
                                     <tr>
                                         <th>Equipo</th>
+                                        <th style="text-align: left; width: 120px;">Área</th>
                                         <th style="text-align: center; width: 40px;">Status</th>
                                         <th style="text-align: center; width: 70px;">Calidad</th>
                                     </tr>
@@ -465,6 +481,7 @@ export default function ChecklistCamaras() {
             return `
                                             <tr>
                                                 <td style="font-weight: 700; color: #334155;">${cam.nombre}</td>
+                                                <td style="font-size: 8px; color: #475569; text-transform: uppercase;">${cam.area || '-'}</td>
                                                 <td style="text-align: center; font-weight: 900; font-size: 8px;">
                                                     <span class="${isOnline ? 'on' : 'off'}">${isOnline ? 'ON' : 'OFF'}</span>
                                                 </td>
@@ -527,13 +544,13 @@ export default function ChecklistCamaras() {
                 if (!content) throw new Error("No se pudo generar el contenedor del reporte.");
 
                 const canvas = await html2canvas(content, {
-                    scale: 2,
+                    scale: 3,
                     useCORS: true,
                     logging: false,
                     backgroundColor: '#ffffff'
                 });
 
-                const imgData = canvas.toDataURL('image/jpeg', 0.9);
+                const imgData = canvas.toDataURL('image/jpeg', 1.0);
                 const pdf = new jsPDF('p', 'mm', 'a4');
                 const pdfWidth = pdf.internal.pageSize.getWidth();
                 const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -571,7 +588,7 @@ export default function ChecklistCamaras() {
         const isOperativa = d?.operativa !== false;
         const quality = d?.calidad_imagen ?? 5;
         const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
-        const incidentCount = reportes.filter(r => r.camara_id === cam.id).length;
+        const incidentCount = reportes.filter(r => r.camara_id === cam.id && r.fecha_reporte.startsWith(selectedDate)).length;
 
         const checklistTime = d?.created_at ? new Date(d.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--";
 
@@ -654,7 +671,8 @@ export default function ChecklistCamaras() {
                             <tr>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Código</th>
                                 <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Cámara / Punto</th>
-                                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Zona</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Zona / Área</th>
+                                <th scope="col" className="px-6 py-3 text-left text-xs font-bold text-slate-500 uppercase tracking-wider">Nave / Fundo</th>
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Turno</th>
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Estado</th>
                                 <th scope="col" className="px-6 py-3 text-center text-xs font-bold text-slate-500 uppercase tracking-wider">Calidad</th>
@@ -668,7 +686,7 @@ export default function ChecklistCamaras() {
                                 const quality = d?.calidad_imagen ?? 5;
                                 const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
 
-                                const incidentCount = reportes.filter(r => r.camara_id === cam.id).length;
+                                const incidentCount = reportes.filter(r => r.camara_id === cam.id && r.fecha_reporte.startsWith(selectedDate)).length;
 
                                 return (
                                     <tr
@@ -685,6 +703,7 @@ export default function ChecklistCamaras() {
                                     >
                                         <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{cam.codigo}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-700">{cam.nombre}</td>
+                                        <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-700 uppercase tracking-widest">{cam.area || '-'}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-xs font-bold text-slate-500 uppercase tracking-widest">{cam.nave_fundo}</td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center">
                                             <span className="px-2 py-1 rounded-lg bg-blue-50 text-[10px] font-black text-blue-600 uppercase">{selectedTurno}</span>
@@ -825,7 +844,7 @@ export default function ChecklistCamaras() {
                     </button>
                     <button
                         onClick={() => setIsAuditModalOpen(true)}
-                        className="bg-red-600 text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-all flex items-center gap-2"
+                        className="bg-[#ff0000] text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-all flex items-center gap-2"
                     >
                         <CheckSquare size={16} /> {currentChecklistId ? "Continuar Checklist" : "Iniciar Checklist"}
                     </button>
@@ -834,6 +853,7 @@ export default function ChecklistCamaras() {
 
             {/* Filters */}
             <div className="bg-white p-6 rounded-2xl border border-slate-200 flex flex-wrap items-center gap-6">
+
                 <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-bold text-slate-400 uppercase tracking-wider ml-1">Sistema</label>
                     <select
@@ -926,39 +946,71 @@ export default function ChecklistCamaras() {
                         </button>
                     </div>
                 </div>
+
             </div>
 
             {/* Dashboard Stats */}
-            {currentChecklistId && (
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4 px-1 mt-4">
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Equipos</p>
-                        <p className="text-3xl font-black text-slate-900">{filteredCameras.length}</p>
-                    </div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200">
-                        <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Operativas</p>
-                        <p className="text-3xl font-black text-emerald-600">
-                            {filteredCameras.filter(c => getDetalleForCamara(c.id)?.operativa !== false).length}
-                        </p>
-                    </div>
-                    <div className="bg-white p-5 rounded-2xl border border-slate-200">
-                        <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Fallas</p>
-                        <p className="text-3xl font-black text-rose-600">
-                            {filteredCameras.filter(c => getDetalleForCamara(c.id)?.operativa === false).length}
-                        </p>
-                    </div>
-                    <div className="bg-slate-900 p-5 rounded-2xl">
-                        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Salud General</p>
-                        <div className="flex items-end gap-2">
-                            <p className="text-3xl font-black text-white">
-                                {filteredCameras.length > 0 ? ((filteredCameras.filter(c => getDetalleForCamara(c.id)?.operativa !== false).length / filteredCameras.length) * 100).toFixed(1) : "0.0"}%
+            {
+                currentChecklistId && (
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-4 px-1 mt-4">
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Total Equipos</p>
+                            <p className="text-3xl font-black text-slate-900">{statsCameras.length}</p>
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                            <p className="text-[10px] font-black text-emerald-500 uppercase tracking-widest mb-1">Operativas</p>
+                            <p className="text-3xl font-black text-emerald-600">
+                                {statsCameras.filter(c => getDetalleForCamara(c.id)?.operativa !== false).length}
                             </p>
-                            <div className="h-8 w-px bg-slate-700 mx-2"></div>
-                            <Activity className="text-blue-400 mb-1" size={24} />
+                        </div>
+                        <div className="bg-white p-5 rounded-2xl border border-slate-200">
+                            <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mb-1">Fallas</p>
+                            <p className="text-3xl font-black text-rose-600">
+                                {statsCameras.filter(c => getDetalleForCamara(c.id)?.operativa === false).length}
+                            </p>
+                        </div>
+                        <div className="bg-white p-3 rounded-2xl border border-slate-200 flex flex-col justify-center gap-1">
+                            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Calidad Imagen</p>
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Óptima:</span>
+                                <span>{statsCameras.filter(c => { const d = getDetalleForCamara(c.id); return d?.operativa !== false && (d?.calidad_imagen || 5) >= 5; }).length}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-amber-500"></div> Regular:</span>
+                                <span>{statsCameras.filter(c => { const d = getDetalleForCamara(c.id); return d?.operativa !== false && (d?.calidad_imagen || 5) === 3; }).length}</span>
+                            </div>
+                            <div className="flex items-center justify-between text-[10px] font-bold text-slate-600">
+                                <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500"></div> Baja:</span>
+                                <span>{statsCameras.filter(c => { const d = getDetalleForCamara(c.id); return d?.operativa !== false && (d?.calidad_imagen || 5) === 1; }).length}</span>
+                            </div>
+                        </div>
+                        <div className="bg-slate-900 p-5 rounded-2xl">
+                            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Salud General</p>
+                            <div className="flex items-end gap-2">
+                                <p className="text-3xl font-black text-white">
+                                    {statsCameras.length > 0 ? ((statsCameras.filter(c => getDetalleForCamara(c.id)?.operativa !== false).length / statsCameras.length) * 100).toFixed(1) : "0.0"}%
+                                </p>
+                                <div className="h-8 w-px bg-slate-700 mx-2"></div>
+                                <Activity className="text-blue-400 mb-1" size={24} />
+                            </div>
                         </div>
                     </div>
+                )
+            }
+
+            {/* Search Bar - Relocated */}
+            <div className="px-1 mt-4 mb-2">
+                <div className="relative">
+                    <Search size={16} className="absolute left-4 top-3.5 text-slate-400" />
+                    <input
+                        type="text"
+                        value={searchText}
+                        onChange={(e) => setSearchText(e.target.value)}
+                        placeholder="Filtrar tarjetas o lista por código / nombre..."
+                        className="w-full bg-white border border-slate-200 text-sm font-semibold pl-11 pr-4 py-3 rounded-2xl outline-none focus:ring-2 focus:ring-blue-500 transition-all"
+                    />
                 </div>
-            )}
+            </div>
 
             {/* Main Content Areas */}
             <div className="flex-1 overflow-y-auto px-1 custom-scrollbar">
@@ -986,353 +1038,396 @@ export default function ChecklistCamaras() {
                                 </div>
                             ))
                         ) : (
-                            renderMainTable(filteredCameras)
+                            (Object.entries(groupCamerasByZona(filteredCameras)) as [string, typeof camaras][]).map(([zona, cams]) => (
+                                <div key={zona} className="space-y-4 mb-8">
+                                    <div className="flex items-center gap-4">
+                                        <div className="bg-slate-100 p-1.5 rounded-lg">
+                                            <Grid size={14} className="text-slate-400" />
+                                        </div>
+                                        <h3 className="text-[11px] font-black text-slate-500 uppercase tracking-[0.2em]">{zona}</h3>
+                                        <div className="h-px flex-1 bg-slate-100"></div>
+                                        <span className="text-[9px] font-bold text-slate-300 uppercase">{cams.length} Equipos</span>
+                                    </div>
+                                    {renderMainTable(cams)}
+                                </div>
+                            ))
                         )}
                     </div>
                 )}
             </div>
 
             {/* Modal Actions */}
-            {optionsModalOpen && selectedCameraId && (
-                <>
-                    {/* CONDITIONAL RENDERING: Context Menu vs Full Modal */}
-                    {activeTab === 'MENU' ? (
-                        /* CONTEXTUAL MENU (No Blur, Positioned) */
-                        <>
-                            {/* Transparent Backdrop to close on click-outside */}
-                            <div
-                                className="fixed inset-0 z-[60]"
-                                onClick={() => setOptionsModalOpen(false)}
-                            />
+            {
+                optionsModalOpen && selectedCameraId && (
+                    <>
+                        {/* CONDITIONAL RENDERING: Context Menu vs Full Modal */}
+                        {activeTab === 'MENU' ? (
+                            /* CONTEXTUAL MENU (No Blur, Positioned) */
+                            <>
+                                {/* Transparent Backdrop to close on click-outside */}
+                                <div
+                                    className="fixed inset-0 z-[60]"
+                                    onClick={() => setOptionsModalOpen(false)}
+                                />
 
-                            {/* Positioned Menu */}
-                            <div
-                                style={{
-                                    top: Math.min(menuPosition?.y || 0, window.innerHeight - 200), // Prevent going off bottom
-                                    left: Math.min(menuPosition?.x || 0, window.innerWidth - 250) // Prevent going off right
-                                }}
-                                className="fixed z-[61] w-64 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-1"
-                            >
-                                <div className="px-3 py-2 border-b border-slate-50 mb-1">
-                                    <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo}</p>
-                                    <p className="text-[11px] font-bold text-slate-700 truncate">{camaras.find(c => c.id === selectedCameraId)?.nombre}</p>
-                                </div>
-
-                                <button
-                                    onClick={() => setActiveTab('STATUS')}
-                                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
+                                {/* Positioned Menu */}
+                                <div
+                                    style={{
+                                        top: Math.min(menuPosition?.y || 0, window.innerHeight - 200), // Prevent going off bottom
+                                        left: Math.min(menuPosition?.x || 0, window.innerWidth - 250) // Prevent going off right
+                                    }}
+                                    className="fixed z-[61] w-64 bg-white rounded-xl shadow-2xl border border-slate-100 p-2 animate-in fade-in zoom-in-95 duration-150 flex flex-col gap-1"
                                 >
-                                    <div className="bg-blue-50 text-blue-600 p-1.5 rounded-md group-hover:bg-blue-100 transition-colors"><Activity size={16} /></div>
-                                    <div>
-                                        <h4 className="text-[11px] font-black text-slate-700 uppercase">Estado y Calidad</h4>
+                                    <div className="px-3 py-2 border-b border-slate-50 mb-1">
+                                        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo}</p>
+                                        <p className="text-[11px] font-bold text-slate-700 truncate">{camaras.find(c => c.id === selectedCameraId)?.nombre}</p>
                                     </div>
-                                </button>
 
-                                <button
-                                    onClick={() => setActiveTab('ISSUES')}
-                                    className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
-                                >
-                                    <div className="bg-amber-50 text-amber-600 p-1.5 rounded-md group-hover:bg-amber-100 transition-colors"><AlertTriangle size={16} /></div>
-                                    <div className="flex-1">
-                                        <div className="flex justify-between items-center">
-                                            <h4 className="text-[11px] font-black text-slate-700 uppercase">Reportar Incidencia</h4>
-                                            {reportes.filter(r => r.camara_id === selectedCameraId).length > 0 && <span className="bg-amber-100 text-amber-700 px-1.5 rounded text-[8px] font-black">{reportes.filter(r => r.camara_id === selectedCameraId).length}</span>}
-                                        </div>
-                                    </div>
-                                </button>
-                            </div>
-                        </>
-                    ) : (
-                        /* FULL LARGE MODAL (Status or Issues) - WITH BLUR */
-                        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
-                            <div className="bg-white rounded-[2rem] w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
-                                {/* Modal Header */}
-                                <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
-                                    <div className="flex items-center gap-4">
-                                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${tempOperativa ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
-                                            <Signal size={28} />
-                                        </div>
+                                    <button
+                                        onClick={() => setActiveTab('STATUS')}
+                                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
+                                    >
+                                        <div className="bg-blue-50 text-blue-600 p-1.5 rounded-md group-hover:bg-blue-100 transition-colors"><Activity size={16} /></div>
                                         <div>
-                                            <div className="flex items-center gap-2">
-                                                <h3 className="text-xl font-bold text-slate-900 tracking-tight">{camaras.find(c => c.id === selectedCameraId)?.nombre}</h3>
-                                            </div>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo} • {camaras.find(c => c.id === selectedCameraId)?.nave_fundo}</p>
+                                            <h4 className="text-[11px] font-black text-slate-700 uppercase">Estado y Calidad</h4>
                                         </div>
-                                    </div>
-                                    <button onClick={() => setOptionsModalOpen(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-full transition-all"><X size={24} /></button>
+                                    </button>
+
+                                    <button
+                                        onClick={() => setActiveTab('ISSUES')}
+                                        className="flex items-center gap-3 p-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
+                                    >
+                                        <div className="bg-amber-50 text-amber-600 p-1.5 rounded-md group-hover:bg-amber-100 transition-colors"><AlertTriangle size={16} /></div>
+                                        <div className="flex-1">
+                                            <div className="flex justify-between items-center">
+                                                <h4 className="text-[11px] font-black text-slate-700 uppercase">Reportar Incidencia</h4>
+                                                {reportes.filter(r => r.camara_id === selectedCameraId && r.fecha_reporte.startsWith(selectedDate)).length > 0 && <span className="bg-amber-100 text-amber-700 px-1.5 rounded text-[8px] font-black">{reportes.filter(r => r.camara_id === selectedCameraId && r.fecha_reporte.startsWith(selectedDate)).length}</span>}
+                                            </div>
+                                        </div>
+                                    </button>
                                 </div>
-
-                                {/* Modal Body */}
-                                <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 custom-scrollbar">
-
-                                    {/* TAB: STATUS */}
-                                    {activeTab === 'STATUS' && (
-                                        <div className="space-y-8 animate-in slide-in-from-right-8 fade-in duration-300">
-                                            <div className="grid grid-cols-2 gap-6">
-
-                                                <div className="space-y-3">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus Operativo</label>
-                                                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 h-14">
-                                                        <button onClick={() => setTempOperativa(true)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${tempOperativa ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
-                                                            <div className={`w-2 h-2 rounded-full ${tempOperativa ? 'bg-emerald-500' : 'bg-slate-300'}`} /> Online
-                                                        </button>
-                                                        <button onClick={() => setTempOperativa(false)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${!tempOperativa ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>
-                                                            <div className={`w-2 h-2 rounded-full ${!tempOperativa ? 'bg-rose-500' : 'bg-slate-300'}`} /> Falla
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                                <div className="space-y-3">
-                                                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Calidad de Video</label>
-                                                    <select
-                                                        disabled={!tempOperativa}
-                                                        value={tempCalidad}
-                                                        onChange={(e) => setTempCalidad(parseInt(e.target.value))}
-                                                        className="w-full h-14 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-slate-100"
-                                                    >
-                                                        {Object.entries(QUALITY_LABELS).map(([v, data]) => <option key={v} value={v}>{data.label}</option>)}
-                                                    </select>
-                                                </div>
+                            </>
+                        ) : (
+                            /* FULL LARGE MODAL (Status or Issues) - WITH BLUR */
+                            <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+                                <div className="bg-white rounded-[2rem] w-full max-w-lg border border-slate-200 shadow-2xl overflow-hidden animate-in zoom-in duration-200 flex flex-col max-h-[90vh]">
+                                    {/* Modal Header */}
+                                    <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white shrink-0">
+                                        <div className="flex items-center gap-4">
+                                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shadow-sm ${tempOperativa ? 'bg-emerald-50 text-emerald-500' : 'bg-rose-50 text-rose-500'}`}>
+                                                <Signal size={28} />
                                             </div>
-
-                                            <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 text-blue-800 flex items-start gap-3">
-                                                <div className="mt-0.5"><ShieldCheck size={18} /></div>
-                                                <div>
-                                                    <h4 className="text-[11px] font-black uppercase tracking-wider mb-1">Auditoría en Progreso</h4>
-                                                    <p className="text-xs opacity-80 leading-relaxed">Cambios realizados aquí se reflejarán en el checklist actual ({selectedTurno}). Recuerde sincronizar al finalizar la ronda.</p>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className="text-xl font-bold text-slate-900 tracking-tight">{camaras.find(c => c.id === selectedCameraId)?.nombre}</h3>
                                                 </div>
-                                            </div>
-
-                                            <div className="pt-4 flex gap-3">
-                                                <button
-                                                    disabled={isSavingModal}
-                                                    onClick={async () => {
-                                                        if (isSavingModal) return;
-                                                        setIsSavingModal(true);
-                                                        try {
-                                                            const existing = detalles.find(d => d.checklist_id === currentChecklistId && d.camara_id === selectedCameraId);
-                                                            await upsertChecklistDetalle({
-                                                                id: existing?.id,
-                                                                checklist_id: currentChecklistId!,
-                                                                camara_id: selectedCameraId!,
-                                                                operativa: tempOperativa,
-                                                                calidad_imagen: tempCalidad,
-                                                            });
-                                                            setToast({ type: "success", message: "Estado actualizado." });
-                                                            setOptionsModalOpen(false);
-                                                        } catch (error) {
-                                                            setToast({ type: "error", message: "Error al guardar." });
-                                                        } finally {
-                                                            setIsSavingModal(false);
-                                                        }
-                                                    }}
-                                                    className="w-full bg-slate-900 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
-                                                >
-                                                    {isSavingModal ? 'Guardando...' : 'Guardar Estado'}
-                                                </button>
+                                                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{camaras.find(c => c.id === selectedCameraId)?.codigo} • {camaras.find(c => c.id === selectedCameraId)?.nave_fundo}</p>
                                             </div>
                                         </div>
-                                    )}
+                                        <button onClick={() => setOptionsModalOpen(false)} className="p-3 text-slate-400 hover:bg-slate-50 rounded-full transition-all"><X size={24} /></button>
+                                    </div>
 
-                                    {/* TAB: ISSUES & HISTORY */}
-                                    {activeTab === 'ISSUES' && (
-                                        <div className="space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+                                    {/* Modal Body */}
+                                    <div className="flex-1 overflow-y-auto p-8 bg-slate-50/50 custom-scrollbar">
 
-                                            {/* New Report Form */}
-                                            <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg"><MessageSquarePlus size={16} /></div>
-                                                    <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Nuevo Reporte Técnico</h4>
-                                                </div>
+                                        {/* TAB: STATUS */}
+                                        {activeTab === 'STATUS' && (
+                                            <div className="space-y-8 animate-in slide-in-from-right-8 fade-in duration-300">
+                                                <div className="grid grid-cols-2 gap-6">
 
-                                                <div className="grid grid-cols-1 gap-4">
-                                                    <div className="space-y-1.5">
-                                                        <label className="text-[9px] font-bold text-slate-400 uppercase">Tipo de Incidente</label>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Estatus Operativo</label>
+                                                        <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200 h-14">
+                                                            <button onClick={() => setTempOperativa(true)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${tempOperativa ? 'bg-white text-emerald-600 shadow-sm' : 'text-slate-500'}`}>
+                                                                <div className={`w-2 h-2 rounded-full ${tempOperativa ? 'bg-emerald-500' : 'bg-slate-300'}`} /> Online
+                                                            </button>
+                                                            <button onClick={() => setTempOperativa(false)} className={`flex-1 flex items-center justify-center gap-2 rounded-lg text-xs font-black uppercase transition-all ${!tempOperativa ? 'bg-white text-rose-600 shadow-sm' : 'text-slate-500'}`}>
+                                                                <div className={`w-2 h-2 rounded-full ${!tempOperativa ? 'bg-rose-500' : 'bg-slate-300'}`} /> Falla
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest ml-1">Calidad de Video</label>
                                                         <select
-                                                            value={incidentType}
-                                                            onChange={e => setIncidentType(e.target.value)}
-                                                            className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                                                            disabled={!tempOperativa}
+                                                            value={tempCalidad}
+                                                            onChange={(e) => setTempCalidad(parseInt(e.target.value))}
+                                                            className="w-full h-14 bg-white border border-slate-200 rounded-xl px-4 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50 disabled:bg-slate-100"
                                                         >
-                                                            {INCIDENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                            {Object.entries(QUALITY_LABELS).map(([v, data]) => <option key={v} value={v}>{data.label}</option>)}
                                                         </select>
                                                     </div>
-                                                    <div className="space-y-1.5">
-                                                        <label className="text-[9px] font-bold text-slate-400 uppercase">Descripción / Observaciones</label>
-                                                        <textarea
-                                                            value={newIncidentDesc}
-                                                            onChange={e => setNewIncidentDesc(e.target.value)}
-                                                            placeholder="Detalles técnicos de la falla..."
-                                                            className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 resize-none"
-                                                        />
+                                                </div>
+
+                                                <div className="bg-blue-50 rounded-xl p-4 border border-blue-100 text-blue-800 flex items-start gap-3">
+                                                    <div className="mt-0.5"><ShieldCheck size={18} /></div>
+                                                    <div>
+                                                        <h4 className="text-[11px] font-black uppercase tracking-wider mb-1">Auditoría en Progreso</h4>
+                                                        <p className="text-xs opacity-80 leading-relaxed">Cambios realizados aquí se reflejarán en el checklist actual ({selectedTurno}). Recuerde sincronizar al finalizar la ronda.</p>
                                                     </div>
                                                 </div>
 
-                                                <button
-                                                    disabled={!newIncidentDesc.trim() || isSavingModal}
-                                                    onClick={async () => {
-                                                        if (isSavingModal) return;
-                                                        setIsSavingModal(true);
-                                                        try {
-                                                            await createReporte({
-                                                                camara_id: selectedCameraId!,
-                                                                tipo_incidente: incidentType,
-                                                                descripcion: newIncidentDesc,
-                                                                usuario_id: user?.id || null
-                                                            });
-                                                            setNewIncidentDesc('');
-                                                            setToast({ type: "success", message: "Incidencia reportada." });
-                                                        } catch (error) {
-                                                            setToast({ type: "error", message: "Error al crear reporte." });
-                                                        } finally {
-                                                            setIsSavingModal(false);
-                                                        }
-                                                    }}
-                                                    className="w-full bg-amber-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                                                >
-                                                    {isSavingModal ? 'Registrando...' : 'Registrar Incidencia'}
-                                                </button>
+                                                <div className="pt-4 flex gap-3">
+                                                    <button
+                                                        disabled={isSavingModal}
+                                                        onClick={async () => {
+                                                            if (isSavingModal) return;
+                                                            setIsSavingModal(true);
+                                                            try {
+                                                                const existing = detalles.find(d => d.checklist_id === currentChecklistId && d.camara_id === selectedCameraId);
+                                                                await upsertChecklistDetalle({
+                                                                    id: existing?.id,
+                                                                    checklist_id: currentChecklistId!,
+                                                                    camara_id: selectedCameraId!,
+                                                                    operativa: tempOperativa,
+                                                                    calidad_imagen: tempCalidad,
+                                                                });
+                                                                setToast({ type: "success", message: "Estado actualizado." });
+                                                                setOptionsModalOpen(false);
+                                                            } catch (error) {
+                                                                setToast({ type: "error", message: "Error al guardar." });
+                                                            } finally {
+                                                                setIsSavingModal(false);
+                                                            }
+                                                        }}
+                                                        className="w-full bg-slate-900 text-white py-4 rounded-xl text-xs font-black uppercase tracking-widest hover:bg-slate-800 transition-all shadow-lg active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed"
+                                                    >
+                                                        {isSavingModal ? 'Guardando...' : 'Guardar Estado'}
+                                                    </button>
+                                                </div>
                                             </div>
+                                        )}
 
-                                            {/* History List */}
-                                            <div className="space-y-4">
-                                                <div className="flex items-center justify-between">
-                                                    <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Historial de Reportes</h4>
-                                                    <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold">{reportes.filter(r => r.camara_id === selectedCameraId).length} Total</span>
+                                        {/* TAB: ISSUES & HISTORY */}
+                                        {activeTab === 'ISSUES' && (
+                                            <div className="space-y-8 animate-in slide-in-from-right-4 fade-in duration-300">
+
+                                                {/* New Report Form */}
+                                                <div className="bg-white p-5 rounded-2xl border border-slate-200 shadow-sm space-y-4">
+                                                    <div className="flex items-center gap-2 mb-2">
+                                                        <div className="bg-amber-100 text-amber-600 p-1.5 rounded-lg"><MessageSquarePlus size={16} /></div>
+                                                        <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-widest">Nuevo Reporte Técnico</h4>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-1 gap-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Tipo de Incidente</label>
+                                                            <select
+                                                                value={incidentType}
+                                                                onChange={e => setIncidentType(e.target.value)}
+                                                                className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2.5 text-xs font-bold outline-none focus:ring-2 focus:ring-amber-500"
+                                                            >
+                                                                {INCIDENT_TYPES.map(t => <option key={t} value={t}>{t}</option>)}
+                                                            </select>
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[9px] font-bold text-slate-400 uppercase">Descripción / Observaciones</label>
+                                                            <textarea
+                                                                value={newIncidentDesc}
+                                                                onChange={e => setNewIncidentDesc(e.target.value)}
+                                                                placeholder="Detalles técnicos de la falla..."
+                                                                className="w-full h-20 p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-amber-500 resize-none"
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <button
+                                                        disabled={!newIncidentDesc.trim() || isSavingModal}
+                                                        onClick={async () => {
+                                                            if (isSavingModal) return;
+                                                            setIsSavingModal(true);
+                                                            try {
+                                                                await createReporte({
+                                                                    camara_id: selectedCameraId!,
+                                                                    tipo_incidente: incidentType,
+                                                                    descripcion: newIncidentDesc,
+                                                                    usuario_id: user?.id || null
+                                                                });
+                                                                setNewIncidentDesc('');
+                                                                setToast({ type: "success", message: "Incidencia reportada." });
+                                                            } catch (error) {
+                                                                setToast({ type: "error", message: "Error al crear reporte." });
+                                                            } finally {
+                                                                setIsSavingModal(false);
+                                                            }
+                                                        }}
+                                                        className="w-full bg-amber-500 text-white py-3 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-600 transition-all shadow-md active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
+                                                    >
+                                                        {isSavingModal ? 'Registrando...' : 'Registrar Incidencia'}
+                                                    </button>
                                                 </div>
 
-                                                <div className="space-y-3">
-                                                    {reportes.filter(r => r.camara_id === selectedCameraId).length === 0 ? (
-                                                        <div className="text-center py-8 opacity-50">
-                                                            <ShieldCheck size={32} className="mx-auto text-slate-300 mb-2" />
-                                                            <p className="text-[10px] font-bold text-slate-400 uppercase">Sin historial de fallas</p>
-                                                        </div>
-                                                    ) : (
-                                                        reportes.filter(r => r.camara_id === selectedCameraId).map(rep => (
-                                                            <div key={rep.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4">
-                                                                <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${rep.resuelto ? 'bg-emerald-500' : 'bg-rose-500'}`} />
-                                                                <div className="flex-1 space-y-1">
-                                                                    <div className="flex justify-between items-start">
-                                                                        <span className="text-[10px] font-black uppercase text-slate-800">{rep.tipo_incidente}</span>
-                                                                        <span className="text-[9px] font-bold text-slate-400">{new Date(rep.fecha_reporte).toLocaleDateString()}</span>
-                                                                    </div>
-                                                                    <p className="text-[11px] text-slate-600 leading-snug">{rep.descripcion}</p>
-                                                                    <div className="pt-2 flex items-center gap-2">
-                                                                        <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${rep.resuelto ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
-                                                                            {rep.resuelto ? 'Resuelto' : 'Pendiente'}
-                                                                        </span>
-                                                                        {rep.usuario_id && <span className="text-[8px] text-slate-400 uppercase font-bold flex items-center gap-1"><User size={8} /> Tech ID: {rep.usuario_id.slice(0, 4)}</span>}
+                                                {/* History List */}
+                                                <div className="space-y-4">
+                                                    <div className="flex items-center justify-between">
+                                                        <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Historial de Reportes</h4>
+                                                        <span className="bg-slate-100 text-slate-500 px-2 py-0.5 rounded text-[9px] font-bold">{reportes.filter(r => r.camara_id === selectedCameraId && r.fecha_reporte.startsWith(selectedDate)).length} Total</span>
+                                                    </div>
+
+                                                    <div className="space-y-3">
+                                                        {reportes.filter(r => r.camara_id === selectedCameraId && r.fecha_reporte.startsWith(selectedDate)).length === 0 ? (
+                                                            <div className="text-center py-8 opacity-50">
+                                                                <ShieldCheck size={32} className="mx-auto text-slate-300 mb-2" />
+                                                                <p className="text-[10px] font-bold text-slate-400 uppercase">Sin historial de fallas</p>
+                                                            </div>
+                                                        ) : (
+                                                            reportes.filter(r => r.camara_id === selectedCameraId && r.fecha_reporte.startsWith(selectedDate)).map(rep => (
+                                                                <div key={rep.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex gap-4 group">
+                                                                    <div className={`mt-1 w-2 h-2 rounded-full shrink-0 ${rep.resuelto ? 'bg-emerald-500' : 'bg-rose-500'}`} />
+                                                                    <div className="flex-1 space-y-1">
+                                                                        <div className="flex justify-between items-start">
+                                                                            <span className="text-[10px] font-black uppercase text-slate-800">{rep.tipo_incidente}</span>
+                                                                            <span className="text-[9px] font-bold text-slate-400">{new Date(rep.fecha_reporte).toLocaleDateString()}</span>
+                                                                        </div>
+                                                                        <p className="text-[11px] text-slate-600 leading-snug">{rep.descripcion}</p>
+                                                                        <div className="pt-2 flex items-center justify-between">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className={`px-2 py-0.5 rounded text-[8px] font-black uppercase ${rep.resuelto ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-600'}`}>
+                                                                                    {rep.resuelto ? 'Resuelto' : 'Pendiente'}
+                                                                                </span>
+                                                                                {rep.usuario_id && <span className="text-[8px] text-slate-400 uppercase font-bold flex items-center gap-1"><User size={8} /> Tech ID: {rep.usuario_id.slice(0, 4)}</span>}
+                                                                            </div>
+                                                                            <button
+                                                                                onClick={async (e) => {
+                                                                                    e.stopPropagation();
+                                                                                    if (confirm("¿Estás seguro de eliminar este reporte permanentemente?")) {
+                                                                                        try {
+                                                                                            await deleteReporte(rep.id);
+                                                                                            setToast({ type: "success", message: "Reporte eliminado." });
+                                                                                        } catch (err) {
+                                                                                            setToast({ type: "error", message: "Error al eliminar." });
+                                                                                        }
+                                                                                    }
+                                                                                }}
+                                                                                className="text-slate-300 hover:text-rose-500 transition-colors p-1"
+                                                                                title="Eliminar Reporte"
+                                                                            >
+                                                                                <Trash2 size={12} />
+                                                                            </button>
+                                                                        </div>
                                                                     </div>
                                                                 </div>
-                                                            </div>
-                                                        ))
-                                                    )}
+                                                            ))
+                                                        )}
+                                                    </div>
                                                 </div>
                                             </div>
-                                        </div>
-                                    )}
+                                        )}
 
+                                    </div>
                                 </div>
                             </div>
-                        </div>
-                    )}
-                </>
-            )}
+                        )}
+                    </>
+                )
+            }
 
             {/* Modal: Checklist Auditoría */}
-            {isAuditModalOpen && (
-                <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-[70] animate-in fade-in duration-300">
-                    <div className="bg-white rounded-[1.5rem] w-full max-w-7xl max-h-[95vh] flex flex-col border border-slate-300 overflow-hidden">
-                        <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
-                            <div className="flex items-center gap-4">
-                                <div className="bg-blue-600 p-2.5 rounded-xl text-white"><ShieldCheck size={20} /></div>
-                                <div>
-                                    <h3 className="text-lg font-black text-slate-900 tracking-tight">Checklist de Auditoría Técnica</h3>
-                                    <p className="text-blue-600 text-[9px] font-bold uppercase tracking-[0.3em] mt-0.5">{centrales.find(c => c.id === selectedCentral)?.nombre} • Ronda de Seguridad</p>
-                                </div>
-                            </div>
-                            <div className="flex items-center gap-3">
-                                <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
-                                    <button
-                                        onClick={() => setViewMode('CARDS')}
-                                        className={`w-10 h-8 flex items-center justify-center rounded-lg transition-all ${viewMode === 'CARDS'
-                                            ? 'bg-white shadow-sm text-blue-600 border border-slate-200/50'
-                                            : 'text-slate-400 hover:text-slate-600'}`}
-                                        title="Vista Tarjetas"
-                                    >
-                                        <Grid size={18} />
-                                    </button>
-                                    <button
-                                        onClick={() => setViewMode('TABLE')}
-                                        className={`w-10 h-8 flex items-center justify-center rounded-lg transition-all ${viewMode === 'TABLE'
-                                            ? 'bg-white shadow-sm text-blue-600 border border-slate-200/50'
-                                            : 'text-slate-400 hover:text-slate-600'}`}
-                                        title="Vista Tabla"
-                                    >
-                                        <List size={18} />
-                                    </button>
-                                </div>
-                                <button onClick={() => setIsAuditModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-all"><X size={24} /></button>
-                            </div>
-                        </div>
-
-                        <div className="p-5 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
-                            <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
-                                <User size={16} className="text-slate-400" />
-                                <input
-                                    type="text"
-                                    placeholder="Nombre del Operador Responsable..."
-                                    className="flex-1 bg-transparent text-xs font-bold outline-none text-slate-800"
-                                    value={supervisorName}
-                                    onChange={e => setSupervisorName(e.target.value)}
-                                />
-                            </div>
-                            <div className="flex bg-white border border-slate-200 p-1 rounded-lg h-11">
-                                <div className="flex-1 flex items-center justify-center text-[10px] font-black uppercase rounded text-slate-900">
-                                    Turno: {selectedTurno}
-                                </div>
-                                <div className="w-px bg-slate-100 h-full mx-2"></div>
-                                <div className="flex-1 flex items-center justify-center text-[10px] font-black uppercase rounded text-slate-400">
-                                    {selectedDate}
-                                </div>
-                            </div>
-                        </div>
-
-                        <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white custom-scrollbar">
-                            {viewMode === 'CARDS' ? (
-                                (Object.entries(groupCamerasByZona(filteredCameras)) as [string, typeof camaras][]).map(([zona, cams]) => (
-                                    <div key={zona} className="space-y-4">
-                                        <div className="flex flex-col border-l-[3px] border-blue-600 pl-3">
-                                            <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em]">{zona}</h4>
-                                            <span className="text-[9px] text-slate-400 font-bold uppercase">{centrales.find(c => c.id === selectedCentral)?.nombre}</span>
-                                        </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
-                                            {cams.map(cam => (
-                                                <div key={cam.id} className="transform scale-[0.95] origin-top-left">
-                                                    {renderCameraCard(cam, true)}
-                                                </div>
-                                            ))}
-                                        </div>
+            {
+                isAuditModalOpen && (
+                    <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-md flex items-center justify-center p-4 z-[70] animate-in fade-in duration-300">
+                        <div className="bg-white rounded-[1.5rem] w-full max-w-7xl max-h-[95vh] flex flex-col border border-slate-300 overflow-hidden">
+                            <div className="p-5 border-b border-slate-200 flex justify-between items-center bg-white shrink-0">
+                                <div className="flex items-center gap-4">
+                                    <div className="bg-blue-600 p-2.5 rounded-xl text-white"><ShieldCheck size={20} /></div>
+                                    <div>
+                                        <h3 className="text-lg font-black text-slate-900 tracking-tight">Checklist de Auditoría Técnica</h3>
+                                        <p className="text-blue-600 text-[9px] font-bold uppercase tracking-[0.3em] mt-0.5">{centrales.find(c => c.id === selectedCentral)?.nombre} • Ronda de Seguridad</p>
                                     </div>
-                                ))
-                            ) : (
-                                renderAuditTable(filteredCameras)
-                            )}
-                        </div>
-
-                        <div className="p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
-                            <div className="flex items-center gap-2 text-slate-400">
-                                <ShieldCheck size={16} className="text-emerald-500" />
-                                <p className="text-[10px] font-bold uppercase tracking-wider">Sincronización en tiempo real.</p>
+                                </div>
+                                <div className="flex items-center gap-3">
+                                    <div className="flex bg-slate-100 p-1 rounded-xl border border-slate-200">
+                                        <button
+                                            onClick={() => setViewMode('CARDS')}
+                                            className={`w-10 h-8 flex items-center justify-center rounded-lg transition-all ${viewMode === 'CARDS'
+                                                ? 'bg-white shadow-sm text-blue-600 border border-slate-200/50'
+                                                : 'text-slate-400 hover:text-slate-600'}`}
+                                            title="Vista Tarjetas"
+                                        >
+                                            <Grid size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => setViewMode('TABLE')}
+                                            className={`w-10 h-8 flex items-center justify-center rounded-lg transition-all ${viewMode === 'TABLE'
+                                                ? 'bg-white shadow-sm text-blue-600 border border-slate-200/50'
+                                                : 'text-slate-400 hover:text-slate-600'}`}
+                                            title="Vista Tabla"
+                                        >
+                                            <List size={18} />
+                                        </button>
+                                    </div>
+                                    <button onClick={() => setIsAuditModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-full transition-all"><X size={24} /></button>
+                                </div>
                             </div>
-                            <div className="flex gap-3 w-full sm:w-auto">
-                                <button onClick={() => setIsAuditModalOpen(false)} className="px-6 py-2.5 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-600">Abortar</button>
-                                <button onClick={handleSaveAndFlush} className="px-10 py-2.5 bg-slate-900 text-white font-black rounded-lg text-[10px] uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all">Sincronizar Auditoría</button>
+
+                            <div className="p-5 bg-slate-50 border-b border-slate-200 grid grid-cols-1 md:grid-cols-2 gap-4 shrink-0">
+                                <div className="flex items-center gap-3 bg-white p-3 rounded-lg border border-slate-200">
+                                    <User size={16} className="text-slate-400" />
+                                    <input
+                                        type="text"
+                                        placeholder="Nombre del Operador Responsable..."
+                                        className="flex-1 bg-transparent text-xs font-bold outline-none text-slate-800"
+                                        value={supervisorName}
+                                        onChange={e => setSupervisorName(e.target.value)}
+                                    />
+                                </div>
+                                <div className="flex bg-white border border-slate-200 p-1 rounded-lg h-11">
+                                    <div className="flex-1 flex items-center justify-center text-[10px] font-black uppercase rounded text-slate-900">
+                                        Turno: {selectedTurno}
+                                    </div>
+                                    <div className="w-px bg-slate-100 h-full mx-2"></div>
+                                    <div className="flex-1 flex items-center justify-center text-[10px] font-black uppercase rounded text-slate-400">
+                                        {selectedDate}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto p-6 space-y-8 bg-white custom-scrollbar">
+                                {viewMode === 'CARDS' ? (
+                                    (Object.entries(groupCamerasByZona(filteredCameras)) as [string, typeof camaras][]).map(([zona, cams]) => (
+                                        <div key={zona} className="space-y-4">
+                                            <div className="flex flex-col border-l-[3px] border-blue-600 pl-3">
+                                                <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em]">{zona}</h4>
+                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{centrales.find(c => c.id === selectedCentral)?.nombre}</span>
+                                            </div>
+                                            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
+                                                {cams.map(cam => (
+                                                    <div key={cam.id} className="transform scale-[0.95] origin-top-left">
+                                                        {renderCameraCard(cam, true)}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))
+                                ) : (
+                                    (Object.entries(groupCamerasByZona(filteredCameras)) as [string, typeof camaras][]).map(([zona, cams]) => (
+                                        <div key={zona} className="space-y-4">
+                                            <div className="flex flex-col border-l-[3px] border-blue-600 pl-3">
+                                                <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em]">{zona}</h4>
+                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{centrales.find(c => c.id === selectedCentral)?.nombre}</span>
+                                            </div>
+                                            {renderAuditTable(cams)}
+                                        </div>
+                                    ))
+                                )}
+                            </div>
+
+                            <div className="p-5 border-t border-slate-200 bg-white flex flex-col sm:flex-row justify-between items-center gap-4 shrink-0">
+                                <div className="flex items-center gap-2 text-slate-400">
+                                    <ShieldCheck size={16} className="text-emerald-500" />
+                                    <p className="text-[10px] font-bold uppercase tracking-wider">Sincronización en tiempo real.</p>
+                                </div>
+                                <div className="flex gap-3 w-full sm:w-auto">
+                                    <button onClick={() => setIsAuditModalOpen(false)} className="px-6 py-2.5 text-slate-400 font-bold text-[10px] uppercase tracking-widest hover:text-slate-600">Abortar</button>
+                                    <button onClick={handleSaveAndFlush} className="px-10 py-2.5 bg-slate-900 text-white font-black rounded-lg text-[10px] uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition-all">Sincronizar Auditoría</button>
+                                </div>
                             </div>
                         </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
-        </div>
+        </div >
     );
 }
