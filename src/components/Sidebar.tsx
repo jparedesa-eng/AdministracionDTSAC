@@ -1,11 +1,9 @@
-// src/components/Sidebar.tsx
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Truck,
   Settings,
   HelpCircle,
   X,
-  ChevronRight,
   ChevronDown,
   FilePlus2,
   ListChecks,
@@ -20,12 +18,19 @@ import {
   MapPin, // For Sedes
   Building2,
   Briefcase,
-  PanelLeft,
-  Monitor
+  ChevronsLeft,
+  ChevronsRight,
+  Monitor,
+  Route
 } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
+import { AnimatePresence, motion } from "framer-motion";
+
+// Helper for conditional classes
+function clsx(...classes: (string | undefined | null | false)[]) {
+  return classes.filter(Boolean).join(" ");
+}
 
 interface SidebarProps {
   open?: boolean; // Drawer en móvil
@@ -34,23 +39,40 @@ interface SidebarProps {
   onToggle?: () => void; // Toggle desktop sidebar
 }
 
+interface NavItem {
+  id: string;
+  label: string;
+  icon?: React.ElementType;
+  path?: string;
+  badge?: string | number;
+  badgeColor?: 'red' | 'blue' | 'green';
+  subItems?: NavItem[];
+}
+
+interface NavGroup {
+  id: string;
+  title: string;
+  items: NavItem[];
+}
+
 export default function Sidebar({ open, onClose, collapsed = false, onToggle }: SidebarProps) {
   const location = useLocation();
+  const navigate = useNavigate();
   const { profile } = useAuth();
 
+  // NOTE: If logout is not in useAuth based on previous code (it wasn't used), we can't add it yet.
+  // The previous code didn't have logout in the Sidebar. I will stick to what was there or check AuthContext if I could.
+  // For now I will omit logout action if not present in previous usage, but add the button UI.
+  // Actually, previous code didn't show logout. User reference has it. I'll add the button but maybe just console log if logout fn is missing.
 
   // ======= PERMISOS desde profiles.allowed_views =======
-  //
   const isAdmin = profile?.rol === "admin";
   const views = Array.isArray(profile?.allowed_views)
     ? (profile!.allowed_views as string[])
     : [];
 
-  // DEBUG: Verificar permisos en consola
-  console.log("[Sidebar] Profile:", { role: profile?.rol, views, isAdmin });
-
   const hasAccess = (path: string) => {
-    if (isAdmin) return true; // admin ve todo
+    if (isAdmin) return true;
     return views.some(
       (p) =>
         p === path ||
@@ -60,12 +82,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     );
   };
 
-  const showAny = (...paths: string[]) => paths.some((p) => hasAccess(p));
-
-  // ======= Visibilidad por ítem =======
-
-
-
+  // ======= Visibilidad por ítem (Logic copied from previous Sidebar) =======
   // Camionetas
   const canSeeCam_Solicitar = hasAccess("/camionetas/solicitar");
   const canSeeCam_Admin = hasAccess("/camionetas/administrar");
@@ -92,13 +109,13 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeTel_AprobGerencia = hasAccess("/telefonia/aprobacion-gerencia");
   const canSeeTel_AprobAdmin = hasAccess("/telefonia/aprobacion-admin");
 
-  // Configuración / Preferencias
+  // Configuración
   const canSeeConfig = hasAccess("/config");
   const canSeeConfigPersonal = hasAccess("/configuracion/personal");
   const canSeeConfigGerencias = hasAccess("/configuracion/gerencias");
   const canSeeConfigSedes = hasAccess("/configuracion/sedes");
   const canSeeConfigCentrales = hasAccess("/configuracion/centrales-cctv");
-  const canSeeAppsCelular = hasAccess("/configuracion/aplicativos-celular"); // 👈 NUEVO
+  const canSeeAppsCelular = hasAccess("/configuracion/aplicativos-celular");
 
   // Seguridad
   const canSeeSeg_Programacion = hasAccess("/seguridad/programacion");
@@ -108,952 +125,436 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeSeg_MonitoreoPT = hasAccess("/seguridad/monitoreo-pt");
   const canSeeSeg_ReportingManager = hasAccess("/seguridad/reporting-manager");
   const canSeeSeg_AgentReport = hasAccess("/seguridad/agent-report");
-
-  // Show section if any subsection is visible
-  const showSeguridad = showAny(
-    "/seguridad/programacion",
-    "/seguridad/recursos",
-    "/seguridad/checklist-camaras",
-    "/seguridad/inventario-camaras",
-    "/seguridad/monitoreo-pt",
-    "/seguridad/reporting-manager",
-    "/seguridad/agent-report"
-  );
-
   const canSeeAyuda = hasAccess("/ayuda");
 
-  // ======= Estados de apertura de submenús =======
 
-  const [openCamionetas, setOpenCamionetas] = React.useState(
-    location.pathname.startsWith("/camionetas")
-  );
-  const [openPasajes, setOpenPasajes] = React.useState(
-    location.pathname.startsWith("/pasajes")
-  );
-  const [openTelefonia, setOpenTelefonia] = React.useState(
-    location.pathname.startsWith("/telefonia")
-  );
-  const [openConfigMenu, setOpenConfigMenu] = React.useState(
-    location.pathname.startsWith("/configuracion") ||
-    location.pathname.startsWith("/config")
-  );
-  const [openSeguridad, setOpenSeguridad] = React.useState(
-    location.pathname.startsWith("/seguridad")
-  );
+  // Construct Navigation Data
+  const getNavGroups = (): NavGroup[] => {
+    const groups: NavGroup[] = [];
 
-  React.useEffect(() => {
-    const inCam = location.pathname.startsWith("/camionetas");
-    const inPas = location.pathname.startsWith("/pasajes");
-    const inTel = location.pathname.startsWith("/telefonia");
-    const inConfig =
-      location.pathname.startsWith("/config") ||
-      location.pathname.startsWith("/configuracion");
-    const inSeg = location.pathname.startsWith("/seguridad");
+    // --- Tickets Group ---
+    // If any tickets sections are visible
+    // Note: The previous logic had a generic 'Tickets' header for both Camionetas and Pasajes. 
+    // I'll create a "Tickets" group if either is visible.
 
-    setOpenCamionetas(inCam);
-    setOpenPasajes(inPas);
-    setOpenTelefonia(inTel);
-    setOpenConfigMenu(inConfig);
-    setOpenSeguridad(inSeg);
-  }, [location.pathname]);
+    // Actually, in the new design, keeping distinct groups is better.
+    // Let's mimic the structure: Camionetas, Pasajes, etc.
 
-  // Fix: Maintain exact vertical height to prevent content jumping
-  const SectionLabel: React.FC<{ children: React.ReactNode }> = ({
-    children,
-  }) => {
-    if (collapsed) {
-      // Matches expanded state: mt-3 mb-2 + h-[17px] (approx line-height of text-[11px])
-      return (
-        <div className="mx-3 mt-3 mb-2 flex h-[17px] items-center">
-          <div className="h-px w-full bg-gray-200" />
-        </div>
-      );
+    // 1. Camionetas
+    const camionetasSubItems: NavItem[] = [];
+    if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
+    if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: ListChecks });
+    if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });
+    if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Truck });
+    if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Wrench });
+    if (canSeeCam_Conductores) camionetasSubItems.push({ id: 'cam-cond', label: 'Conductores', path: '/camionetas/conductores', icon: Users });
+    if (canSeeCam_RegGastos) camionetasSubItems.push({ id: 'cam-gastos', label: 'Registros G.', path: '/camionetas/registros/gastos', icon: DollarSign });
+    if (canSeeCam_RegChecklist) camionetasSubItems.push({ id: 'cam-check', label: 'Checklists', path: '/camionetas/registros/checklist', icon: ClipboardList });
+    if (canSeeCam_Mantenimiento) camionetasSubItems.push({ id: 'cam-mant', label: 'Mantenimiento', path: '/camionetas/mantenimiento', icon: CalendarDays });
+
+    const pasajesSubItems: NavItem[] = [];
+    if (canSeePas_Solicitar) pasajesSubItems.push({ id: 'pas-sol', label: 'Solicitar', path: '/pasajes/solicitar', icon: FilePlus2 });
+    if (canSeePas_Proveedor) pasajesSubItems.push({ id: 'pas-prov', label: 'Proveedor', path: '/pasajes/proveedor', icon: DollarSign });
+    if (canSeePas_Gerencia) pasajesSubItems.push({ id: 'pas-ger', label: 'Gerencia', path: '/pasajes/gerencia', icon: ListChecks });
+    if (canSeePas_Gestion) pasajesSubItems.push({ id: 'pas-ges', label: 'Gestión', path: '/pasajes/gestion', icon: Wrench });
+    if (canSeePas_Proveedores) pasajesSubItems.push({ id: 'pas-list', label: 'Proveedores', path: '/pasajes/proveedores', icon: Users });
+
+    const ticketItems: NavItem[] = [];
+    if (camionetasSubItems.length > 0) {
+      ticketItems.push({ id: 'camionetas', label: 'Camionetas', icon: Truck, subItems: camionetasSubItems });
     }
-    return (
-      <div className="mx-2 mb-2 mt-3 flex h-[17px] items-center select-none px-1 text-[11px] font-semibold uppercase tracking-wide text-gray-400">
-        {children}
-      </div>
-    );
+    if (pasajesSubItems.length > 0) {
+      ticketItems.push({ id: 'pasajes', label: 'Pasajes & Hospedaje', icon: Plane, subItems: pasajesSubItems });
+    }
+
+    // --- Telefonia (Merged into Administracion) ---
+    const telefoniaSubItems: NavItem[] = [];
+    if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-sol', label: 'Solicitar', path: '/telefonia/solicitar', icon: FilePlus2 });
+    if (canSeeTel_Inventario) telefoniaSubItems.push({ id: 'tel-inv', label: 'Inventario', path: '/telefonia/inventario', icon: Wrench });
+    if (canSeeTel_AprobIT) telefoniaSubItems.push({ id: 'tel-it', label: 'Aprobación IT', path: '/telefonia/aprobacion-it', icon: Wrench });
+    if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ListChecks });
+    if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: DollarSign });
+    if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-hist', label: 'Entregas / Historial', path: '/telefonia/gestion', icon: Truck });
+
+    if (telefoniaSubItems.length > 0) {
+      ticketItems.push({ id: 'telefonia', label: 'Telefonía', icon: Smartphone, subItems: telefoniaSubItems });
+    }
+
+    if (ticketItems.length > 0) {
+      groups.push({ id: 'admin', title: 'ADMINISTRACIÓN', items: ticketItems });
+    }
+
+    // --- Seguridad Patrimonial ---
+    const seguridadItems: NavItem[] = [];
+
+    // 1. Programacion de puestos
+    const progSubItems: NavItem[] = [];
+    if (canSeeSeg_Programacion) progSubItems.push({ id: 'seg-prog', label: 'Programación', path: '/seguridad/programacion', icon: CalendarDays });
+    if (canSeeSeg_Recursos) progSubItems.push({ id: 'seg-rec', label: 'Recursos', path: '/seguridad/recursos', icon: Users });
+
+    if (progSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-puestos', label: 'Programación de Puestos', icon: CalendarDays, subItems: progSubItems });
+    }
+
+    // 2. Checklist de Camaras
+    const checklistSubItems: NavItem[] = [];
+    if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/seguridad/inventario-camaras', icon: Wrench });
+    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
+
+    if (checklistSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-camaras', label: 'Checklist de Cámaras', icon: ClipboardList, subItems: checklistSubItems });
+    }
+
+    // 3. Monitoreo de Unidades
+    const monitoreoSubItems: NavItem[] = [];
+    if (canSeeSeg_MonitoreoPT) monitoreoSubItems.push({ id: 'seg-mon', label: 'Monitoreo PT', path: '/seguridad/monitoreo-pt', icon: Monitor });
+    monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/seguridad/tiempos-viaje', icon: Truck });
+
+    if (monitoreoSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-unidades', label: 'Monitoreo de Unidades', icon: Route, subItems: monitoreoSubItems });
+    }
+
+    // 4. Seguimiento Agentes
+    const agentesSubItems: NavItem[] = [];
+    if (canSeeSeg_ReportingManager) agentesSubItems.push({ id: 'seg-rep', label: 'Reporte de Puestos', path: '/seguridad/reporting-manager', icon: ShieldCheck });
+    if (canSeeSeg_AgentReport) agentesSubItems.push({ id: 'seg-agent', label: 'Terminal de Agente', path: '/seguridad/agent-report', icon: Smartphone });
+
+    if (agentesSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-agentes', label: 'Seguimiento Agentes', icon: Users, subItems: agentesSubItems }); // Changed icon to Users regarding 'Agentes'
+    }
+
+    if (seguridadItems.length > 0) {
+      groups.push({
+        id: 'seguridad-group',
+        title: 'SEGURIDAD PATRIMONIAL',
+        items: seguridadItems
+      });
+    }
+
+    // --- Configuración ---
+    const configSubItems: NavItem[] = [];
+    if (canSeeConfig) configSubItems.push({ id: 'conf-gen', label: 'General', path: '/config', icon: Settings });
+    if (canSeeConfigPersonal) configSubItems.push({ id: 'conf-pers', label: 'Personal', path: '/configuracion/personal', icon: Users });
+    if (canSeeConfigGerencias) configSubItems.push({ id: 'conf-ger', label: 'Gerencias', path: '/configuracion/gerencias', icon: ClipboardList });
+    if (canSeeConfigSedes) configSubItems.push({ id: 'conf-sedes', label: 'Sedes', path: '/configuracion/sedes', icon: MapPin });
+    if (canSeeConfigCentrales) configSubItems.push({ id: 'conf-cctv', label: 'Centrales CCTV', path: '/configuracion/centrales-cctv', icon: Building2 });
+    configSubItems.push({ id: 'conf-sup', label: 'Supervisores ST', path: '/configuracion/supervisores', icon: Briefcase }); // Always visible?
+    if (canSeeAppsCelular) configSubItems.push({ id: 'conf-apps', label: 'Aplicativos MDM', path: '/configuracion/aplicativos-celular', icon: Smartphone });
+
+    if (configSubItems.length > 0) {
+      groups.push({
+        id: 'config-group',
+        title: 'Preferencias',
+        items: [{ id: 'config', label: 'Configuración', icon: Settings, subItems: configSubItems }]
+      });
+    }
+
+    // --- Ayuda ---
+    if (canSeeAyuda) {
+      groups.push({
+        id: 'help-group',
+        title: 'Soporte',
+        items: [{ id: 'ayuda', label: 'Ayuda', icon: HelpCircle, path: '/ayuda' }]
+      });
+    }
+
+    return groups;
   };
 
-  // ======= Estilos =======
+  const navGroups = getNavGroups();
 
-  const baseItem =
-    "group mb-1 flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-left text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 font-medium";
-  const activeClass = "bg-gray-600/10 text-gray-700";
-  const idleClass = "text-gray-600 hover:bg-gray-100";
+  // --- State ---
+  const [expandedMenus, setExpandedMenus] = useState<string[]>([]);
+  const [hoveredItem, setHoveredItem] = useState<string | null>(null);
+  const [menuTop, setMenuTop] = useState<number>(0);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const submenuItem = (isActive: boolean) =>
-    [
-      "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
-      isActive ? "bg-gray-600/10 text-gray-700 font-medium" : "text-gray-600 hover:bg-gray-50 hover:text-gray-900",
-    ].join(" ");
+  // Sync expanded state with URL
+  useEffect(() => {
+    // Logic: find which item contains the current path and expand it
+    const activePaths = new Set<string>();
+    navGroups.forEach(group => {
+      group.items.forEach(item => {
+        if (item.subItems) {
+          // Check if any subitem matches current path
+          if (item.subItems.some(sub => location.pathname.startsWith(sub.path || '###'))) {
+            activePaths.add(item.id);
+          }
+        } else if (item.path && location.pathname.startsWith(item.path)) {
+          // Single item, no strict expansion needed usually but good to know
+        }
+      });
+    });
+    // OLD: setExpandedMenus(prev => Array.from(new Set([...prev, ...Array.from(activePaths)])));
+    // NEW: Reset to only the active group when navigating
+    setExpandedMenus(Array.from(activePaths));
+  }, [location.pathname]);
 
-  const iconIdle = "h-5 w-5 text-gray-500 group-hover:text-gray-700";
-  const iconActive = "h-5 w-5 text-gray-700";
+  const handleItemClick = (item: NavItem) => {
+    if (item.subItems && item.subItems.length > 0) {
+      if (collapsed) return; // Hover handles this
+      setExpandedMenus(prev =>
+        prev.includes(item.id)
+          ? prev.filter(id => id !== item.id)
+          : [...prev, item.id]
+      );
+    } else if (item.path) {
+      navigate(item.path);
+      if (onClose) onClose();
+    }
+  };
 
-  const inConfigSection =
-    location.pathname.startsWith("/config") ||
-    location.pathname.startsWith("/configuracion");
+  const handleMouseEnterItem = (item: NavItem, e: React.MouseEvent) => {
+    if (!collapsed) return;
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
 
-  const SidebarBody = (
-    <div className={`flex h-full flex-col bg-white transition-all duration-300 ${collapsed ? "w-20" : "w-72"}`}>
+    // Position logic
+    const rect = e.currentTarget.getBoundingClientRect();
+    // We want the menu to align roughly with the top of the item, but handled by fixed positioning
+    setMenuTop(rect.top);
+    if (item.subItems && item.subItems.length > 0) {
+      setHoveredItem(item.id);
+    } else {
+      // Show tooltip logic if needed, or just highlight. Use simplistic approach for now.
+      // Actually for single items we might want a simple tooltip.
+      // For now, let's only handle submenus popping out as that was the main request.
+      // If single item, maybe just set hoveredItem to null?
+      setHoveredItem(null);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    if (!collapsed) return;
+    hoverTimeoutRef.current = setTimeout(() => {
+      setHoveredItem(null);
+    }, 300);
+  };
+
+  // Active item check
+  const isItemActive = (item: NavItem) => {
+    if (item.path && location.pathname.startsWith(item.path)) return true;
+    if (item.subItems) {
+      return item.subItems.some(sub => sub.path && location.pathname.startsWith(sub.path));
+    }
+    return false;
+  };
+
+  // Find the hovered item object for the floating menu
+  const activePopupItem = collapsed && hoveredItem
+    ? navGroups.flatMap(g => g.items).find(i => i.id === hoveredItem)
+    : null;
+
+  const SidebarContent = (
+    <div className="flex h-full flex-col bg-white">
       {/* Brand */}
-      {/* Brand - Fixed height to prevent layout shifts */}
-      <div className={`flex items-center h-16 shrink-0 ${collapsed ? "justify-center" : "justify-between px-4"} border-b border-gray-100`}>
-        {collapsed ? (
-          <button
-            onClick={onToggle}
-            className="flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
-            title="Expandir barra lateral"
-          >
-            <PanelLeft className="h-5 w-5 rotate-180" />
-          </button>
-        ) : (
+      <div className={clsx(
+        "flex items-center h-16 shrink-0 border-b border-slate-200 transition-all duration-300",
+        collapsed ? "justify-center" : "justify-between px-4"
+      )}>
+        {!collapsed ? (
           <>
             <div className="flex items-center gap-2">
               <img src="/logo-rojo.svg" alt="Danper" className="h-8 w-auto" />
             </div>
-
-            {/* Desktop Toggle Button (only if passed) */}
             {onToggle && (
-              <button
-                onClick={onToggle}
-                className="hidden md:flex h-8 w-8 items-center justify-center rounded-lg hover:bg-gray-100 text-gray-500 transition-colors"
-                title="Ocultar barra lateral"
-              >
-                <PanelLeft className="h-5 w-5" />
+              <button onClick={onToggle} className="hidden md:flex p-2 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                <ChevronsLeft className="h-6 w-6" />
               </button>
             )}
-
-            {/* Cerrar (móvil) - Only shown if !collapsed (which is implied here inside !collapsed block, but logic is shared. Wait, mobile uses 'open' prop, logic above handles collapsed state for desktop.
-               The original code had the Close button inside the main div but distinct.
-               My replacement above handles the DESKTOP collapsed logic.
-               The MOBILE CLOSE button was previously:
-               {!collapsed && ( <button ... hidden md:inline-flex ... /> )}
-               Wait, mobile drawer is "fixed inset 0".
-               Let's re-verify where the Mobile Close button was.
-               It was checking !collapsed.
-               Actually, for mobile, 'collapsed' prop might be false (default), but 'open' is true.
-               The mobile drawer uses the SAME content 'SidebarBody'.
-               So in mobile view, 'collapsed' is usually false.
-               So we need to make sure the "Mobile Close" button is also rendered here or preserved.
-            */}
-            <button
-              type="button"
-              aria-label="Cerrar menú"
-              onClick={onClose}
-              className="md:hidden inline-flex h-9 w-9 items-center justify-center rounded-full border border-gray-200 bg-white text-gray-700 transition-colors hover:bg-gray-50"
-            >
-              <X className="h-5 w-5" />
+            {/* Mobile Close */}
+            <button onClick={onClose} className="md:hidden p-2 rounded-lg text-slate-500 hover:bg-slate-100">
+              <X className="h-6 w-6" />
             </button>
           </>
+        ) : (
+          <button onClick={onToggle} className="flex p-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 transition-colors">
+            <ChevronsRight className="h-6 w-6" />
+          </button>
         )}
       </div>
 
-      {/* Navegación */}
-      <nav className="flex-1 overflow-y-auto p-2">
-        {/* Inicio */}
-
-
-        {/* ===== Tickets ===== */}
-        {(showAny(
-          "/camionetas/*",
-          "/camionetas/solicitar",
-          "/camionetas/administrar",
-          "/camionetas/inventario",
-          "/camionetas/conductores",
-          "/camionetas/registros/gastos",
-          "/camionetas/registros/checklist",
-          "/camionetas/mantenimiento",
-          "/camionetas/garita", // 👈 NUEVO
-          "/camionetas/mi-camioneta" // 👈 NUEVO
-        ) ||
-          showAny(
-            "/pasajes/*",
-            "/pasajes/solicitar",
-            "/pasajes/proveedor",
-            "/pasajes/gerencia",
-            "/pasajes/gestion",
-            "/pasajes/proveedores"
-          )) && <SectionLabel>Tickets</SectionLabel>}
-
-        {/* Camionetas */}
-        {showAny(
-          "/camionetas/*",
-          "/camionetas/solicitar",
-          "/camionetas/administrar",
-          "/camionetas/inventario",
-          "/camionetas/conductores",
-          "/camionetas/registros/gastos",
-          "/camionetas/registros/checklist",
-          "/camionetas/mantenimiento",
-          "/camionetas/garita", // 👈 NUEVO
-          "/camionetas/mi-camioneta" // 👈 NUEVO
-        ) && (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpenCamionetas((v) => !v)}
-                className={[
-                  baseItem,
-                  location.pathname.startsWith("/camionetas")
-                    ? activeClass
-                    : idleClass,
-                ].join(" ")}
-                aria-expanded={openCamionetas}
-                aria-controls="submenu-camionetas"
-              >
-                <Truck
-                  className={
-                    location.pathname.startsWith("/camionetas")
-                      ? iconActive
-                      : iconIdle
-                  }
-                />
-                {!collapsed && (
-                  <>
-                    <span className="font-medium">Camionetas</span>
-                    <span className="ml-auto transition-transform">
-                      {openCamionetas ? (
-                        <ChevronDown
-                          className={
-                            location.pathname.startsWith("/camionetas")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      ) : (
-                        <ChevronRight
-                          className={
-                            location.pathname.startsWith("/camionetas")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      )}
-                    </span>
-                  </>
-                )}
-              </button>
-
-              <AnimatePresence initial={false}>
-                {openCamionetas && (
-                  <motion.div
-                    id="submenu-camionetas"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                  >
-                    {canSeeCam_Solicitar && (
-                      <NavLink
-                        to="/camionetas/solicitar"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Solicitar (Creación de ticket)"
-                      >
-                        <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Solicitar (Creación de ticket)"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_Admin && (
-                      <NavLink
-                        to="/camionetas/administrar"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Administrar solicitudes"
-                      >
-                        <ListChecks className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Administrar solicitudes"}
-                      </NavLink>
-                    )}
-
-                    {/* 👇 NUEVO ENLACE GARITA */}
-                    {canSeeCam_Garita && (
-                      <NavLink
-                        to="/camionetas/garita"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Garita (Control QR)"
-                      >
-                        <ClipboardList className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Garita (Control QR)"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_MiCamioneta && (
-                      <NavLink
-                        to="/camionetas/mi-camioneta"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Mi Camioneta"
-                      >
-                        <Truck className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Mi Camioneta"}
-                      </NavLink>
-                    )}
-
-                    {canSeeCam_Inventario && (
-                      <NavLink
-                        to="/camionetas/inventario"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Inventario Flota"
-                      >
-                        <Wrench className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Inventario Flota"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_Conductores && (
-                      <NavLink
-                        to="/camionetas/conductores"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Conductores"
-                      >
-                        <Users className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Conductores"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_RegGastos && (
-                      <NavLink
-                        to="/camionetas/registros/gastos"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Registros Gastos"
-                      >
-                        <DollarSign className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Registros Gastos"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_RegChecklist && (
-                      <NavLink
-                        to="/camionetas/registros/checklist"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Registros Checklist"
-                      >
-                        <ClipboardList className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Registros Checklist"}
-                      </NavLink>
-                    )}
-                    {canSeeCam_Mantenimiento && (
-                      <NavLink
-                        to="/camionetas/mantenimiento"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Programación mantenimiento"
-                      >
-                        <CalendarDays className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Programación mantenimiento"}
-                      </NavLink>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
-
-        {/* Pasajes & Hospedaje */}
-        {showAny(
-          "/pasajes/*",
-          "/pasajes/solicitar",
-          "/pasajes/proveedor",
-          "/pasajes/gerencia",
-          "/pasajes/gestion",
-          "/pasajes/proveedores"
-        ) && (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpenPasajes((v) => !v)}
-                className={[
-                  baseItem,
-                  location.pathname.startsWith("/pasajes")
-                    ? activeClass
-                    : idleClass,
-                  "mt-1",
-                ].join(" ")}
-                aria-expanded={openPasajes}
-                aria-controls="submenu-pasajes"
-              >
-                <Plane
-                  className={
-                    location.pathname.startsWith("/pasajes")
-                      ? iconActive
-                      : iconIdle
-                  }
-                />
-                {!collapsed && (
-                  <>
-                    <span className="font-medium">Pasajes &amp; Hospedaje</span>
-                    <span className="ml-auto transition-transform">
-                      {openPasajes ? (
-                        <ChevronDown
-                          className={
-                            location.pathname.startsWith("/pasajes")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      ) : (
-                        <ChevronRight
-                          className={
-                            location.pathname.startsWith("/pasajes")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      )}
-                    </span>
-                  </>
-                )}
-              </button>
-
-              <AnimatePresence initial={false}>
-                {openPasajes && (
-                  <motion.div
-                    id="submenu-pasajes"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                  >
-                    {canSeePas_Solicitar && (
-                      <NavLink
-                        to="/pasajes/solicitar"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Solicitar"
-                      >
-                        <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Solicitar"}
-                      </NavLink>
-                    )}
-                    {canSeePas_Proveedor && (
-                      <NavLink
-                        to="/pasajes/proveedor"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Proveedor"
-                      >
-                        <DollarSign className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Proveedor"}
-                      </NavLink>
-                    )}
-                    {canSeePas_Gerencia && (
-                      <NavLink
-                        to="/pasajes/gerencia"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Gerencia (Aprobación)"
-                      >
-                        <ListChecks className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Gerencia (Aprobación)"}
-                      </NavLink>
-                    )}
-                    {canSeePas_Gestion && (
-                      <NavLink
-                        to="/pasajes/gestion"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Gestión"
-                      >
-                        <Wrench className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Gestión"}
-                      </NavLink>
-                    )}
-                    {canSeePas_Proveedores && (
-                      <NavLink
-                        to="/pasajes/proveedores"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Proveedores"
-                      >
-                        <Users className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Proveedores"}
-                      </NavLink>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
-
-        {/* Telefonia */}
-        {showAny(
-          "/telefonia/*",
-          "/telefonia/solicitar",
-          "/telefonia/inventario",
-          "/telefonia/gestion",
-          "/telefonia/aprobacion-it",
-          "/telefonia/aprobacion-gerencia",
-          "/telefonia/aprobacion-admin"
-        ) && (
-            <>
-              <button
-                type="button"
-                onClick={() => setOpenTelefonia((v) => !v)}
-                className={[
-                  baseItem,
-                  location.pathname.startsWith("/telefonia")
-                    ? activeClass
-                    : idleClass,
-                  "mt-1",
-                ].join(" ")}
-                aria-expanded={openTelefonia}
-                aria-controls="submenu-telefonia"
-              >
-                <Smartphone
-                  className={
-                    location.pathname.startsWith("/telefonia")
-                      ? iconActive
-                      : iconIdle
-                  }
-                />
-                {!collapsed && (
-                  <>
-                    <span className="font-medium">Telefonía</span>
-                    <span className="ml-auto transition-transform">
-                      {openTelefonia ? (
-                        <ChevronDown
-                          className={
-                            location.pathname.startsWith("/telefonia")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      ) : (
-                        <ChevronRight
-                          className={
-                            location.pathname.startsWith("/telefonia")
-                              ? "h-4 w-4 text-white"
-                              : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                          }
-                        />
-                      )}
-                    </span>
-                  </>
-                )}
-              </button>
-
-              <AnimatePresence initial={false}>
-                {openTelefonia && (
-                  <motion.div
-                    id="submenu-telefonia"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: "auto", opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                  >
-                    {canSeeTel_Solicitar && (
-                      <NavLink
-                        to="/telefonia/solicitar"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Solicitar"
-                      >
-                        <FilePlus2 className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Solicitar"}
-                      </NavLink>
-                    )}
-                    {canSeeTel_Inventario && (
-                      <NavLink
-                        to="/telefonia/inventario"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Inventario"
-                      >
-                        <Wrench className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Inventario"}
-                      </NavLink>
-                    )}
-                    {canSeeTel_AprobIT && (
-                      <NavLink
-                        to="/telefonia/aprobacion-it"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Aprobación IT"
-                      >
-                        <Wrench className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Aprobación IT"}
-                      </NavLink>
-                    )}
-                    {canSeeTel_AprobGerencia && (
-                      <NavLink
-                        to="/telefonia/aprobacion-gerencia"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Aprobación Gerencia"
-                      >
-                        <ListChecks className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Aprobación Gerencia"}
-                      </NavLink>
-                    )}
-                    {canSeeTel_AprobAdmin && (
-                      <NavLink
-                        to="/telefonia/aprobacion-admin"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Aprobación Admin"
-                      >
-                        <DollarSign className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Aprobación Admin"}
-                      </NavLink>
-                    )}
-                    {canSeeTel_Gestion && (
-                      <NavLink
-                        to="/telefonia/gestion"
-                        className={({ isActive }) => submenuItem(isActive)}
-                        onClick={onClose}
-                        title="Entregas / Historial"
-                      >
-                        <Truck className="h-4 w-4 text-gray-600" />
-                        {!collapsed && "Entregas / Historial"}
-                      </NavLink>
-                    )}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </>
-          )}
-
-        {/* Seguridad Patrimonial */}
-        {showSeguridad && (
-          <>
-            <SectionLabel>Seguridad Patrimonial</SectionLabel>
-            <button
-              type="button"
-              onClick={() => setOpenSeguridad((v) => !v)}
-              className={[
-                baseItem,
-                location.pathname.startsWith("/seguridad")
-                  ? activeClass
-                  : idleClass,
-                "mt-1",
-              ].join(" ")}
-              aria-expanded={openSeguridad}
-              aria-controls="submenu-seguridad"
-            >
-              <ShieldCheck
-                className={
-                  location.pathname.startsWith("/seguridad")
-                    ? iconActive
-                    : iconIdle
-                }
-              />
-              {!collapsed && (
-                <>
-                  <span className="font-medium">Seguridad Patrimonial</span>
-                  <span className="ml-auto transition-transform">
-                    {openSeguridad ? (
-                      <ChevronDown
-                        className={
-                          location.pathname.startsWith("/seguridad")
-                            ? "h-4 w-4 text-white"
-                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                        }
-                      />
-                    ) : (
-                      <ChevronRight
-                        className={
-                          location.pathname.startsWith("/seguridad")
-                            ? "h-4 w-4 text-white"
-                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                        }
-                      />
-                    )}
-                  </span>
-                </>
-              )}
-            </button>
-
-            <AnimatePresence initial={false}>
-              {openSeguridad && (
-                <motion.div
-                  id="submenu-seguridad"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                >
-                  {canSeeSeg_Programacion && (
-                    <NavLink
-                      to="/seguridad/programacion"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Programación de Puestos"
-                    >
-                      <CalendarDays className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Programación de Puestos"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_Recursos && (
-                    <NavLink
-                      to="/seguridad/recursos"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Gestión de Recursos"
-                    >
-                      <Users className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Gestión de Recursos"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_ChecklistCamaras && (
-                    <NavLink
-                      to="/seguridad/checklist-camaras"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Checklist de Cámaras"
-                    >
-                      <ClipboardList className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Checklist de Cámaras"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_InventarioCamaras && (
-                    <NavLink
-                      to="/seguridad/inventario-camaras"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Inventario de Cámaras"
-                    >
-                      <Wrench className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Inventario de Cámaras"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_MonitoreoPT && (
-                    <NavLink
-                      to="/seguridad/monitoreo-pt"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Monitoreo PT"
-                    >
-                      <Monitor className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Monitoreo PT"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_ReportingManager && (
-                    <NavLink
-                      to="/seguridad/reporting-manager"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Reporte Puestos"
-                    >
-                      <ShieldCheck className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Reporte Puestos"}
-                    </NavLink>
-                  )}
-                  {canSeeSeg_AgentReport && (
-                    <NavLink
-                      to="/seguridad/agent-report"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Terminal Agente"
-                    >
-                      <Smartphone className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Terminal Agente"}
-                    </NavLink>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
-
-        {/* Preferencias / Configuración (agrupado) */}
-        {(canSeeConfig || canSeeConfigPersonal || canSeeConfigGerencias || canSeeConfigSedes || canSeeConfigCentrales) && (
-          <>
-            <SectionLabel>Preferencias</SectionLabel>
-
-            <button
-              type="button"
-              onClick={() => setOpenConfigMenu((v) => !v)}
-              className={[
-                baseItem,
-                inConfigSection ? activeClass : idleClass,
-              ].join(" ")}
-              aria-expanded={openConfigMenu}
-              aria-controls="submenu-config"
-            >
-              <Settings className={inConfigSection ? iconActive : iconIdle} />
-              {!collapsed && (
-                <>
-                  <span className="font-medium">Configuración</span>
-                  <span className="ml-auto transition-transform">
-                    {openConfigMenu ? (
-                      <ChevronDown
-                        className={
-                          inConfigSection
-                            ? "h-4 w-4 text-white"
-                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                        }
-                      />
-                    ) : (
-                      <ChevronRight
-                        className={
-                          inConfigSection
-                            ? "h-4 w-4 text-white"
-                            : "h-4 w-4 text-gray-600 group-hover:text-gray-900"
-                        }
-                      />
-                    )}
-                  </span>
-                </>
-              )}
-            </button>
-
-            <AnimatePresence initial={false}>
-              {openConfigMenu && (
-                <motion.div
-                  id="submenu-config"
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: "auto", opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  className="ml-2 overflow-hidden rounded-xl border border-gray-100 bg-gray-50"
-                >
-                  {canSeeConfig && (
-                    <NavLink
-                      to="/config"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="General"
-                    >
-                      <Settings className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "General"}
-                    </NavLink>
-                  )}
-
-                  {canSeeConfigPersonal && (
-                    <NavLink
-                      to="/configuracion/personal"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Personal"
-                    >
-                      <Users className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Personal"}
-                    </NavLink>
-                  )}
-
-                  {canSeeConfigGerencias && (
-                    <NavLink
-                      to="/configuracion/gerencias"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Gerencias"
-                    >
-                      <ClipboardList className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Gerencias"}
-                    </NavLink>
-                  )}
-
-                  {canSeeConfigSedes && (
-                    <NavLink
-                      to="/configuracion/sedes"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Sedes"
-                    >
-                      <MapPin className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Sedes"}
-                    </NavLink>
-                  )}
-
-                  {canSeeConfigCentrales && (
-                    <NavLink
-                      to="/configuracion/centrales-cctv"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Centrales CCTV"
-                    >
-                      <Building2 className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Centrales CCTV"}
-                    </NavLink>
-                  )}
-
-                  <NavLink
-                    to="/configuracion/supervisores"
-                    className={({ isActive }) => submenuItem(isActive)}
-                    onClick={onClose}
-                    title="Supervisores ST"
-                  >
-                    <Briefcase className="h-4 w-4 text-gray-600" />
-                    {!collapsed && "Supervisores ST"}
-                  </NavLink>
-
-                  {canSeeAppsCelular && (
-                    <NavLink
-                      to="/configuracion/aplicativos-celular"
-                      className={({ isActive }) => submenuItem(isActive)}
-                      onClick={onClose}
-                      title="Aplicativos MDM"
-                    >
-                      <Smartphone className="h-4 w-4 text-gray-600" />
-                      {!collapsed && "Aplicativos MDM"}
-                    </NavLink>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </>
-        )}
-
-        {/* Ayuda */}
-        {canSeeAyuda && (
-          <NavLink
-            to="/ayuda"
-            className={({ isActive }) =>
-              [baseItem, isActive ? activeClass : idleClass].join(" ")
-            }
-            onClick={onClose}
-          >
-            {({ isActive }) => (
-              <>
-                <HelpCircle className={isActive ? iconActive : iconIdle} />
-                {!collapsed && <span className="font-medium">Ayuda</span>}
-              </>
+      {/* Items */}
+      <div className="flex-1 overflow-y-auto overflow-x-hidden p-3 space-y-6 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-thumb]:bg-slate-200 [&::-webkit-scrollbar-thumb]:rounded-full hover:[&::-webkit-scrollbar-thumb]:bg-slate-300">
+        {navGroups.map(group => (
+          <div key={group.id}>
+            {collapsed ? (
+              <div className="my-2 mx-4 border-t border-slate-100" />
+            ) : (
+              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2 px-2 transition-all">
+                {group.title}
+              </h3>
             )}
-          </NavLink>
-        )}
-      </nav>
 
-      {/* Usuario / footer - REMOVED MOVED TO HEADER */}
+            <div className="space-y-1">
+              {group.items.map(item => {
+                const isActive = isItemActive(item);
+                const isExpanded = expandedMenus.includes(item.id);
+                // Single item logic vs Submenu logic
+                const hasSub = item.subItems && item.subItems.length > 0;
+
+                return (
+                  <React.Fragment key={item.id}>
+                    <button
+                      onClick={() => handleItemClick(item)}
+                      onMouseEnter={(e) => handleMouseEnterItem(item, e)}
+                      onMouseLeave={handleMouseLeave}
+                      className={clsx(
+                        "w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all duration-200 group relative",
+                        isActive
+                          ? "bg-red-50 text-red-700 font-medium shadow-sm ring-1 ring-red-200"
+                          : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                      )}
+                    >
+                      {item.icon && (
+                        <item.icon
+                          className={clsx(
+                            "h-6 w-6 flex-shrink-0 transition-colors",
+                            isActive ? "text-red-600" : "text-slate-400 group-hover:text-slate-600"
+                          )}
+                        />
+                      )}
+
+                      <div className={clsx("flex-1 text-left whitespace-nowrap overflow-hidden transition-all", collapsed ? "w-0 opacity-0" : "w-auto opacity-100")}>
+                        {item.label}
+                      </div>
+
+                      {!collapsed && hasSub && (
+                        <ChevronDown className={clsx("h-4 w-4 text-slate-400 transition-transform", isExpanded && "rotate-180")} />
+                      )}
+                    </button>
+
+                    {/* Accordion for Expanded Mode */}
+                    {!collapsed && hasSub && (
+                      <AnimatePresence>
+                        {isExpanded && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: "auto", opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            className="overflow-hidden"
+                          >
+                            <div className="pl-4 mt-1 space-y-0.5 relative">
+                              <div className="absolute left-[22px] top-0 bottom-2 w-px bg-slate-200" />
+                              {item.subItems?.map(sub => {
+                                return <NavLink
+                                  key={sub.id}
+                                  to={sub.path!}
+                                  onClick={onClose}
+                                  className={({ isActive }) => clsx(
+                                    "group flex items-center gap-3 px-3 py-2 rounded-lg text-sm relative z-10 ml-2 transition-colors",
+                                    isActive
+                                      ? "text-red-700 bg-red-50/50 font-medium"
+                                      : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
+                                  )}
+                                >
+                                  {({ isActive }) => (
+                                    <>
+                                      {/* Replaced dot with Icon */}
+                                      {sub.icon ? (
+                                        <sub.icon className={clsx(
+                                          "h-4 w-4 transition-colors",
+                                          isActive ? "text-red-600" : "text-slate-400"
+                                        )} />
+                                      ) : (
+                                        <div className={clsx(
+                                          "w-1.5 h-1.5 rounded-full transition-colors",
+                                          isActive ? "bg-red-600 ring-2 ring-red-100" : "bg-slate-300 group-hover:bg-slate-400"
+                                        )} />
+                                      )}
+                                      <span className="truncate">{sub.label}</span>
+                                    </>
+                                  )}
+                                </NavLink>;
+                              })}
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Footer / Logout */}
+      <div className="p-4 border-t border-slate-100">
+        {/* We can simply put a logout button or user profile link here if needed, or leave empty/minimal */}
+        {/* If collapsed show icon only */}
+      </div>
     </div>
   );
 
   return (
     <>
-      {/* Desktop */}
-      <aside className={`fixed left-0 top-0 hidden h-screen border-r border-gray-100 bg-white md:block z-30 transition-all duration-300 ${collapsed ? "w-20" : "w-72"}`}>
-        {SidebarBody}
+      <aside className={clsx(
+        "fixed left-0 top-0 z-30 h-screen border-r border-slate-200 bg-white transition-all duration-300 hidden md:block",
+        collapsed ? "w-20" : "w-72"
+      )}>
+        {SidebarContent}
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Mobile Drawer */}
       <AnimatePresence>
         {open && (
-          <motion.div
-            className="fixed inset-0 z-40 md:hidden"
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-          >
-            <div
-              className="absolute inset-0 bg-black/30"
-              onClick={onClose}
-              aria-hidden
-            />
+          <motion.div className="fixed inset-0 z-40 md:hidden" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={onClose} />
             <motion.aside
-              className="absolute left-0 top-0 h-full w-72 border-r bg-white"
-              initial={{ x: -320 }}
+              className="absolute left-0 top-0 h-full w-72 bg-white shadow-xl"
+              initial={{ x: -300 }}
               animate={{ x: 0 }}
-              exit={{ x: -320 }}
+              exit={{ x: -300 }}
               transition={{ type: "spring", stiffness: 300, damping: 30 }}
             >
-              {SidebarBody}
+              {SidebarContent}
             </motion.aside>
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* Floating Popover Portal/Overlay */}
+      {/* We render this outside the overflow container, fixed position */}
+      {activePopupItem && (
+        <div
+          className="fixed z-50 left-[84px] bg-white rounded-xl shadow-xl border border-slate-100 w-64 py-2 animate-in fade-in zoom-in-95 duration-200"
+          style={{ top: menuTop }}
+          onMouseEnter={() => {
+            // Clear timeout so it stays open
+            if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+          }}
+          onMouseLeave={handleMouseLeave}
+        >
+          {/* Bridge element to prevent gap issues */}
+          <div className="absolute -left-4 top-0 w-4 h-full bg-transparent" />
+
+          <div className="px-4 py-2 border-b border-slate-50 mb-1">
+            <span className="text-sm font-bold text-slate-800">{activePopupItem.label}</span>
+          </div>
+          <div className="flex flex-col p-1">
+            {activePopupItem.subItems?.map(sub => {
+              const isSubActive = sub.path && location.pathname.startsWith(sub.path);
+              return (
+                <NavLink
+                  key={sub.id}
+                  to={sub.path!}
+                  onClick={() => setHoveredItem(null)}
+                  className={clsx(
+                    "text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2",
+                    isSubActive
+                      ? "bg-red-50 text-red-700 font-medium"
+                      : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                  )}
+                >
+                  {sub.icon && <sub.icon className="h-4 w-4 opacity-70" />}
+                  {sub.label}
+                </NavLink>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </>
   );
 }

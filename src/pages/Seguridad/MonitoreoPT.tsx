@@ -2,7 +2,7 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { UnitStatus } from '../types';
 import type { TransportUnit, LatLng, StopPoint } from '../types';
-import { ROUTE_MATRIX } from './TravelTimesTable';
+import { getTravelTimesState, subscribeTravelTimes } from '../../store/travelTimesStore';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import html2pdf from 'html2pdf.js';
@@ -30,7 +30,8 @@ import {
     Edit3,
     FileSpreadsheet,
     MapPin,
-    PlayCircle
+    PlayCircle,
+    Monitor
 } from 'lucide-react';
 
 const GLOBAL_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };
@@ -46,6 +47,15 @@ type TabType = 'CONTROLES' | 'PARADAS' | 'DETALLE' | 'RESUMEN';
 type FilterStatus = 'ALL' | 'TRANSIT' | 'ARRIVED' | 'CANCELLED';
 
 export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUnits }) => {
+    // Travel Times Store Integration
+    const [routeMatrix, setRouteMatrix] = useState(getTravelTimesState().travelTimes);
+    useEffect(() => {
+        const unsubscribe = subscribeTravelTimes(() => {
+            setRouteMatrix(getTravelTimesState().travelTimes);
+        });
+        return () => { unsubscribe(); };
+    }, []);
+
     const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
@@ -162,20 +172,26 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
 
     useEffect(() => {
         if (form.origin && form.destination && form.fechaSalida) {
-            const matched = ROUTE_MATRIX.find(r => r.origen === form.origin && r.destino === form.destination);
-            if (matched) {
-                const [hours, minutes] = matched.max.split(':').map(Number);
-                const departureDate = new Date(form.fechaSalida);
-                const arrivalDate = new Date(departureDate.getTime() + (hours * 60 * 60 * 1000) + (minutes * 60 * 1000));
+            const matched = routeMatrix.find(r => r.origen === form.origin && r.destino === form.destination);
+            if (matched && matched.max_time) {
+                const parts = matched.max_time.split(':');
+                const hours = parseInt(parts[0], 10) || 0;
+                const minutes = parseInt(parts[1], 10) || 0;
 
-                if (!isNaN(arrivalDate.getTime())) {
-                    const pad = (n: number) => n.toString().padStart(2, '0');
-                    const formattedETA = `${arrivalDate.getFullYear()}-${pad(arrivalDate.getMonth() + 1)}-${pad(arrivalDate.getDate())}T${pad(arrivalDate.getHours())}:${pad(arrivalDate.getMinutes())}`;
-                    setForm(prev => ({ ...prev, eta: formattedETA }));
+                const departureDate = new Date(form.fechaSalida);
+
+                if (!isNaN(departureDate.getTime())) {
+                    const arrivalDate = new Date(departureDate.getTime() + (hours * 60 * 60 * 1000) + (minutes * 60 * 1000));
+
+                    if (!isNaN(arrivalDate.getTime())) {
+                        const pad = (n: number) => n.toString().padStart(2, '0');
+                        const formattedETA = `${arrivalDate.getFullYear()}-${pad(arrivalDate.getMonth() + 1)}-${pad(arrivalDate.getDate())}T${pad(arrivalDate.getHours())}:${pad(arrivalDate.getMinutes())}`;
+                        setForm(prev => ({ ...prev, eta: formattedETA }));
+                    }
                 }
             }
         }
-    }, [form.origin, form.destination, form.fechaSalida]);
+    }, [form.origin, form.destination, form.fechaSalida, routeMatrix]);
 
     const fetchRoadRoute = async (points: LatLng[]): Promise<LatLng[]> => {
         if (points.length < 2) return points;
@@ -349,16 +365,23 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         setFinishTripModal({ open: false, date: '' });
     };
 
+    // State for Cancel Trip Confirmation
+    const [confirmCancelModal, setConfirmCancelModal] = useState(false);
+
     const handleCancelTrip = () => {
         if (!selectedUnitId) return;
-        const confirm = window.confirm("¿Estás seguro de CANCELAR este viaje? Esto indica un error operativo o anulación. Se guardará como histórico.");
-        if (!confirm) return;
+        setConfirmCancelModal(true);
+    };
+
+    const performCancelTrip = () => {
+        if (!selectedUnitId) return;
         setUnits(prev => prev.map(u => {
             if (u.id === selectedUnitId) {
                 return { ...u, status: 'CANCELADO', ubicacionActual: 'VIAJE CANCELADO', lastUpdate: new Date().toISOString() };
             }
             return u;
         }));
+        setConfirmCancelModal(false);
     };
 
     const handleEditUnit = () => {
@@ -393,7 +416,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         const salidaDate = new Date(form.fechaSalida);
         const etaDate = new Date(form.eta);
         const now = new Date();
-        const matched = ROUTE_MATRIX.find(r => r.origen === form.origin && r.destino === form.destination);
+        const matched = routeMatrix.find(r => r.origen === form.origin && r.destino === form.destination);
 
         // VALIDATION LOGIC FOR NEW/EDIT UNIT
         if (ingresoDate > now) { alert("ERROR: La fecha de ingreso a planta no puede ser futura."); return; }
@@ -420,7 +443,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                         fechaEstimadaLlegada: form.eta,
                         origin: form.origin,
                         destination: form.destination,
-                        rutaName: matched ? matched.ruta : '',
+                        rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
                     };
                 }
                 return u;
@@ -462,9 +485,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                 calificacionTTotal: 'PENDIENTE',
                 incidente: '',
                 detalleIncidente: '',
-                rutaName: matched ? matched.ruta : '',
-                tiempoTransitoMin: matched ? matched.min : '',
-                tiempoTransitoMax: matched ? matched.max : '',
+                rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
+                tiempoTransitoMin: matched ? matched.min_time : '',
+                tiempoTransitoMax: matched ? matched.max_time : '',
                 año: now.getFullYear(),
                 mes: now.toLocaleDateString('es-ES', { month: 'short' }),
                 fecha: now.toLocaleDateString('es-ES'),
@@ -838,12 +861,14 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         <div className="flex flex-col h-[calc(100vh-140px)] gap-4 animate-in fade-in duration-200">
 
             {/* HEADER */}
-            <div className="flex justify-between items-center px-4 py-3 bg-white rounded-xl border border-slate-300 shrink-0">
-                <div className="flex items-center gap-3">
-                    <div className="p-2 bg-slate-900 rounded-lg text-white"><RouteIcon size={20} /></div>
+            <div className="flex justify-between items-center px-4 py-3 shrink-0">
+                <div className="px-1 flex items-center gap-4">
+                    <div className="h-14 w-14 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-gray-400 shrink-0">
+                        <Monitor size={30} className="stroke-bold" />
+                    </div>
                     <div>
-                        <h2 className="text-lg font-black text-slate-900 tracking-tight uppercase">Terminal de Monitoreo SOC</h2>
-                        <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">Seguimiento de Flota en Ruta</p>
+                        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Terminal de Monitoreo SOC</h1>
+                        <p className="text-sm text-gray-500 mt-1">Seguimiento de Flota en Ruta</p>
                     </div>
                 </div>
                 <div className="flex gap-2">
@@ -966,7 +991,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                                             </div>
                                             <div className="bg-blue-50 p-1.5 rounded border border-blue-200">
                                                 <span className="text-[7px] font-bold text-blue-400 uppercase block mb-0.5">ESTIMADO LLEGADA</span>
-                                                <span className="text-[10px] font-black text-blue-700 block">{formatDate(unit.fechaEstimadaLlegada)}</span>
+                                                <span className="text-[10px] font-black text-blue-700 block transition-all hover:scale-105 cursor-default">
+                                                    {(() => {
+                                                        const d = new Date(unit.fechaEstimadaLlegada);
+                                                        return `${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
+                                                    })()}
+                                                </span>
                                             </div>
                                         </div>
                                     </div>
@@ -1340,25 +1370,40 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                 <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-[100] animate-in fade-in">
                     <div className="bg-white rounded-xl w-full max-w-4xl shadow-2xl animate-in zoom-in duration-200 max-h-[90vh] overflow-hidden flex flex-col">
                         <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                            <div><h3 className="text-xl font-black text-slate-900 uppercase tracking-tight">{isEditMode ? 'Editar Registro de Viaje' : 'Apertura de Operación'}</h3><p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{isEditMode ? 'Modificación de Datos' : 'Registro de Nuevo Viaje'}</p></div>
+                            <div className="flex items-center gap-4">
+                                <div className="w-12 h-12 bg-slate-200 rounded-xl flex items-center justify-center text-slate-700">
+                                    <RouteIcon size={24} className="stroke-bold" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">{isEditMode ? 'Editar Registro' : 'Apertura de Operación'}</h3>
+                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{isEditMode ? 'Modificación de Datos' : 'Registro de Nuevo Viaje'}</p>
+                                </div>
+                            </div>
                             <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><X size={20} /></button>
                         </div>
 
                         <div className="overflow-y-auto flex-1 p-8 custom-scrollbar bg-slate-50/30">
-                            <form onSubmit={handleSaveUnit} className="space-y-8">
-                                <div className="bg-white p-6 rounded-2xl border border-slate-300 relative overflow-hidden group hover:border-slate-400 transition-all">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-slate-900"></div>
-                                    <h4 className="text-xs font-black text-slate-900 uppercase mb-6 flex items-center gap-2"><span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center border border-slate-200"><MapPin size={14} /></span>1. Itinerario y Tiempos</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-6">
-                                        <div className="grid grid-cols-2 gap-4">
-                                            <FormInput label="Origen" type="select" options={Array.from(new Set((ROUTE_MATRIX || []).map(r => r.origen))).sort()} value={form.origin} onChange={v => setForm({ ...form, origin: v })} />
-                                            <FormInput label="Destino" type="select" options={form.origin ? Array.from(new Set((ROUTE_MATRIX || []).filter(r => r.origen === form.origin).map(r => r.destino))).sort() : []} value={form.destination} onChange={v => setForm({ ...form, destination: v })} />
+                            <form onSubmit={handleSaveUnit} className="space-y-4">
+                                <div className="bg-slate-50/80 p-6 rounded-[1.5rem] border-2 border-slate-100">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+                                            <MapPin size={20} className="stroke-bold" />
                                         </div>
-                                        <div className="grid grid-cols-2 gap-4">
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Itinerario y Tiempos</h4>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Definición de ruta</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <FormInput label="Origen" type="select" options={Array.from(new Set((routeMatrix || []).map(r => r.origen))).sort()} value={form.origin} onChange={v => setForm({ ...form, origin: v })} />
+                                            <FormInput label="Destino" type="select" options={form.origin ? Array.from(new Set((routeMatrix || []).filter(r => r.origen === form.origin).map(r => r.destino))).sort() : []} value={form.destination} onChange={v => setForm({ ...form, destination: v })} />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
                                             <FormInput label="Ingreso Planta" type="datetime-local" value={form.fechaIngreso} onChange={v => setForm({ ...form, fechaIngreso: v })} />
                                             <FormInput label="Salida Planta" type="datetime-local" value={form.fechaSalida} onChange={v => setForm({ ...form, fechaSalida: v })} />
                                         </div>
-                                        <div className="col-span-2 grid grid-cols-3 gap-4">
+                                        <div className="col-span-2 grid grid-cols-3 gap-3">
                                             <FormInput label="ETA (Estimado Llegada)" type="datetime-local" value={form.eta} onChange={v => setForm({ ...form, eta: v })} />
                                             <FormInput label="Proceso" type="select" options={['CONSERVA', 'FRESCO', 'CONGELADO', 'HARINA', 'ACEITE']} value={form.proceso} onChange={v => setForm({ ...form, proceso: v })} />
                                             <FormInput label="Tipo Envío" type="select" options={['TERRESTRE', 'MARITIMO', 'AEREO', 'BIMODAL']} value={form.tipoEnvio} onChange={v => setForm({ ...form, tipoEnvio: v })} />
@@ -1366,51 +1411,100 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-2xl border border-slate-300 relative overflow-hidden group hover:border-slate-400 transition-all">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-slate-400"></div>
-                                    <h4 className="text-xs font-black text-slate-900 uppercase mb-6 flex items-center gap-2"><span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center border border-slate-200"><Package size={14} /></span>2. Información Logística</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-                                        <FormInput label="Operador Logístico" value={form.operador} onChange={v => setForm({ ...form, operador: v })} />
-                                        <FormInput label="Booking / Referencia" value={form.booking} onChange={v => setForm({ ...form, booking: v })} />
+                                <div className="bg-slate-50/80 p-6 rounded-[1.5rem] border-2 border-slate-100">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+                                            <Package size={20} className="stroke-bold" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Información Logística</h4>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datos de carga</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                        <FormInput label="Operador Logístico" placeholder="Ej: RANSA / NEPTUNIA" value={form.operador} onChange={v => setForm({ ...form, operador: v })} />
+                                        <FormInput label="Booking / Referencia" placeholder="Ej: BK-2024-001" value={form.booking} onChange={v => setForm({ ...form, booking: v })} />
                                     </div>
                                 </div>
 
-                                <div className="bg-white p-6 rounded-2xl border border-slate-300 relative overflow-hidden group hover:border-slate-400 transition-all">
-                                    <div className="absolute top-0 left-0 w-1 h-full bg-[#ff0000]"></div>
-                                    <h4 className="text-xs font-black text-slate-900 uppercase mb-6 flex items-center gap-2"><span className="w-6 h-6 rounded bg-slate-100 text-slate-600 flex items-center justify-center border border-slate-200"><Truck size={14} /></span>3. Unidad de Transporte</h4>
-                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                        <FormInput label="Transportista" value={form.transportista} onChange={v => setForm({ ...form, transportista: v })} />
-                                        <FormInput label="Placa Tracto" value={form.plateRemolque} onChange={v => setForm({ ...form, plateRemolque: v })} />
-                                        <FormInput label="Placa Semi-Remolque" value={form.plateSemi} onChange={v => setForm({ ...form, plateSemi: v })} />
-                                        <FormInput label="Nombre Conductor" value={form.conductor} onChange={v => setForm({ ...form, conductor: v })} />
-                                        <FormInput label="Teléfono / Celular" value={form.telefono} onChange={v => setForm({ ...form, telefono: v })} />
+                                <div className="bg-slate-50/80 p-6 rounded-[1.5rem] border-2 border-slate-100">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-10 h-10 rounded-xl bg-slate-200 text-slate-700 flex items-center justify-center">
+                                            <Truck size={20} className="stroke-bold" />
+                                        </div>
+                                        <div>
+                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Unidad de Transporte</h4>
+                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datos del vehículo</p>
+                                        </div>
+                                    </div>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <FormInput label="Transportista" placeholder="Ej: TRANSPORTES PEREDA" value={form.transportista} onChange={v => setForm({ ...form, transportista: v })} />
+                                        <FormInput label="Placa Tracto" placeholder="Ej: ABC-123" value={form.plateRemolque} onChange={v => setForm({ ...form, plateRemolque: v })} />
+                                        <FormInput label="Placa Semi-Remolque" placeholder="Ej: DEF-456" value={form.plateSemi} onChange={v => setForm({ ...form, plateSemi: v })} />
+                                        <FormInput label="Nombre Conductor" placeholder="Ej: JUAN PEREZ" value={form.conductor} onChange={v => setForm({ ...form, conductor: v })} />
+                                        <FormInput label="Teléfono / Celular" placeholder="Ej: 999 888 777" value={form.telefono} onChange={v => setForm({ ...form, telefono: v })} />
                                     </div>
                                 </div>
 
-                                <div className="flex justify-end gap-3 pt-4">
-                                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-6 py-4 rounded-xl text-xs font-black uppercase text-slate-500 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all">Cancelar Operación</button>
-                                    <button type="submit" className="bg-slate-900 text-white px-8 py-4 rounded-xl font-black text-xs uppercase tracking-widest hover:bg-black transition-all flex items-center gap-2"><Save size={16} /> {isEditMode ? 'Guardar Cambios' : 'Iniciar Seguimiento'}</button>
+                                <div className="flex justify-end gap-3 pt-2">
+                                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase text-slate-500 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all">Cancelar Operación</button>
+                                    <button type="submit" className="bg-[#ff0000] text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 transition-all flex items-center gap-2"><Save size={14} /> {isEditMode ? 'Guardar Cambios' : 'Iniciar Seguimiento'}</button>
                                 </div>
                             </form>
                         </div>
                     </div>
                 </div>
             )}
+
+            {confirmCancelModal && (
+                <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center p-4 z-[100] animate-in fade-in">
+                    <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-2xl animate-in zoom-in duration-200 border border-slate-100">
+                        <div className="text-center space-y-4">
+                            <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mx-auto text-red-500">
+                                <AlertTriangle size={24} />
+                            </div>
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800">Confirmar Cancelación</h3>
+                                <p className="text-xs font-medium text-slate-500 mt-2">¿Desea cancelar el monitoreo registrado?</p>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3 pt-2">
+                                <button onClick={() => setConfirmCancelModal(false)} className="px-4 py-3 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-50 border border-slate-100 transition-all">No, continuar</button>
+                                <button onClick={performCancelTrip} className="px-4 py-3 rounded-xl text-xs font-bold uppercase text-white bg-red-500 hover:bg-red-600 transition-all">Si, cancelar</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .leaflet-container { font-family: 'Inter', sans-serif; background: #f8fafc !important; } .custom-leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }`}</style>
         </div>
     );
 };
 
-const FormInput = ({ label, value, onChange, type = "text", options = [] }: { label: string, value: string, onChange: (v: string) => void, type?: string, options?: string[] }) => (
-    <div className="space-y-1.5 w-full">
-        <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest ml-1">{label}</label>
+const FormInput = ({ label, value, onChange, type = "text", options = [], placeholder = "" }: { label: string, value: string, onChange: (v: string) => void, type?: string, options?: string[], placeholder?: string }) => (
+    <div className="group space-y-1 w-full">
+        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
         {type === 'select' ? (
-            <select required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-slate-400 focus:bg-white transition-all" value={value} onChange={e => onChange(e.target.value)}>
-                <option value="">Seleccionar...</option>
-                {(options || []).map(o => <option key={o} value={o}>{o}</option>)}
-            </select>
+            <div className="relative">
+                <select required className="w-full p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 appearance-none cursor-pointer" value={value} onChange={e => onChange(e.target.value)}>
+                    <option value="">Seleccionar...</option>
+                    {(options || []).map(o => <option key={o} value={o}>{o}</option>)}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <svg width="8" height="5" viewBox="0 0 10 6" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <path d="M1 1L5 5L9 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                </div>
+            </div>
         ) : (
-            <input type={type} required className="w-full p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold uppercase outline-none focus:border-slate-400 focus:bg-white transition-all" value={value} onChange={e => onChange(e.target.value)} />
+            <input
+                required
+                type={type}
+                className="w-full p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 placeholder:text-slate-300 placeholder:font-normal"
+                value={value}
+                onChange={e => onChange(e.target.value)}
+                placeholder={placeholder}
+            />
         )}
     </div>
 );

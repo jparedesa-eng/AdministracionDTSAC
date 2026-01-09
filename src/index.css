@@ -1,13 +1,22 @@
 @import "tailwindcss";
 
+@layer base {
+
+  html,
+  body {
+    @apply bg-slate-50 text-gray-900;
+  }
+}
 
 @layer components {
 
   .btn-brand {
-    @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium
-           text-white shadow-sm transition
-           bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700
-           active:scale-[.99];
+    @apply inline-flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium text-white shadow-sm transition bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-700 hover:to-violet-700 active:scale-[.99];
   }
 }
 
+@layer utilities {
+  .stroke-bold {
+    stroke-width: 2.5px;
+  }
+}

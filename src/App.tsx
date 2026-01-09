@@ -56,6 +56,7 @@ import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
 import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen";
 import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
+import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
 import { INITIAL_POSTS } from "./mockData";
 import type { AlertSchedule, Post } from "./pages/types";
 
@@ -93,7 +94,7 @@ function ProtectedLayout() {
       />
 
       <main className={`transition-all duration-300 ${!isDesktopCollapsed ? "md:pl-72" : "md:pl-20"}`}>
-        <div className="min-h-screen flex flex-col bg-slate-100 pt-16">
+        <div className="min-h-screen flex flex-col bg-slate-50 pt-16">
           <div className="flex-1 p-4 md:p-6">
             <Outlet />
           </div>
@@ -215,6 +216,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/camionetas/conductores">
                 <Conductores />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/tiempos-viaje"
+            element={
+              <ProtectedRoute path="/seguridad/tiempos-viaje">
+                <TravelTimesTable />
               </ProtectedRoute>
             }
           />
