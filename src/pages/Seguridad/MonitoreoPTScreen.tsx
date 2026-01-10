@@ -1,7 +1,8 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { TransportTracker } from './MonitoreoPT';
 import type { TransportUnit } from '../types';
+import { fetchUnits, getMonitoreoState, subscribeMonitoreo } from '../../store/monitoreoStore';
 
 class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any }> {
     constructor(props: any) {
@@ -31,63 +32,43 @@ class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any
 }
 
 export default function MonitoreoPTScreen() {
-    const [units, setUnits] = useState<TransportUnit[]>([
-        {
-            id: '1',
-            solicitudId: 'REQ-2024-001',
-            unitName: 'TRACTO ABC-123',
-            plateRemolque: 'ABC-123',
-            plateSemiRemolque: 'REM-456',
-            conductor: 'Juan Perez',
-            transportista: 'Transportes Rápidos',
-            telefono: '987654321',
-            origin: 'LIMA',
-            destination: 'AREQUIPA',
-            proceso: 'CONSERVA',
-            tipoEnvio: 'TERRESTRE',
-            operadorLogistico: 'Ransa',
-            booking: 'BK-2024-999',
-            fechaIngresoPlanta: new Date(Date.now() - 4000000).toISOString(),
-            fechaSalidaPlanta: new Date(Date.now() - 3600000).toISOString(),
-            fechaEstimadaLlegada: new Date(Date.now() + 86400000).toISOString(),
-            lastUpdate: new Date().toISOString(),
-            status: 'En Ruta', // Updated to match UnitStatus.TRANSIT
-            ubicacionActual: 'En tránsito por Panamericana Sur',
-            controles: [],
-            paradasProg: [],
-            paradasNoProg: [],
-            path: [],
-            // New required fields
-            transportistaEstandar: 'STANDAR',
-            almacenDestino1: 'Almacen A',
-            fechaLlegadaDestino1: '',
-            tiempoTotal1: '',
-            tiempoNeto1: '',
-            almacenDestino2: '',
-            fechaLlegadaDestino2: '',
-            tiempoTotal2: '',
-            calificacionTNeto: '',
-            calificacionTTotal: '',
-            incidente: '',
-            detalleIncidente: '',
-            rutaName: 'Ruta 1',
-            tiempoTransitoMin: '',
-            tiempoTransitoMax: '',
-            año: 2024,
-            mes: 'ENERO',
-            fecha: new Date().toISOString(),
-            tipoViaje: 'IDA',
-            cumplimiento: 'PENDIENTE',
-            unidadEstandar: 'SI',
-            area: 'LOGISTICA',
-            lastLocation: 'Lima',
-            departureTime: '10:00'
-        }
-    ]);
+    // Local state to hold the units for the tracker
+    const [units, setUnits] = useState<TransportUnit[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        // Initial fetch
+        fetchUnits();
+
+        // Subscribe to store updates
+        const unsubscribe = subscribeMonitoreo(() => {
+            const state = getMonitoreoState();
+            setUnits(state.units);
+            setLoading(state.loading);
+        });
+
+        // Set initial state
+        const state = getMonitoreoState();
+        setUnits(state.units);
+        setLoading(state.loading);
+
+        return () => unsubscribe();
+    }, []);
+
+    if (loading && units.length === 0) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-slate-50">
+                <div className="text-center">
+                    <div className="w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+                    <p className="text-slate-600 font-medium">Cargando unidades de transporte...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <ErrorBoundary>
-            <TransportTracker units={units} setUnits={setUnits} />
+            <TransportTracker units={units} />
         </ErrorBoundary>
     );
 }

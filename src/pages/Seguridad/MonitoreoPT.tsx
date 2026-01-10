@@ -4,6 +4,7 @@ import { UnitStatus } from '../types';
 import type { TransportUnit, LatLng, StopPoint } from '../types';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
+import { createUnit, updateUnit } from '../../store/monitoreoStore';
 import { Toast } from '../../components/ui/Toast';
 import type { ToastState } from '../../components/ui/Toast';
 import L from 'leaflet';
@@ -44,13 +45,12 @@ const DESTINATION_GPS: LatLng = { lat: -11.9462474113332, lng: -77.1317648638200
 
 interface TransportTrackerProps {
     units: TransportUnit[];
-    setUnits: React.Dispatch<React.SetStateAction<TransportUnit[]>>;
 }
 
 type TabType = 'CONTROLES' | 'PARADAS' | 'DETALLE' | 'RESUMEN';
 type FilterStatus = 'ALL' | 'TRANSIT' | 'ARRIVED' | 'CANCELLED';
 
-export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUnits }) => {
+export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => {
     // Travel Times Store Integration
     const [routeMatrix, setRouteMatrix] = useState(getTravelTimesState().travelTimes);
     useEffect(() => {
@@ -352,113 +352,100 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
 
         const formattedTime = finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-
-        // Use hardcoded GPS for destination
         const finalCoords = DESTINATION_GPS;
 
-        // Calculate new path including the final destination
-        // We need to fetch route from last point to this destination
+        let newControles = [...unit.controles];
+        newControles.push({
+            time: formattedTime,
+            location: 'LLEGADA A DESTINO',
+            coords: finalCoords
+        });
 
-        const updatedUnits = await Promise.all(units.map(async u => {
-            if (u.id === selectedUnitId) {
-                let newControles = [...u.controles];
-                // Add final arrival checkpoint
-                newControles.push({
-                    time: formattedTime,
-                    location: 'LLEGADA A DESTINO',
-                    coords: finalCoords
-                });
+        // Update Path
+        const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
+        const newPath = await fetchRoadRoute(pointsForRouting);
 
-                // Update Path
-                const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
-                const newPath = await fetchRoadRoute(pointsForRouting);
+        const updatedUnit = {
+            ...unit,
+            status: UnitStatus.DELIVERED,
+            ubicacionActual: 'LLEGADA A DESTINO',
+            lastUpdate: finishDate.toISOString(),
+            controles: newControles,
+            path: newPath,
+            // Metrics & Ratings
+            fechaLlegadaDestino1: finishDate.toISOString(),
+            tiempoTotal1: (() => {
+                const totalMs = finishDate.getTime() - departureDate.getTime();
+                const h = Math.floor(Math.floor(totalMs / 60000) / 60);
+                const m = Math.floor(totalMs / 60000) % 60;
+                return `${h}h ${m}m`;
+            })(),
+            tiempoNeto1: (() => {
+                const totalMs = finishDate.getTime() - departureDate.getTime();
+                const totalMins = Math.floor(totalMs / 60000);
 
-                return {
-                    ...u,
-                    status: UnitStatus.DELIVERED,
-                    ubicacionActual: 'LLEGADA A DESTINO',
-                    lastUpdate: finishDate.toISOString(),
-                    controles: newControles,
-                    path: newPath,
-                    // Metrics & Ratings
-                    fechaLlegadaDestino1: finishDate.toISOString(),
-                    tiempoTotal1: (() => {
-                        const totalMs = finishDate.getTime() - departureDate.getTime();
-                        const h = Math.floor(Math.floor(totalMs / 60000) / 60);
-                        const m = Math.floor(totalMs / 60000) % 60;
-                        return `${h}h ${m}m`;
-                    })(),
-                    tiempoNeto1: (() => {
-                        const totalMs = finishDate.getTime() - departureDate.getTime();
-                        const totalMins = Math.floor(totalMs / 60000);
+                const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
+                    if (!stop.time) return acc;
+                    let m = 0;
+                    const hMatch = stop.time.match(/(\d+)h/);
+                    const mMatch = stop.time.match(/(\d+)m/);
+                    if (hMatch) m += parseInt(hMatch[1]) * 60;
+                    if (mMatch) m += parseInt(mMatch[1]);
+                    return acc + m;
+                }, 0);
 
-                        const stopsMins = [...u.paradasProg, ...u.paradasNoProg].reduce((acc, stop) => {
-                            if (!stop.time) return acc;
-                            let m = 0;
-                            const hMatch = stop.time.match(/(\d+)h/);
-                            const mMatch = stop.time.match(/(\d+)m/);
-                            if (hMatch) m += parseInt(hMatch[1]) * 60;
-                            if (mMatch) m += parseInt(mMatch[1]);
-                            return acc + m;
-                        }, 0);
-
-                        const netMins = Math.max(0, totalMins - stopsMins);
-                        const h = Math.floor(netMins / 60);
-                        const m = netMins % 60;
-                        return `${h}h ${m}m`;
-                    })(),
-                    calificacionTTotal: (() => {
-                        // Parse limits "HH:MM:SS" or "HH:MM"
-                        const parse = (s: string) => {
-                            if (!s) return 0;
-                            const parts = s.split(':').map(Number);
-                            return (parts[0] * 60) + (parts[1] || 0);
-                        };
-                        const min = parse(u.tiempoTransitoMin);
-                        const max = parse(u.tiempoTransitoMax);
-
-                        const totalMs = finishDate.getTime() - departureDate.getTime();
-                        const totalMins = Math.floor(totalMs / 60000);
-
-                        if (min === 0 && max === 0) return 'PENDIENTE';
-                        if (totalMins < min) return 'EXCELENTE';
-                        if (totalMins > max) return 'DEFICIENTE';
-                        return 'BUENO';
-                    })(),
-                    calificacionTNeto: (() => {
-                        // Parse limits
-                        const parse = (s: string) => {
-                            if (!s) return 0;
-                            const parts = s.split(':').map(Number);
-                            return (parts[0] * 60) + (parts[1] || 0);
-                        };
-                        const min = parse(u.tiempoTransitoMin);
-                        const max = parse(u.tiempoTransitoMax);
-
-                        const totalMs = finishDate.getTime() - departureDate.getTime();
-                        const totalMins = Math.floor(totalMs / 60000);
-                        const stopsMins = [...u.paradasProg, ...u.paradasNoProg].reduce((acc, stop) => {
-                            if (!stop.time) return acc;
-                            let m = 0;
-                            const hMatch = stop.time.match(/(\d+)h/);
-                            const mMatch = stop.time.match(/(\d+)m/);
-                            if (hMatch) m += parseInt(hMatch[1]) * 60;
-                            if (mMatch) m += parseInt(mMatch[1]);
-                            return acc + m;
-                        }, 0);
-                        const netMins = Math.max(0, totalMins - stopsMins);
-
-                        if (min === 0 && max === 0) return 'PENDIENTE';
-                        if (netMins < min) return 'EXCELENTE';
-                        if (netMins > max) return 'DEFICIENTE';
-                        return 'BUENO';
-                    })()
+                const netMins = Math.max(0, totalMins - stopsMins);
+                const h = Math.floor(netMins / 60);
+                const m = netMins % 60;
+                return `${h}h ${m}m`;
+            })(),
+            calificacionTTotal: (() => {
+                const parse = (s: string) => {
+                    if (!s) return 0;
+                    const parts = s.split(':').map(Number);
+                    return (parts[0] * 60) + (parts[1] || 0);
                 };
-            }
-            return u;
-        }));
+                const min = parse(unit.tiempoTransitoMin);
+                const max = parse(unit.tiempoTransitoMax);
 
-        setUnits(updatedUnits);
+                const totalMs = finishDate.getTime() - departureDate.getTime();
+                const totalMins = Math.floor(totalMs / 60000);
+
+                if (min === 0 && max === 0) return 'PENDIENTE';
+                if (totalMins < min) return 'EXCELENTE';
+                if (totalMins > max) return 'DEFICIENTE';
+                return 'BUENO';
+            })(),
+            calificacionTNeto: (() => {
+                const parse = (s: string) => {
+                    if (!s) return 0;
+                    const parts = s.split(':').map(Number);
+                    return (parts[0] * 60) + (parts[1] || 0);
+                };
+                const min = parse(unit.tiempoTransitoMin);
+                const max = parse(unit.tiempoTransitoMax);
+
+                const totalMs = finishDate.getTime() - departureDate.getTime();
+                const totalMins = Math.floor(totalMs / 60000);
+                const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
+                    if (!stop.time) return acc;
+                    let m = 0;
+                    const hMatch = stop.time.match(/(\d+)h/);
+                    const mMatch = stop.time.match(/(\d+)m/);
+                    if (hMatch) m += parseInt(hMatch[1]) * 60;
+                    if (mMatch) m += parseInt(mMatch[1]);
+                    return acc + m;
+                }, 0);
+                const netMins = Math.max(0, totalMins - stopsMins);
+
+                if (min === 0 && max === 0) return 'PENDIENTE';
+                if (netMins < min) return 'EXCELENTE';
+                if (netMins > max) return 'DEFICIENTE';
+                return 'BUENO';
+            })()
+        };
+
+        await updateUnit(unit.id, updatedUnit);
         setFinishTripModal({ open: false, date: '' });
     };
 
@@ -470,14 +457,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         setConfirmCancelModal(true);
     };
 
-    const performCancelTrip = () => {
+    const performCancelTrip = async () => {
         if (!selectedUnitId) return;
-        setUnits(prev => prev.map(u => {
-            if (u.id === selectedUnitId) {
-                return { ...u, status: 'CANCELADO', ubicacionActual: 'VIAJE CANCELADO', lastUpdate: new Date().toISOString() };
-            }
-            return u;
-        }));
+
+        await updateUnit(selectedUnitId, {
+            status: 'CANCELADO',
+            ubicacionActual: 'VIAJE CANCELADO',
+            lastUpdate: new Date().toISOString()
+        });
+
         setConfirmCancelModal(false);
     };
 
@@ -509,7 +497,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
 
 
 
-    const handleSaveUnit = (e: React.FormEvent) => {
+    const handleSaveUnit = async (e: React.FormEvent) => {
         e.preventDefault();
         const ingresoDate = new Date(form.fechaIngreso);
         const salidaDate = new Date(form.fechaSalida);
@@ -523,86 +511,84 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         if (salidaDate > now) { alert("ERROR: La fecha de salida no puede ser futura."); return; }
         if (etaDate < salidaDate) { alert("ERROR: La fecha estimada de llegada no puede ser anterior a la salida de planta."); return; }
 
-        if (isEditMode && selectedUnitId) {
-            setUnits(prev => prev.map(u => {
-                if (u.id === selectedUnitId) {
-                    return {
-                        ...u,
-                        proceso: form.proceso.toUpperCase(),
-                        fechaIngresoPlanta: ingresoDate.toISOString(),
-                        fechaSalidaPlanta: salidaDate.toISOString(),
-                        tipoEnvio: form.tipoEnvio,
-                        operadorLogistico: form.operador.toUpperCase(),
-                        booking: form.booking.toUpperCase(),
-                        conductor: form.conductor.toUpperCase(),
-                        plateRemolque: form.plateRemolque.toUpperCase(),
-                        plateSemiRemolque: form.plateSemi.toUpperCase(),
-                        transportista: form.transportista.toUpperCase(),
-                        telefono: form.telefono,
-                        fechaEstimadaLlegada: form.eta,
-                        origin: form.origin,
-                        destination: form.destination,
-                        rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
-                    };
-                }
-                return u;
-            }));
-            setIsAddModalOpen(false);
-            setIsEditMode(false);
-        } else {
-            const newUnit: TransportUnit = {
-                id: Date.now().toString(),
-                unitName: form.plateRemolque.toUpperCase() || 'S/N',
-                proceso: form.proceso.toUpperCase(),
-                fechaIngresoPlanta: ingresoDate.toISOString(),
-                fechaSalidaPlanta: salidaDate.toISOString(),
-                tipoEnvio: form.tipoEnvio,
-                operadorLogistico: form.operador.toUpperCase(),
-                booking: form.booking.toUpperCase(),
-                conductor: form.conductor.toUpperCase(),
-                plateRemolque: form.plateRemolque.toUpperCase(),
-                plateSemiRemolque: form.plateSemi.toUpperCase(),
-                transportistaEstandar: form.transportista.toUpperCase(),
-                transportista: form.transportista.toUpperCase(),
-                telefono: form.telefono,
-                ubicacionActual: 'ORIGEN PLANTA',
-                fechaEstimadaLlegada: form.eta,
-                status: UnitStatus.TRANSIT,
-                controles: [],
-                paradasProg: [],
-                paradasNoProg: [],
-                origin: form.origin,
-                destination: form.destination,
-                almacenDestino1: form.destination,
-                fechaLlegadaDestino1: '',
-                tiempoTotal1: '',
-                tiempoNeto1: '',
-                almacenDestino2: '',
-                fechaLlegadaDestino2: '',
-                tiempoTotal2: '',
-                calificacionTNeto: 'PENDIENTE',
-                calificacionTTotal: 'PENDIENTE',
-                incidente: '',
-                detalleIncidente: '',
-                rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
-                tiempoTransitoMin: matched ? matched.min_time : '',
-                tiempoTransitoMax: matched ? matched.max_time : '',
-                año: now.getFullYear(),
-                mes: now.toLocaleDateString('es-ES', { month: 'short' }),
-                fecha: now.toLocaleDateString('es-ES'),
-                tipoViaje: 'REGULAR',
-                cumplimiento: 'PENDIENTE',
-                unidadEstandar: form.plateRemolque.toUpperCase(),
-                area: form.area,
-                lastLocation: 'Origen Planta',
-                lastUpdate: now.toISOString(),
-                path: [GLOBAL_ORIGIN]
-            };
-            setUnits(prev => [newUnit, ...prev]);
-            setIsAddModalOpen(false);
-        }
-        if (!isEditMode) {
-            setForm(prev => ({ ...prev, plateRemolque: '', plateSemi: '', conductor: '', telefono: '', booking: '' }));
+        try {
+            if (isEditMode && selectedUnitId) {
+                await updateUnit(selectedUnitId, {
+                    proceso: form.proceso.toUpperCase(),
+                    fechaIngresoPlanta: ingresoDate.toISOString(),
+                    fechaSalidaPlanta: salidaDate.toISOString(),
+                    tipoEnvio: form.tipoEnvio,
+                    operadorLogistico: form.operador.toUpperCase(),
+                    booking: form.booking.toUpperCase(),
+                    conductor: form.conductor.toUpperCase(),
+                    plateRemolque: form.plateRemolque.toUpperCase(),
+                    plateSemiRemolque: form.plateSemi.toUpperCase(),
+                    transportista: form.transportista.toUpperCase(),
+                    telefono: form.telefono,
+                    fechaEstimadaLlegada: form.eta,
+                    origin: form.origin,
+                    destination: form.destination,
+                    rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
+                });
+                setIsAddModalOpen(false);
+                setIsEditMode(false);
+            } else {
+                const newUnit: Omit<TransportUnit, 'id'> = {
+                    unitName: form.plateRemolque.toUpperCase() || 'S/N',
+                    proceso: form.proceso.toUpperCase(),
+                    fechaIngresoPlanta: ingresoDate.toISOString(),
+                    fechaSalidaPlanta: salidaDate.toISOString(),
+                    tipoEnvio: form.tipoEnvio,
+                    operadorLogistico: form.operador.toUpperCase(),
+                    booking: form.booking.toUpperCase(),
+                    conductor: form.conductor.toUpperCase(),
+                    plateRemolque: form.plateRemolque.toUpperCase(),
+                    plateSemiRemolque: form.plateSemi.toUpperCase(),
+                    transportistaEstandar: form.transportista.toUpperCase(),
+                    transportista: form.transportista.toUpperCase(),
+                    telefono: form.telefono,
+                    ubicacionActual: 'ORIGEN PLANTA',
+                    fechaEstimadaLlegada: form.eta,
+                    status: UnitStatus.TRANSIT,
+                    controles: [],
+                    paradasProg: [],
+                    paradasNoProg: [],
+                    origin: form.origin,
+                    destination: form.destination,
+                    almacenDestino1: form.destination,
+                    fechaLlegadaDestino1: '',
+                    tiempoTotal1: '',
+                    tiempoNeto1: '',
+                    almacenDestino2: '',
+                    fechaLlegadaDestino2: '',
+                    tiempoTotal2: '',
+                    calificacionTNeto: 'PENDIENTE',
+                    calificacionTTotal: 'PENDIENTE',
+                    incidente: '',
+                    detalleIncidente: '',
+                    rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
+                    tiempoTransitoMin: matched ? matched.min_time : '',
+                    tiempoTransitoMax: matched ? matched.max_time : '',
+                    año: now.getFullYear(),
+                    mes: now.toLocaleDateString('es-ES', { month: 'short' }),
+                    fecha: now.toLocaleDateString('es-ES'),
+                    tipoViaje: 'REGULAR',
+                    cumplimiento: 'PENDIENTE',
+                    unidadEstandar: form.plateRemolque.toUpperCase(),
+                    area: form.area,
+                    lastLocation: 'Origen Planta',
+                    lastUpdate: now.toISOString(),
+                    path: [GLOBAL_ORIGIN]
+                };
+                await createUnit(newUnit);
+                setIsAddModalOpen(false);
+            }
+            if (!isEditMode) {
+                setForm(prev => ({ ...prev, plateRemolque: '', plateSemi: '', conductor: '', telefono: '', booking: '' }));
+            }
+        } catch (error) {
+            console.error("Error saving unit:", error);
+            alert("Error al guardar la unidad. Por favor intente nuevamente.");
         }
     };
 
@@ -744,10 +730,11 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
 
     const handleUpdateControl = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!selectedUnitId || !selectedUnit) return;
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!selectedUnitId || !u) return;
 
         // VALIDATION: Prevent adding control if unit is stopped
-        if (selectedUnit.status === 'EN PARADA' || selectedUnit.status === 'INCIDENTE') {
+        if (u.status === 'EN PARADA' || u.status === 'INCIDENTE') {
             alert("⚠️ ACCIÓN REQUERIDA:\n\nLa unidad se encuentra en estado de DETENCIÓN (Parada/Incidente).\n\nDebe registrar el FIN DE PARADA en la pestaña 'Paradas' antes de reportar una nueva ubicación de ruta.");
             setActiveTab('PARADAS');
             return;
@@ -759,8 +746,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
 
         const reportDateTime = new Date(reportForm.reportDateTime);
         const now = new Date();
-        const departureDate = new Date(selectedUnit.fechaSalidaPlanta);
-        const lastUpdateDate = new Date(selectedUnit.lastUpdate);
+        const departureDate = new Date(u.fechaSalidaPlanta);
+        const lastUpdateDate = new Date(u.lastUpdate);
 
         // DATE VALIDATION FOR CONTROLS
         if (reportDateTime < departureDate) { alert("ERROR: La fecha del control no puede ser anterior a la salida de planta."); return; }
@@ -774,36 +761,32 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         const newPoint: LatLng = { lat: nLat, lng: nLng };
         const formattedTime = reportDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
-        const updatedUnits = await Promise.all(units.map(async u => {
-            if (u.id === selectedUnitId) {
-                let newControles = [...u.controles];
-                if (editingControlIndex !== null) {
-                    newControles[editingControlIndex] = {
-                        ...newControles[editingControlIndex],
-                        location: reportForm.location.toUpperCase(),
-                        coords: newPoint
-                    };
-                } else {
-                    newControles.push({
-                        time: formattedTime,
-                        location: reportForm.location.toUpperCase(),
-                        coords: newPoint
-                    });
-                }
-                const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
-                const newPath = await fetchRoadRoute(pointsForRouting);
-                return {
-                    ...u,
-                    controles: newControles,
-                    ubicacionActual: reportForm.location.toUpperCase(),
-                    lastLocation: reportForm.location.toUpperCase(),
-                    lastUpdate: reportDateTime.toISOString(),
-                    path: newPath
-                };
-            }
-            return u;
-        }));
-        setUnits(updatedUnits);
+        let newControles = [...u.controles];
+        if (editingControlIndex !== null) {
+            newControles[editingControlIndex] = {
+                ...newControles[editingControlIndex],
+                location: reportForm.location.toUpperCase(),
+                coords: newPoint
+            };
+        } else {
+            newControles.push({
+                time: formattedTime,
+                location: reportForm.location.toUpperCase(),
+                coords: newPoint
+            });
+        }
+        const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
+        const newPath = await fetchRoadRoute(pointsForRouting);
+
+        await updateUnit(u.id, {
+            ...u,
+            controles: newControles,
+            ubicacionActual: reportForm.location.toUpperCase(),
+            lastLocation: reportForm.location.toUpperCase(),
+            lastUpdate: reportDateTime.toISOString(),
+            path: newPath
+        });
+
         resetReportForm();
         setEditingControlIndex(null);
     };
@@ -819,10 +802,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         return `${h}h ${m}m`;
     };
 
-    const handleAddStop = (type: 'PROG' | 'NOPROG') => {
-        if (!selectedUnitId || !selectedUnit) return;
+    const handleAddStop = async (type: 'PROG' | 'NOPROG') => {
+        if (!selectedUnitId) return;
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!u) return;
+
         const startTime = new Date(newStopForm.start);
-        const departureTime = new Date(selectedUnit.fechaSalidaPlanta);
+        const departureTime = new Date(u.fechaSalidaPlanta);
         const now = new Date();
 
         // VALIDATION FOR STOP START
@@ -846,25 +832,23 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         const nLng = newStopForm.lng ? parseFloat(newStopForm.lng) : undefined;
         const coords = (nLat && nLng) ? { lat: nLat, lng: nLng } : undefined;
 
-        setUnits(prev => prev.map(u => {
-            if (u.id !== selectedUnitId) return u;
+        const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
 
-            const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
+        const newStop: StopPoint = {
+            location: newStopForm.location.toUpperCase(),
+            start: formatTime(newStopForm.start),
+            end: isStopOngoing ? '' : formatTime(newStopForm.end),
+            time: isStopOngoing ? 'En Curso' : calculateDuration(newStopForm.start, newStopForm.end),
+            cause: type === 'NOPROG' ? newStopForm.cause?.toUpperCase() : undefined,
+            coords: coords
+        };
 
-            const newStop: StopPoint = {
-                location: newStopForm.location.toUpperCase(),
-                start: formatTime(newStopForm.start),
-                end: isStopOngoing ? '' : formatTime(newStopForm.end),
-                time: isStopOngoing ? 'En Curso' : calculateDuration(newStopForm.start, newStopForm.end),
-                cause: type === 'NOPROG' ? newStopForm.cause?.toUpperCase() : undefined,
-                coords: coords
-            };
-            return {
-                ...u,
-                status: newStatus,
-                [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: [...(type === 'PROG' ? u.paradasProg : u.paradasNoProg), newStop]
-            };
-        }));
+        await updateUnit(u.id, {
+            ...u,
+            status: newStatus,
+            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: [...(type === 'PROG' ? u.paradasProg : u.paradasNoProg), newStop]
+        });
+
         setNewStopForm({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
         setIsStopOngoing(false);
         if (type === 'PROG') setShowAddStopProg(false);
@@ -885,79 +869,76 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         });
     };
 
-    const handleConfirmFinishStop = () => {
+    const handleConfirmFinishStop = async () => {
         if (!selectedUnitId || !finishStopModal.type || finishStopModal.index === null) return;
 
         const { type, index, endDate } = finishStopModal;
         const endDateObj = new Date(endDate);
         const now = new Date();
-        const unit = units.find(u => u.id === selectedUnitId);
+        const u = units.find(unit => unit.id === selectedUnitId);
 
-        if (!unit) return;
+        if (!u) return;
 
         // VALIDATION FOR FINISHING STOP
         if (endDateObj > now) { alert("ERROR: La fecha de fin no puede ser futura."); return; }
 
-        // Note: We can't strictly validate against start date here easily because start is stored as non-standard string in StopPoint.
-        // Assuming user inputs correct chronological order or visual check. 
-        // Ideally refactor StopPoint to store ISO strings for start/end.
-
         // Re-format end date for display
         const formatTimeDisplay = (d: Date) => `${d.getDate()}/${d.getMonth() + 1} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
 
-        setUnits(prev => prev.map(u => {
-            if (u.id !== selectedUnitId) return u;
-            const currentList = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
+        const currentList = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
+        let durationStr = 'Finalizado';
+        try {
+            const [datePart, timePart] = currentList[index].start.split(' ');
+            const [day, month] = datePart.split('/').map(Number);
+            const [hour, min] = timePart.split(':').map(Number);
+            const startObj = new Date(new Date().getFullYear(), month - 1, day, hour, min);
 
-            let durationStr = 'Finalizado';
-            try {
-                const [datePart, timePart] = currentList[index].start.split(' ');
-                const [day, month] = datePart.split('/').map(Number);
-                const [hour, min] = timePart.split(':').map(Number);
-                const startObj = new Date(new Date().getFullYear(), month - 1, day, hour, min);
+            if (endDateObj < startObj) {
+                alert("ADVERTENCIA: La fecha de fin parece ser anterior al inicio. Verifique.");
+            }
 
-                if (endDateObj < startObj) {
-                    alert("ADVERTENCIA: La fecha de fin parece ser anterior al inicio. Verifique.");
-                }
+            let diff = (endDateObj.getTime() - startObj.getTime()) / 60000;
+            if (diff > 0) {
+                const h = Math.floor(diff / 60);
+                const m = Math.floor(diff % 60);
+                durationStr = `${h}h ${m}m`;
+            }
+        } catch (e) { }
 
-                let diff = (endDateObj.getTime() - startObj.getTime()) / 60000;
-                if (diff > 0) {
-                    const h = Math.floor(diff / 60);
-                    const m = Math.floor(diff % 60);
-                    durationStr = `${h}h ${m}m`;
-                }
-            } catch (e) { }
+        currentList[index] = {
+            ...currentList[index],
+            end: formatTimeDisplay(endDateObj),
+            time: durationStr
+        };
 
-            currentList[index] = {
-                ...currentList[index],
-                end: formatTimeDisplay(endDateObj),
-                time: durationStr
-            };
-
-            return {
-                ...u,
-                status: UnitStatus.TRANSIT, // Back to route
-                [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: currentList
-            };
-        }));
+        await updateUnit(u.id, {
+            ...u,
+            status: UnitStatus.TRANSIT, // Back to route
+            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: currentList
+        });
 
         setFinishStopModal({ open: false, type: null, index: null, endDate: '' });
     };
 
-    const handleDeleteStop = (type: 'PROG' | 'NOPROG', index: number) => {
+    const handleDeleteStop = async (type: 'PROG' | 'NOPROG', index: number) => {
         if (!selectedUnitId) return;
-        setUnits(prev => prev.map(u => {
-            if (u.id !== selectedUnitId) return u;
-            const list = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
-            // If deleting an ongoing stop, revert status if needed
-            const stop = list[index];
-            let newStatus = u.status;
-            if (!stop.end) {
-                newStatus = UnitStatus.TRANSIT;
-            }
-            list.splice(index, 1);
-            return { ...u, status: newStatus, [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: list };
-        }));
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!u) return;
+
+        const list = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
+        // If deleting an ongoing stop, revert status if needed
+        const stop = list[index];
+        let newStatus = u.status;
+        if (!stop.end) {
+            newStatus = UnitStatus.TRANSIT;
+        }
+        list.splice(index, 1);
+
+        await updateUnit(u.id, {
+            ...u,
+            status: newStatus,
+            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: list
+        });
     };
 
     const openDetail = (unitId: string) => {
