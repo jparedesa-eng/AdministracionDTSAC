@@ -208,6 +208,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     // 3. Monitoreo de Unidades
     const monitoreoSubItems: NavItem[] = [];
     if (canSeeSeg_MonitoreoPT) monitoreoSubItems.push({ id: 'seg-mon', label: 'Monitoreo PT', path: '/seguridad/monitoreo-pt', icon: Monitor });
+    monitoreoSubItems.push({ id: 'seg-dest', label: 'Lugares de Destino', path: '/seguridad/destinos', icon: MapPin });
     monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/seguridad/tiempos-viaje', icon: Truck });
 
     if (monitoreoSubItems.length > 0) {

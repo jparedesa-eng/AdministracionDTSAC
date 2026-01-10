@@ -60,9 +60,15 @@ export interface TransportUnit {
     fechaLlegadaDestino1: string;
     tiempoTotal1: string;
     tiempoNeto1: string;
-    almacenDestino2: string;
-    fechaLlegadaDestino2: string;
-    tiempoTotal2: string;
+
+    almacenDestino2: string; // New: Secondary Destination (Muestras)
+    fechaLlegadaDestino2: string; // New
+    tiempoTotal2: string; // New
+
+    // Status flags for multi-dest logic
+    statusMuestras?: 'PENDING' | 'ARRIVED' | 'COMPLETED' | 'SKIPPED';
+    fechaSalidaDestino1?: string; // Departure from Primary
+    fechaSalidaDestino2?: string; // Departure from Secondary
 
     origin: string;
     destination: string;
@@ -84,7 +90,6 @@ export interface TransportUnit {
 
     lastLocation: string;
     lastUpdate: string;
-    departureTime: string;
     maxTravelHours?: number;
 
     // Tracking path for map visualization
@@ -186,4 +191,4 @@ export interface AlertSchedule {
     checkpoints: Checkpoint[];
 }
 
-export type ViewState = 'DASHBOARD' | 'CAMERAS' | 'TRANSPORT' | 'INSPECTION' | 'SCHEDULER' | 'ALERT_MONITOR' | 'AGENT_REPORT' | 'TRAVEL_TIMES';
+export type ViewState = 'DASHBOARD' | 'CAMERAS' | 'TRANSPORT' | 'INSPECTION' | 'SCHEDULER' | 'ALERT_MONITOR' | 'AGENT_REPORT' | 'TRAVEL_TIMES' | 'DESTINATIONS';

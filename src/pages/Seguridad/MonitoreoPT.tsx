@@ -2,7 +2,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { UnitStatus } from '../types';
 import type { TransportUnit, LatLng, StopPoint } from '../types';
-import { getTravelTimesState, subscribeTravelTimes } from '../../store/travelTimesStore';
+import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
+import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
+import { Toast } from '../../components/ui/Toast';
+import type { ToastState } from '../../components/ui/Toast';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import html2pdf from 'html2pdf.js';
@@ -31,7 +34,8 @@ import {
     FileSpreadsheet,
     MapPin,
     PlayCircle,
-    Monitor
+    Monitor,
+    Loader2
 } from 'lucide-react';
 
 const GLOBAL_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };
@@ -53,8 +57,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         const unsubscribe = subscribeTravelTimes(() => {
             setRouteMatrix(getTravelTimesState().travelTimes);
         });
-        return () => { unsubscribe(); };
+        const unsubscribeDest = subscribeDestinations(() => { /* force re-render if needed or just let store handle it */ });
+
+        fetchTravelTimes().catch(console.error);
+        fetchDestinations().catch(console.error);
+
+        return () => { unsubscribe(); unsubscribeDest(); };
     }, []);
+
+    const { destinations } = getDestinationsState();
 
     const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -64,7 +75,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
 
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState<FilterStatus>('TRANSIT');
-    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [dateRange, setDateRange] = useState(() => {
+        const curr = new Date();
+        const day = curr.getDay() || 7; // Get current day number, converting Sun (0) to 7
+        const first = curr.getDate() - day + 1;
+        const last = first + 6;
+        const firstDay = new Date(curr.setDate(first)).toISOString().split('T')[0];
+        const lastDay = new Date(curr.setDate(last)).toISOString().split('T')[0];
+        return { start: firstDay, end: lastDay };
+    });
 
     const [editingControlIndex, setEditingControlIndex] = useState<number | null>(null);
     const [showAddStopProg, setShowAddStopProg] = useState(false);
@@ -91,6 +110,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const unitLayersRef = useRef<Record<string, { polyline: any, marker: any }>>({});
 
+    const [toast, setToast] = useState<ToastState>(null);
+    const [isExporting, setIsExporting] = useState(false);
+
     const [form, setForm] = useState({
         unitName: '',
         proceso: 'CONSERVA',
@@ -106,6 +128,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
         telefono: '',
         origin: '',
         destination: '',
+        almacenDestino1: '',
+        almacenDestino2: '',
         area: 'INDUSTRIAL',
         eta: ''
     });
@@ -214,7 +238,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                 attributionControl: false,
                 preferCanvas: true
             }).setView([GLOBAL_ORIGIN.lat, GLOBAL_ORIGIN.lng], 12);
-            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19 }).addTo(map);
+            L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, crossOrigin: true }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             mapRef.current = map;
             setTimeout(() => map.invalidateSize(), 300);
@@ -355,7 +379,80 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                     ubicacionActual: 'LLEGADA A DESTINO',
                     lastUpdate: finishDate.toISOString(),
                     controles: newControles,
-                    path: newPath
+                    path: newPath,
+                    // Metrics & Ratings
+                    fechaLlegadaDestino1: finishDate.toISOString(),
+                    tiempoTotal1: (() => {
+                        const totalMs = finishDate.getTime() - departureDate.getTime();
+                        const h = Math.floor(Math.floor(totalMs / 60000) / 60);
+                        const m = Math.floor(totalMs / 60000) % 60;
+                        return `${h}h ${m}m`;
+                    })(),
+                    tiempoNeto1: (() => {
+                        const totalMs = finishDate.getTime() - departureDate.getTime();
+                        const totalMins = Math.floor(totalMs / 60000);
+
+                        const stopsMins = [...u.paradasProg, ...u.paradasNoProg].reduce((acc, stop) => {
+                            if (!stop.time) return acc;
+                            let m = 0;
+                            const hMatch = stop.time.match(/(\d+)h/);
+                            const mMatch = stop.time.match(/(\d+)m/);
+                            if (hMatch) m += parseInt(hMatch[1]) * 60;
+                            if (mMatch) m += parseInt(mMatch[1]);
+                            return acc + m;
+                        }, 0);
+
+                        const netMins = Math.max(0, totalMins - stopsMins);
+                        const h = Math.floor(netMins / 60);
+                        const m = netMins % 60;
+                        return `${h}h ${m}m`;
+                    })(),
+                    calificacionTTotal: (() => {
+                        // Parse limits "HH:MM:SS" or "HH:MM"
+                        const parse = (s: string) => {
+                            if (!s) return 0;
+                            const parts = s.split(':').map(Number);
+                            return (parts[0] * 60) + (parts[1] || 0);
+                        };
+                        const min = parse(u.tiempoTransitoMin);
+                        const max = parse(u.tiempoTransitoMax);
+
+                        const totalMs = finishDate.getTime() - departureDate.getTime();
+                        const totalMins = Math.floor(totalMs / 60000);
+
+                        if (min === 0 && max === 0) return 'PENDIENTE';
+                        if (totalMins < min) return 'EXCELENTE';
+                        if (totalMins > max) return 'DEFICIENTE';
+                        return 'BUENO';
+                    })(),
+                    calificacionTNeto: (() => {
+                        // Parse limits
+                        const parse = (s: string) => {
+                            if (!s) return 0;
+                            const parts = s.split(':').map(Number);
+                            return (parts[0] * 60) + (parts[1] || 0);
+                        };
+                        const min = parse(u.tiempoTransitoMin);
+                        const max = parse(u.tiempoTransitoMax);
+
+                        const totalMs = finishDate.getTime() - departureDate.getTime();
+                        const totalMins = Math.floor(totalMs / 60000);
+                        const stopsMins = [...u.paradasProg, ...u.paradasNoProg].reduce((acc, stop) => {
+                            if (!stop.time) return acc;
+                            let m = 0;
+                            const hMatch = stop.time.match(/(\d+)h/);
+                            const mMatch = stop.time.match(/(\d+)m/);
+                            if (hMatch) m += parseInt(hMatch[1]) * 60;
+                            if (mMatch) m += parseInt(mMatch[1]);
+                            return acc + m;
+                        }, 0);
+                        const netMins = Math.max(0, totalMins - stopsMins);
+
+                        if (min === 0 && max === 0) return 'PENDIENTE';
+                        if (netMins < min) return 'EXCELENTE';
+                        if (netMins > max) return 'DEFICIENTE';
+                        return 'BUENO';
+                    })()
                 };
             }
             return u;
@@ -402,7 +499,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
             origin: selectedUnit.origin || '',
             destination: selectedUnit.destination || '',
             area: selectedUnit.area || '',
-            eta: (selectedUnit.fechaEstimadaLlegada || '').slice(0, 16)
+            eta: (selectedUnit.fechaEstimadaLlegada || '').slice(0, 16),
+            almacenDestino1: selectedUnit.almacenDestino1 || '',
+            almacenDestino2: selectedUnit.almacenDestino2 || ''
         });
         setIsEditMode(true);
         setIsAddModalOpen(true);
@@ -497,7 +596,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                 area: form.area,
                 lastLocation: 'Origen Planta',
                 lastUpdate: now.toISOString(),
-                departureTime: salidaDate.toISOString(),
                 path: [GLOBAL_ORIGIN]
             };
             setUnits(prev => [newUnit, ...prev]);
@@ -511,119 +609,137 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
     const handleExportReport = async () => {
         const activeUnits = units.filter(u => u.status === UnitStatus.TRANSIT || u.status === UnitStatus.PLANT || u.status === 'EN PARADA' || u.status === 'INCIDENTE');
         if (activeUnits.length === 0) {
-            alert("No hay unidades en ruta para generar el reporte.");
+            setToast({ type: 'warning', message: "No hay unidades en ruta para generar el reporte." });
             return;
         }
 
-        let mapImage = '';
-        if (mapContainerRef.current) {
-            try {
-                const canvas = await html2canvas(mapContainerRef.current, { useCORS: true, allowTaint: true, logging: false, scale: 1.5 });
-                mapImage = canvas.toDataURL('image/png');
-            } catch (e) { console.warn("Error capturando mapa:", e); }
-        }
+        setIsExporting(true);
+        setToast({ type: 'info', message: "Generando reporte, por favor espere..." });
 
-        const reportDate = new Date().toLocaleString();
+        try {
+            let mapImage = '';
+            // Force map render sync before capture
+            if (mapContainerRef.current) {
+                try {
+                    await new Promise(resolve => setTimeout(resolve, 800)); // Increased wait time slightly
+                    const canvas = await html2canvas(mapContainerRef.current, {
+                        useCORS: true,
+                        allowTaint: true,
+                        logging: false,
+                        scale: 2,
+                        ignoreElements: (element) => element.classList.contains('leaflet-control-zoom')
+                    });
+                    mapImage = canvas.toDataURL('image/png');
+                } catch (e) {
+                    console.warn("Error capturando mapa:", e);
+                    // Don't fail the whole export just for the map
+                }
+            }
 
-        // ESTILO PDF CORREGIDO (Sin sombras, mapa ajustado, fecha hora completa)
-        const cardStyle = "background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; margin-bottom: 0; display: flex; height: 44px;";
+            const reportDate = new Date().toLocaleString();
 
-        const sectionBase = "padding: 0 5px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid #e2e8f0; height: 100%; box-sizing: border-box;";
-        const darkSection = "background: #1e293b; color: white; width: 14%; padding: 2px 6px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid #334155; height: 100%; box-sizing: border-box;";
+            const cardStyle = "background: #fff; border: 1px solid #cbd5e1; border-radius: 4px; overflow: hidden; page-break-inside: avoid; margin-bottom: 0; display: flex; height: 44px; flex-wrap: nowrap;";
+            const sectionBase = "padding: 0 5px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid #e2e8f0; height: 100%; box-sizing: border-box;";
+            const darkSection = "background: #1e293b; color: white; width: 14%; padding: 2px 6px; display: flex; flex-direction: column; justify-content: center; border-right: 1px solid #334155; height: 100%; box-sizing: border-box;";
+            const labelStyle = "font-size: 7px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; line-height: 1;";
+            const valStyle = "font-size: 9px; color: #0f172a; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1;";
 
-        const labelStyle = "font-size: 7px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 2px; line-height: 1;";
-        const valStyle = "font-size: 9px; color: #0f172a; font-weight: 800; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.1;";
+            const cardsHtml = activeUnits.map(u => {
+                const fmtDate = (d: string) => d ? new Date(d).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '') : '-';
+                const salida = fmtDate(u.fechaSalidaPlanta);
+                const eta = fmtDate(u.fechaEstimadaLlegada);
+                const updated = fmtDate(u.lastUpdate);
 
-        const cardsHtml = activeUnits.map(u => {
-            const fmtDate = (d: string) => d ? new Date(d).toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '') : '-';
-
-            // const ingreso = fmtDate(u.fechaIngresoPlanta);
-            const salida = fmtDate(u.fechaSalidaPlanta);
-            const eta = fmtDate(u.fechaEstimadaLlegada);
-            const updated = fmtDate(u.lastUpdate);
-
-            return `
-            <div style="${cardStyle}">
-                <div style="${darkSection}">
-                    <div style="font-weight: 900; font-size: 11px; line-height: 1;">${u.plateRemolque}</div>
-                    <div style="color: #94a3b8; font-size: 7px; margin-top: 3px;">${u.plateSemiRemolque || '-'}</div>
-                    <div style="background: #fff; color: #1e293b; font-size: 6px; font-weight: 800; padding: 2px 3px; border-radius: 2px; margin-top: 3px; width: fit-content;">${u.proceso.substring(0, 10)}</div>
-                </div>
-                <div style="${sectionBase} width: 22%;">
-                    <div style="display: flex; gap: 4px; margin-bottom: 3px;">
-                        <div style="flex:1"><div style="${labelStyle}">ORI</div><div style="${valStyle}">${u.origin.substring(0, 10)}</div></div>
-                        <div style="flex:1"><div style="${labelStyle}">DES</div><div style="${valStyle}">${u.destination.substring(0, 10)}</div></div>
+                return `
+                <div style="${cardStyle}">
+                    <div style="${darkSection}">
+                        <div style="font-weight: 900; font-size: 11px; line-height: 1;">${u.plateRemolque}</div>
+                        <div style="color: #94a3b8; font-size: 7px; margin-top: 3px;">${u.plateSemiRemolque || '-'}</div>
+                        <div style="background: #fff; color: #1e293b; font-size: 6px; font-weight: 800; padding: 2px 3px; border-radius: 2px; margin-top: 3px; width: fit-content;">${u.proceso.substring(0, 10)}</div>
                     </div>
-                    <div><div style="${labelStyle}">TIPO</div><div style="${valStyle}">${u.tipoEnvio}</div></div>
-                </div>
-                <div style="${sectionBase} width: 18%;">
-                    <div style="margin-bottom: 3px;"><div style="${labelStyle}">SALIDA</div><div style="${valStyle}">${salida}</div></div>
-                    <div><div style="${labelStyle}"></div><div style="${valStyle}"></div></div>
-                </div>
-                <div style="${sectionBase} width: 16%;">
-                    <div style="margin-bottom: 3px;"><div style="${labelStyle}">CONDUCTOR</div><div style="${valStyle}">${u.conductor.substring(0, 12)}</div></div>
-                    <div><div style="${labelStyle}">TEL</div><div style="${valStyle}">${u.telefono}</div></div>
-                </div>
-                <div style="width: 30%; padding: 3px; display: flex; flex-direction: column; justify-content: center; gap: 3px; height: 100%; box-sizing: border-box;">
-                    <div style="background: #f8fafc; padding: 3px 5px; border-radius: 3px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
-                        <span style="${labelStyle}">UBIC (${updated.split(' ')[1] || ''})</span>
-                        <span style="${valStyle}; font-size: 8px; max-width: 140px;">${u.ubicacionActual.substring(0, 35)}</span>
+                    <div style="${sectionBase} width: 22%;">
+                        <div style="display: flex; gap: 4px; margin-bottom: 3px;">
+                            <div style="flex:1"><div style="${labelStyle}">ORI</div><div style="${valStyle}">${u.origin.substring(0, 10)}</div></div>
+                            <div style="flex:1"><div style="${labelStyle}">DES</div><div style="${valStyle}">${u.destination.substring(0, 10)}</div></div>
+                        </div>
+                        <div><div style="${labelStyle}">TIPO</div><div style="${valStyle}">${u.tipoEnvio}</div></div>
                     </div>
-                    <div style="background: #eff6ff; padding: 3px 5px; border-radius: 3px; border: 1px solid #dbeafe; display: flex; align-items: center; justify-content: space-between;">
-                        <span style="${labelStyle}; color: #1e40af;">ESTIMADO LLEGADA</span>
-                        <span style="${valStyle}; color: #1d4ed8; font-size: 9px;">${eta}</span>
+                    <div style="${sectionBase} width: 18%;">
+                        <div style="margin-bottom: 3px;"><div style="${labelStyle}">SALIDA</div><div style="${valStyle}">${salida}</div></div>
+                        <div><div style="${labelStyle}"></div><div style="${valStyle}"></div></div>
                     </div>
-                </div>
-            </div>
-            `;
-        }).join('');
-
-        const htmlContent = `
-            <div style="font-family: 'Inter', sans-serif; padding: 15px; width: 1120px; height: 790px; box-sizing: border-box; background: white; overflow: hidden; position: relative;">
-                <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; padding-bottom: 8px; margin-bottom: 10px; height: 35px;">
-                    <div>
-                        <h1 style="color: #1e293b; font-size: 16px; margin: 0; font-weight: 900; text-transform: uppercase;">REPORTE DE OPERACIONES EN RUTA</h1>
-                        <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Generado: ${reportDate} • ${activeUnits.length} Unidades Activas</p>
+                    <div style="${sectionBase} width: 16%;">
+                        <div style="margin-bottom: 3px;"><div style="${labelStyle}">CONDUCTOR</div><div style="${valStyle}">${u.conductor.substring(0, 12)}</div></div>
+                        <div><div style="${labelStyle}">TEL</div><div style="${valStyle}">${u.telefono}</div></div>
                     </div>
-                    <div style="text-align: right;">
-                        <div style="background-color: #1e293b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold;">CONTROL CENTER AI</div>
+                    <div style="width: 30%; padding: 3px; display: flex; flex-direction: column; justify-content: center; gap: 3px; height: 100%; box-sizing: border-box;">
+                        <div style="background: #f8fafc; padding: 3px 5px; border-radius: 3px; border: 1px solid #e2e8f0; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="${labelStyle}">UBIC (${updated.split(' ')[1] || ''})</span>
+                            <span style="${valStyle}; font-size: 8px; max-width: 140px;">${u.ubicacionActual.substring(0, 35)}</span>
+                        </div>
+                        <div style="background: #eff6ff; padding: 3px 5px; border-radius: 3px; border: 1px solid #dbeafe; display: flex; align-items: center; justify-content: space-between;">
+                            <span style="${labelStyle}; color: #1e40af;">ESTIMADO LLEGADA</span>
+                            <span style="${valStyle}; color: #1d4ed8; font-size: 9px;">${eta}</span>
+                        </div>
                     </div>
                 </div>
-                <div style="display: flex; gap: 12px; height: 705px; align-items: flex-start;">
-                    <div style="width: 65%; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; align-content: flex-start;">
-                        ${cardsHtml}
+                `;
+            }).join('');
+
+            const htmlContent = `
+                <div style="font-family: 'Inter', sans-serif; padding: 15px; width: 1120px; height: 790px; box-sizing: border-box; background: white; overflow: hidden; position: relative;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid #1e293b; padding-bottom: 8px; margin-bottom: 10px; height: 35px;">
+                        <div>
+                            <h1 style="color: #1e293b; font-size: 16px; margin: 0; font-weight: 900; text-transform: uppercase;">REPORTE DE OPERACIONES EN RUTA</h1>
+                            <p style="color: #64748b; font-size: 10px; margin: 2px 0 0 0;">Generado: ${reportDate} • ${activeUnits.length} Unidades Activas</p>
+                        </div>
+                        <div style="text-align: right;">
+                            <div style="background-color: #1e293b; color: white; padding: 4px 8px; border-radius: 4px; font-size: 10px; font-weight: bold;">CONTROL CENTER AI</div>
+                        </div>
                     </div>
-                    <div style="width: 35%; flex-shrink: 0; display: flex; flex-direction: column; height: 100%;">
-                        ${mapImage ? `
-                            <div style="border: 2px solid #1e293b; border-radius: 6px; overflow: hidden; height: 100%; display: flex; align-items: center; justify-content: center; background: #f8fafc;">
-                                <!-- FIX: Height auto and object-fit contain to prevent vertical stretching -->
-                                <img src="${mapImage}" style="width: 100%; height: auto; max-height: 100%; object-fit: contain; display: block;" />
-                            </div>
-                            <div style="margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; height: 40px;">
-                                <p style="font-size: 8px; color: #475569; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; margin-top: 0;">LEYENDA</p>
-                                <div style="display: flex; gap: 10px;">
-                                    <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 6px; height: 6px; background: #3b82f6; border-radius: 50%;"></div><span style="font-size: 8px; color: #64748b; font-weight: 600;">EN RUTA</span></div>
-                                    <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 6px; height: 6px; background: #f97316; border-radius: 50%;"></div><span style="font-size: 8px; color: #64748b; font-weight: 600;">ALERTA</span></div>
+                    <div style="display: flex; gap: 12px; height: 705px; align-items: flex-start;">
+                        <div style="width: 65%; flex-shrink: 0; display: flex; flex-direction: column; gap: 4px; align-content: flex-start;">
+                            ${cardsHtml}
+                        </div>
+                        <div style="width: 35%; flex-shrink: 0; display: flex; flex-direction: column; height: 100%;">
+                            ${mapImage ? `
+                                <div style="border: 2px solid #1e293b; border-radius: 6px; overflow: hidden; height: 100%; display: flex; align-items: center; justify-content: center; background: #f8fafc;">
+                                    <img src="${mapImage}" style="width: 100%; height: auto; max-height: 100%; object-fit: contain; display: block;" />
                                 </div>
-                            </div>
-                        ` : '<div style="background: #f1f5f9; height: 100%; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-weight: bold; font-size: 10px;">MAPA NO DISPONIBLE</div>'}
+                                <div style="margin-top: 8px; padding: 8px; background: #f8fafc; border-radius: 4px; border: 1px solid #e2e8f0; height: 40px;">
+                                    <p style="font-size: 8px; color: #475569; font-weight: bold; text-transform: uppercase; margin-bottom: 4px; margin-top: 0;">LEYENDA</p>
+                                    <div style="display: flex; gap: 10px;">
+                                        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 6px; height: 6px; background: #3b82f6; border-radius: 50%;"></div><span style="font-size: 8px; color: #64748b; font-weight: 600;">EN RUTA</span></div>
+                                        <div style="display: flex; align-items: center; gap: 4px;"><div style="width: 6px; height: 6px; background: #f97316; border-radius: 50%;"></div><span style="font-size: 8px; color: #64748b; font-weight: 600;">ALERTA</span></div>
+                                    </div>
+                                </div>
+                            ` : '<div style="background: #f1f5f9; height: 100%; display: flex; align-items: center; justify-content: center; color: #94a3b8; font-weight: bold; font-size: 10px;">MAPA NO DISPONIBLE</div>'}
+                        </div>
+                    </div>
+                    <div style="position: absolute; bottom: 8px; width: 100%; text-align: center; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
+                        Documento Confidencial • Generado automáticamente por ControlCenter AI
                     </div>
                 </div>
-                <div style="position: absolute; bottom: 8px; width: 100%; text-align: center; font-size: 8px; color: #94a3b8; border-top: 1px solid #e2e8f0; padding-top: 6px;">
-                    Documento Confidencial • Generado automáticamente por ControlCenter AI
-                </div>
-            </div>
-        `;
+            `;
 
-        const element = document.createElement('div');
-        element.innerHTML = htmlContent;
-        html2pdf().set({
-            margin: 0,
-            filename: `Reporte_Ruta_${new Date().toISOString().split('T')[0]}.pdf`,
-            image: { type: 'jpeg', quality: 0.95 },
-            html2canvas: { scale: 1.5, useCORS: true, scrollY: 0 },
-            jsPDF: { unit: 'px', format: [1122, 794], orientation: 'landscape', hotfixes: ['px_scaling'] } as any
-        }).from(element).save();
+            const element = document.createElement('div');
+            element.innerHTML = htmlContent;
+
+            await html2pdf().set({
+                margin: 0,
+                filename: `Reporte_Ruta_${new Date().toISOString().split('T')[0]}.pdf`,
+                image: { type: 'jpeg', quality: 0.95 },
+                html2canvas: { scale: 1.5, useCORS: true, scrollY: 0 },
+                jsPDF: { unit: 'px', format: [1122, 794], orientation: 'landscape', hotfixes: ['px_scaling'] } as any
+            }).from(element).save();
+
+            setToast({ type: 'success', message: "Reporte descargado correctamente" });
+        } catch (error) {
+            console.error("Export error:", error);
+            setToast({ type: 'error', message: "Error al generar el reporte PDF" });
+        } finally {
+            setIsExporting(false);
+        }
     };
 
     const handleUpdateControl = async (e: React.FormEvent) => {
@@ -872,8 +988,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <button onClick={handleExportReport} className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all">
-                        <FileSpreadsheet size={16} /> Reporte Ruta
+                    <button onClick={handleExportReport} disabled={isExporting} className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
+                        {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                        {isExporting ? 'Generando...' : 'Reporte Ruta'}
                     </button>
                     <button onClick={() => { setIsEditMode(false); setForm({ ...form, plateRemolque: '' }); setIsAddModalOpen(true); }} className="bg-[#ff0000] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all">
                         <Plus size={16} /> Nueva Apertura
@@ -888,10 +1005,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                 <div className="w-[65%] flex flex-col gap-3">
                     <div className="bg-white p-2 rounded-xl border border-slate-300 flex flex-col md:flex-row items-center justify-between gap-4">
                         <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto custom-scrollbar border border-slate-200">
-                            <button onClick={() => setStatusFilter('TRANSIT')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>En Ruta</button>
-                            <button onClick={() => setStatusFilter('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${statusFilter === 'ALL' ? 'bg-white text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>Todos</button>
-                            <button onClick={() => setStatusFilter('ARRIVED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${statusFilter === 'ARRIVED' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>Llegados</button>
-                            <button onClick={() => setStatusFilter('CANCELLED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase transition-all ${statusFilter === 'CANCELLED' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700'}`}>Cancelados</button>
+                            <button onClick={() => setStatusFilter('TRANSIT')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>En Ruta</button>
+                            <button onClick={() => setStatusFilter('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'ALL' ? 'bg-white text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Todos</button>
+                            <button onClick={() => setStatusFilter('ARRIVED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'ARRIVED' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Llegados</button>
+                            <button onClick={() => setStatusFilter('CANCELLED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'CANCELLED' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Cancelados</button>
                         </div>
 
                         {(statusFilter === 'ALL' || statusFilter === 'ARRIVED' || statusFilter === 'CANCELLED') && (
@@ -1022,7 +1139,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                     </div>
                 </div>
             </div>
-
             {finishTripModal.open && (
                 <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[200] p-4 animate-in fade-in">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
@@ -1397,7 +1513,23 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                                         <div className="grid grid-cols-2 gap-3">
                                             <FormInput label="Origen" type="select" options={Array.from(new Set((routeMatrix || []).map(r => r.origen))).sort()} value={form.origin} onChange={v => setForm({ ...form, origin: v })} />
-                                            <FormInput label="Destino" type="select" options={form.origin ? Array.from(new Set((routeMatrix || []).filter(r => r.origen === form.origin).map(r => r.destino))).sort() : []} value={form.destination} onChange={v => setForm({ ...form, destination: v })} />
+                                            <FormInput label="Destino (Zona)" type="select" options={form.origin ? Array.from(new Set((routeMatrix || []).filter(r => r.origen === form.origin).map(r => r.destino))).sort() : []} value={form.destination} onChange={v => setForm({ ...form, destination: v, almacenDestino1: '', almacenDestino2: '' })} />
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <FormInput
+                                                label="Almacén Descarga"
+                                                type="select"
+                                                options={destinations.filter(d => d.city_zone === form.destination && d.type === 'DESCARGA' && d.active).map(d => d.name)}
+                                                value={form.almacenDestino1}
+                                                onChange={v => setForm({ ...form, almacenDestino1: v })}
+                                            />
+                                            <FormInput
+                                                label="Almacén Muestras (Opcional)"
+                                                type="select"
+                                                options={destinations.filter(d => d.city_zone === form.destination && d.type === 'MUESTRAS' && d.active).map(d => d.name)}
+                                                value={form.almacenDestino2}
+                                                onChange={v => setForm({ ...form, almacenDestino2: v })}
+                                            />
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <FormInput label="Ingreso Planta" type="datetime-local" value={form.fechaIngreso} onChange={v => setForm({ ...form, fechaIngreso: v })} />
@@ -1477,6 +1609,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units, setUn
             )}
 
             <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .leaflet-container { font-family: 'Inter', sans-serif; background: #f8fafc !important; } .custom-leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }`}</style>
+            <Toast toast={toast} onClose={() => setToast(null)} />
         </div>
     );
 };

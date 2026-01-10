@@ -54,6 +54,7 @@ import GestionRecursos from "./pages/Seguridad/GestionRecursos";
 import ChecklistCamaras from "./pages/Seguridad/ChecklistCamaras";
 import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
 import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen";
+import { DestinationsTable } from "./pages/Seguridad/DestinationsTable";
 import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
 import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
@@ -458,6 +459,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/seguridad/monitoreo-pt">
                 <MonitoreoPT />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/destinos"
+            element={
+              <ProtectedRoute path="/seguridad/monitoreo-pt">
+                <DestinationsTable />
               </ProtectedRoute>
             }
           />
