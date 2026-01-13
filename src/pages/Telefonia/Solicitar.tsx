@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore } from "../../store/telefoniaStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
+import { getPersonalState, subscribePersonal } from "../../store/personalStore";
+import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore"; // NEW
 import type { ValidationResult } from "../../store/telefoniaStore";
 import { aplicativosStore } from "../../store/aplicativosStore";
 
@@ -19,7 +21,6 @@ import {
     Smartphone,
     X,
 } from "lucide-react";
-import { supabase } from "../../supabase/supabaseClient";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 import { Modal } from "../../components/ui/Modal";
 
@@ -87,6 +88,8 @@ export default function SolicitarTelefonia() {
         justificacion: "",
         asume_costo: "", // "EMPRESA" | "USUARIO"
         cuotas: 3,
+        ceco: "", // NEW
+        categoria: "", // NEW
     });
 
     const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -124,7 +127,13 @@ export default function SolicitarTelefonia() {
     useEffect(() => {
         loadHistory();
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
-        return () => unsubSedes();
+        const unsubPersonal = subscribePersonal(() => { });
+        const unsubGerencias = subscribeGerencias(() => { }); // NEW
+        return () => {
+            unsubSedes();
+            unsubPersonal();
+            unsubGerencias();
+        };
     }, []);
 
     const [, setSedesVersion] = useState(0);
@@ -316,22 +325,25 @@ export default function SolicitarTelefonia() {
 
         setSearchingDni(true);
         try {
-            const { data } = await supabase
-                .from("profiles")
-                .select("nombre, area, puesto")
-                .eq("dni", formData.dni)
-                .single();
+            // Updated to use personalStore with manual mapping
+            const { personal } = getPersonalState();
+            const { gerencias } = getGerenciasState();
+            const found = personal.find(p => p.dni === formData.dni);
 
-            if (data) {
+            if (found) {
+                // Find gerencia name
+                const g = gerencias.find(g => g.id === found.gerenciaId);
+
                 setFormData((prev) => ({
                     ...prev,
-                    nombre: data.nombre || "",
-                    area: data.area || "",
-                    puesto: data.puesto || "",
+                    nombre: found.nombre || "",
+                    area: g?.nombre || "", // Mapped manually
+                    puesto: "", // Puesto not available in personal table
                 }));
-                setToast({ type: "success", message: "Datos encontrados" });
+                // Warning added
+                setToast({ type: "success", message: "Datos encontrados (Personal). NOTA: Puesto no disponible en este padrón." });
             } else {
-                setToast({ type: "info", message: "DNI no encontrado, ingrese datos manualmente" });
+                setToast({ type: "info", message: "DNI no encontrado en el padrón de personal." });
                 setFormData((prev) => ({
                     ...prev,
                     nombre: "",
@@ -341,7 +353,7 @@ export default function SolicitarTelefonia() {
             }
         } catch (e) {
             console.error(e);
-            setToast({ type: "error", message: "No se pudo traer información, ingrese manual." });
+            setToast({ type: "error", message: "Error al buscar información." });
         } finally {
             setSearchingDni(false);
         }
@@ -357,18 +369,34 @@ export default function SolicitarTelefonia() {
             if ((formData.n_linea === "Renovación" || formData.n_linea === "Reposición") && !formData.numero_telefono) {
                 return "Debe ingresar el número de teléfono.";
             }
+
+            // New Validation Rules
+            if (formData.n_linea === "Renovación") {
+                if (!validationResult?.valid) {
+                    return "Debe validar la antigüedad del equipo para continuar (mínimo 3 años).";
+                }
+            }
+            if (formData.n_linea === "Reposición") {
+                if (!renewalCalculated.valid) { // Using renewalCalculated for Reposición state
+                    return "Debe validar el número para proceder con la reposición.";
+                }
+            }
         }
         if (step === 2) {
             // BRANCH: REPOSICIÓN
             if (formData.n_linea === "Reposición") {
                 if (!formData.motivo_reposicion) return "Seleccione el motivo de la reposición.";
+                if (!formData.fundo_planta) return "Seleccione Fundo / Planta."; // NEW Validation
                 if (!formData.tiene_evidencia) return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
                 if (["ROBO", "PERDIDA"].includes(formData.motivo_reposicion)) {
                     if (!formData.asume_costo) return "Indique quién asume el costo de la reposición.";
                 }
             } else {
                 // BRANCH: STANDARD SERVICES
-                if (!formData.tipo_servicio) return "Seleccione el tipo de servicio";
+                if (!formData.ceco) return "Ingrese el CECO (Centro de Costo).";
+                if (!formData.categoria) return "Seleccione la Categoría (Proyecto/Administrativos).";
+
+                if (!formData.tipo_servicio) return "Seleccione el Operador";
                 if (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && !formData.paquete_asignado) {
                     return "Seleccione un paquete asignado";
                 }
@@ -451,8 +479,10 @@ export default function SolicitarTelefonia() {
                 } : null,
                 justificacion: formData.justificacion,
                 aplicativos: selectedApps,
-                estado: "Pendiente Gerencia",
+                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Línea Nueva" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
                 created_by: user?.id,
+                ceco: formData.ceco, // NEW
+                categoria: formData.categoria, // NEW 
             });
 
             setToast({ type: "success", message: "Solicitud creada correctamente" });
@@ -463,7 +493,7 @@ export default function SolicitarTelefonia() {
                 tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
-                paquete_asignado: "", asume_costo: "", cuotas: 3
+                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: ""
             });
             setSelectedApps([]);
             setCurrentStep(1);
@@ -583,25 +613,24 @@ export default function SolicitarTelefonia() {
                                             value={formData.numero_telefono}
                                             onChange={(e) => {
                                                 handleChange("numero_telefono", e.target.value);
+                                                // Reset validation when number changes
                                                 if (formData.n_linea === "Reposición" && renewalCalculated.message) {
-                                                    setRenewalCalculated({ ...renewalCalculated, message: "" });
+                                                    setRenewalCalculated({ ...renewalCalculated, message: "", valid: false });
+                                                }
+                                                // Reset validation for Renovación too
+                                                if (formData.n_linea === "Renovación" && validationResult) {
+                                                    setValidationResult(null);
                                                 }
                                             }}
-                                            onBlur={(e) => {
-                                                if (formData.n_linea === "Reposición") {
-                                                    handleValidateReposicionNumber(e.target.value);
-                                                }
-                                            }}
+                                            // onBlur removed from here to use explicit button for Reposicion as requested
                                             placeholder="999 999 999"
                                         />
                                         <Smartphone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
 
-                                        {/* Status Indicator for Reposicion */}
+                                        {/* Status Indicator for Reposicion - Kept for visual feedback inside input */}
                                         {formData.n_linea === "Reposición" && (
                                             <div className="absolute right-2 top-2">
-                                                {verifyingNumber ? (
-                                                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
-                                                ) : renewalCalculated.message === "Validado" ? (
+                                                {renewalCalculated.message === "Validado" ? (
                                                     <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full border border-green-200">
                                                         VALIDADO
                                                     </span>
@@ -613,6 +642,21 @@ export default function SolicitarTelefonia() {
                                             </div>
                                         )}
                                     </div>
+
+                                    {/* Validar Button for Reposición (NEW) */}
+                                    {formData.n_linea === "Reposición" && (
+                                        <div className="mt-2">
+                                            <button
+                                                type="button"
+                                                onClick={() => handleValidateReposicionNumber(formData.numero_telefono)}
+                                                disabled={verifyingNumber || !formData.numero_telefono}
+                                                className="mt-1 w-full inline-flex justify-center items-center px-4 py-2 border border-blue-200 shadow-sm text-sm font-medium rounded-md text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
+                                            >
+                                                {verifyingNumber ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                                                Validar Número para Reposición
+                                            </button>
+                                        </div>
+                                    )}
 
                                     {/* Equipment Info Display for Reposicion - REMOVED per user request
                                     {formData.n_linea === "Reposición" && previousDevice && (
@@ -637,7 +681,7 @@ export default function SolicitarTelefonia() {
                                             {validationResult && (
                                                 <div className={`mt-2 p-2 rounded text-xs border ${validationResult.valid ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
                                                     <p className="font-semibold">{validationResult.message}</p>
-                                                    {validationResult.equipo && <p>Equipo anterior: {validationResult.equipo}</p>}
+                                                    {/* Removed "Equipo ANTERIOR" as per user request */}
                                                 </div>
                                             )}
                                         </div>
@@ -677,6 +721,41 @@ export default function SolicitarTelefonia() {
                                         <p className="text-xs text-indigo-400 mt-1">Se le asignará un equipo de mismas características.</p>
                                     </div>
                                 )}
+
+                                <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fundo / Planta</label>
+                                    <select
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                        value={formData.fundo_planta}
+                                        onChange={(e) => handleChange("fundo_planta", e.target.value)}
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        {sedes.map(sede => (
+                                            <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
+                                        ))}
+                                        {!sedes.find(s => s.nombre === formData.fundo_planta) && formData.fundo_planta && (
+                                            <option value={formData.fundo_planta}>{formData.fundo_planta} (Legacy)</option>
+                                        )}
+                                    </select>
+                                </div>
+                                <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cultivo</label>
+                                    <select
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                        value={formData.cultivo}
+                                        onChange={(e) => handleChange("cultivo", e.target.value)}
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        <option value="ARANDANO">ARANDANO</option>
+                                        <option value="PALTA">PALTA</option>
+                                        <option value="ESPARRAGO">ESPARRAGO</option>
+                                        <option value="UVA">UVA</option>
+                                        <option value="MANGO">MANGO</option>
+                                        <option value="PIMIENTO">PIMIENTO</option>
+                                        <option value="OTROS">OTROS</option>
+                                    </select>
+                                </div>
+
 
                                 <div className="col-span-12 md:col-span-6">
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Reposición</label>
@@ -832,9 +911,35 @@ export default function SolicitarTelefonia() {
                                 </select>
                             </div>
 
+                            {/* New Fields: CECO & Categoria */}
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">CECO</label>
+                                <input
+                                    type="text" // numeric input but stored as string often safer for codes, user said "NUMERICO" so maybe <input type="number"> or regex.
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.ceco}
+                                    onChange={(e) => handleChange("ceco", e.target.value.replace(/\D/g, ''))} // Enforce numeric
+                                    placeholder="Centro de Costo"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Categoría</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.categoria}
+                                    onChange={(e) => handleChange("categoria", e.target.value)}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="PROYECTO">PROYECTO</option>
+                                    <option value="ADMINISTRATIVOS">ADMINISTRATIVOS</option>
+                                </select>
+                            </div>
+
                             {/* Service Type - Filtered */}
                             <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Servicio</label>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">OPERADOR</label>
                                 <select
                                     required
                                     className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
@@ -866,7 +971,6 @@ export default function SolicitarTelefonia() {
                                     })()}
 
                                     <option value="SOLO CHIP">SOLO CHIP</option>
-                                    <option value="REPOSICIÓN">REPOSICIÓN DE EQUIPO</option>
                                 </select>
                                 {formData.fundo_planta && sedes.find(s => s.nombre === formData.fundo_planta)?.operadores?.length === 0 && (
                                     <p className="text-[10px] text-orange-500 mt-1">* Sede sin cobertura configurada (se muestran todos)</p>
@@ -1131,7 +1235,11 @@ export default function SolicitarTelefonia() {
                                     <button
                                         type="button"
                                         onClick={nextStep}
-                                        className="px-4 py-1.5 bg-gray-900 text-white rounded hover:bg-gray-800 text-sm font-medium inline-flex items-center gap-2 transition-colors shadow-sm"
+                                        disabled={
+                                            (currentStep === 1 && formData.n_linea === "Renovación" && !validationResult?.valid) ||
+                                            (currentStep === 1 && formData.n_linea === "Reposición" && !renewalCalculated.valid)
+                                        }
+                                        className="px-4 py-1.5 bg-gray-900 text-white rounded hover:bg-gray-800 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
                                     >
                                         Siguiente <ChevronRight className="w-3 h-3" />
                                     </button>

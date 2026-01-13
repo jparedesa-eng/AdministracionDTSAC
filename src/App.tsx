@@ -36,7 +36,6 @@ import ProveedoresPasaje from "./pages/pasajes/ProvidersPage";
 import InventarioTelefonia from "./pages/Telefonia/Inventario";
 import SolicitarTelefonia from "./pages/Telefonia/Solicitar";
 import GestionTelefonia from "./pages/Telefonia/Gestion";
-import AprobacionIT from "./pages/Telefonia/AprobacionIT";
 import AprobacionGerencia from "./pages/Telefonia/AprobacionGerencia";
 import AprobacionAdmin from "./pages/Telefonia/AprobacionAdmin";
 import ModelosTelefonia from "./pages/Telefonia/Catalogos/Modelos";
@@ -327,14 +326,6 @@ export default function App() {
             element={
               <ProtectedRoute path="/telefonia/gestion">
                 <GestionTelefonia />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/telefonia/aprobacion-it"
-            element={
-              <ProtectedRoute path="/telefonia/aprobacion-it">
-                <AprobacionIT />
               </ProtectedRoute>
             }
           />

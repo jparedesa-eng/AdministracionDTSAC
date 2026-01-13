@@ -6,7 +6,8 @@ import { supabase } from "../supabase/supabaseClient";
 export type EstadoEquipo = "Disponible" | "Asignado" | "Mantenimiento" | "Baja";
 export type EstadoChip = "Disponible" | "Asignado" | "Baja";
 export type EstadoSolicitud =
-    | "Pendiente IT"
+    | "Pendiente IT" // Legacy or specific workflow
+    | "Revisión Admin" // Renamed from Pendiente IT for Reposition/Admin flow
     | "Pendiente Gerencia"
     | "Pendiente Admin"
     | "Programar Entrega"
@@ -95,6 +96,8 @@ export interface Solicitud {
     aplicativos?: string[] | null;
 
     estado: EstadoSolicitud;
+    ceco?: string | null;
+    categoria?: string | null;
 
     // New fields for Reposition
     detalle_reposicion?: any; // JSONB

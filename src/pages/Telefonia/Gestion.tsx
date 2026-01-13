@@ -14,6 +14,8 @@ import {
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
+// STANDARD_MODELS removed in favor of telefoniaStore.modelos
+
 // --- SIGNATURE PAD HOOK ---
 function useSignaturePad() {
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -93,13 +95,18 @@ export default function GestionTelefonia() {
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
-    const [entregaData, setEntregaData] = useState({ recibidoPor: "", equipoId: "" });
+    const [entregaData, setEntregaData] = useState({ recibidoPor: "", equipoId: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" });
     const sig = useSignaturePad();
 
     // Clear signature when modal opens
     useEffect(() => {
-        if (selectedTicket?.estado === "Programar Entrega") {
-            setTimeout(() => sig.clear(), 100);
+        if (selectedTicket) {
+            // Reset state when opening a ticket
+            setEntregaData(prev => ({ ...prev, recibidoPor: "", equipoId: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" }));
+
+            if (selectedTicket.estado === "Programar Entrega") {
+                setTimeout(() => sig.clear(), 100);
+            }
         }
     }, [selectedTicket]);
 
@@ -176,7 +183,7 @@ export default function GestionTelefonia() {
     const tickets = getFilteredTickets();
 
     const columns = {
-        pendingIT: tickets.filter(t => t.estado === "Pendiente IT"),
+        revisionAdmin: tickets.filter(t => t.estado === "Revisión Admin"),
         approvals: tickets.filter(t => ["Pendiente Gerencia", "Pendiente Admin"].includes(t.estado)),
         delivery: tickets.filter(t => t.estado === "Programar Entrega"),
         history: tickets.filter(t => ["Entregado", "Rechazada", "Cancelada"].includes(t.estado))
@@ -184,9 +191,9 @@ export default function GestionTelefonia() {
 
     const StatusBadge = ({ estado }: { estado: string }) => {
         let color = "bg-gray-100 text-gray-800";
-        if (estado.includes("IT")) color = "bg-purple-100 text-purple-800";
+        if (estado === "Revisión Admin") color = "bg-purple-100 text-purple-800";
         if (estado.includes("Gerencia")) color = "bg-blue-100 text-blue-800";
-        if (estado.includes("Admin")) color = "bg-amber-100 text-amber-800";
+        if (estado === "Pendiente Admin") color = "bg-amber-100 text-amber-800";
         if (estado === "Programar Entrega") color = "bg-indigo-100 text-indigo-800";
         if (estado === "Entregado") color = "bg-emerald-100 text-emerald-800";
         if (estado === "Rechazada") color = "bg-rose-100 text-rose-800";
@@ -248,7 +255,7 @@ export default function GestionTelefonia() {
         <div className="h-full flex flex-col space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 flex-shrink-0">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Tablero de Gestión</h1>
+                    <h1 className="text-2xl font-bold text-gray-900">Gestión de Solicitudes</h1>
                     <p className="text-gray-500 text-sm">Monitoreo global del ciclo de vida de solicitudes</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
@@ -289,17 +296,17 @@ export default function GestionTelefonia() {
             {/* KANBAN BOARD */}
             <div className="flex-1 overflow-x-auto min-h-0">
                 <div className="grid grid-cols-1 md:grid-cols-4 gap-6 min-w-[1000px] h-full pb-4">
-                    {/* COLUMN 1: Pending IT */}
+                    {/* COLUMN 1: Revision Admin */}
                     <div className="flex flex-col h-full bg-gray-50/50 rounded-xl border border-gray-200/50">
                         <div className="p-3 border-b border-gray-200 bg-gray-50 rounded-t-xl flex justify-between items-center sticky top-0">
                             <h3 className="font-semibold text-gray-700 text-sm flex items-center gap-2">
-                                <span className="w-2 h-2 rounded-full bg-purple-500"></span> Validación IT
+                                <span className="w-2 h-2 rounded-full bg-purple-500"></span> Revisión Administración
                             </h3>
-                            <span className="text-xs bg-white px-2 py-0.5 rounded border border-gray-200 font-medium">{columns.pendingIT.length}</span>
+                            <span className="text-xs bg-white px-2 py-0.5 rounded border border-gray-200 font-medium">{columns.revisionAdmin.length}</span>
                         </div>
                         <div className="flex-1 overflow-y-auto p-3 space-y-3">
-                            {columns.pendingIT.map(t => <TicketCard key={t.id} ticket={t} onClick={() => setSelectedTicket(t)} />)}
-                            {columns.pendingIT.length === 0 && <p className="text-center text-xs text-gray-400 italic py-4">No hay tickets pendientes</p>}
+                            {columns.revisionAdmin.map(t => <TicketCard key={t.id} ticket={t} onClick={() => setSelectedTicket(t)} />)}
+                            {columns.revisionAdmin.length === 0 && <p className="text-center text-xs text-gray-400 italic py-4">No hay tickets pendientes</p>}
                         </div>
                     </div>
 
@@ -441,6 +448,137 @@ export default function GestionTelefonia() {
                         ) : (
                             // READ ONLY VIEW FOR OTHER STATES
                             <div className="pt-2">
+                                {/* REVISION ADMIN (Pendiente IT -> Revisión Admin) */}
+                                {selectedTicket.estado === "Revisión Admin" && (
+                                    <div className="bg-purple-50 p-4 rounded-xl border border-purple-100 mb-4 space-y-4">
+                                        <div className="flex items-center gap-2 text-purple-800 font-bold border-b border-purple-200 pb-2">
+                                            <div className="p-1 bg-purple-100 rounded">
+                                                <span className="text-lg">🛠️</span>
+                                            </div>
+                                            Revisión Administración (IT)
+                                        </div>
+
+                                        {/* 1. SUGERENCIA DE MODELO */}
+                                        <div>
+                                            <label className="block text-sm font-medium text-gray-700 mb-1">Sugerir Modelo (Catálogo)</label>
+                                            <select
+                                                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm border p-2"
+                                                value={entregaData.suggestedModel || ""}
+                                                onChange={(e) => setEntregaData({ ...entregaData, suggestedModel: e.target.value })}
+                                            >
+                                                <option value="">
+                                                    {selectedTicket.alternativa_modelo
+                                                        ? `-- ${selectedTicket.alternativa_modelo} (Actual) --`
+                                                        : "-- Seleccionar Modelo Sugerido --"}
+                                                </option>
+                                                {/* From DB Catalog */}
+                                                {telefoniaStore.modelos
+                                                    .map(m => `${m.marca} ${m.nombre}`)
+                                                    .sort()
+                                                    .map(modelName => (
+                                                        <option key={modelName} value={modelName}>
+                                                            {modelName}
+                                                        </option>
+                                                    ))
+                                                }
+                                            </select>
+                                            <p className="text-xs text-gray-500 mt-1">
+                                                Seleccione el modelo sugerido para atender esta solicitud.
+                                            </p>
+                                        </div>
+
+                                        {/* 2. COST ASSIGNMENT (Only for Reposicion) */}
+                                        {((selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.beneficiario_n_linea_ref === "Reposición")) && (
+                                            <div className="bg-white p-3 rounded-lg border border-purple-200 mt-2">
+                                                <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
+                                                    💰 Asignación de Costos (Reposición)
+                                                </h4>
+                                                <p className="text-xs text-gray-500 mb-3 block p-2 bg-yellow-50 text-yellow-800 rounded border border-yellow-100">
+                                                    <strong>Nota:</strong> El usuario asume el 100% del costo de reposición.
+                                                </p>
+
+                                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                                    <div>
+                                                        <label className="block text-xs font-semibold text-gray-600 uppercase mb-1">Costo Total Equipo (S/)</label>
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            step="0.01"
+                                                            className="block w-full rounded border-gray-300 border p-2 text-sm focus:border-purple-500 focus:ring-purple-500"
+                                                            placeholder="0.00"
+                                                            value={entregaData.costoEquipo || ""}
+                                                            onChange={(e) => {
+                                                                const val = parseFloat(e.target.value);
+                                                                if (!isNaN(val)) {
+                                                                    // 100% Cost to User
+                                                                    const descuento = val; // Full cost
+                                                                    const cuotas = selectedTicket.detalle_reposicion?.cuotas || 1;
+                                                                    const mensual = descuento / cuotas;
+                                                                    setEntregaData(prev => ({ ...prev, costoEquipo: val, montoDescuento: descuento, cuotaMensual: mensual }));
+                                                                } else {
+                                                                    setEntregaData(prev => ({ ...prev, costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0 }));
+                                                                }
+                                                            }}
+                                                        />
+                                                    </div>
+                                                    <div className="bg-gray-50 p-2 rounded border border-gray-200">
+                                                        <div className="flex justify-between items-center mb-1">
+                                                            <span className="text-xs text-gray-500">A Pagar (100%):</span>
+                                                            <span className="font-bold text-red-600">S/ {entregaData.montoDescuento ? entregaData.montoDescuento.toFixed(2) : "0.00"}</span>
+                                                        </div>
+                                                        <div className="flex justify-between items-center border-t border-gray-200 pt-1">
+                                                            <span className="text-xs text-gray-500">Cuota Mensual:</span>
+                                                            <span className="font-bold text-gray-900">S/ {entregaData.cuotaMensual ? entregaData.cuotaMensual.toFixed(2) : "0.00"}</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        <button
+                                            onClick={async () => {
+                                                // Validate Cost if Reposition
+                                                const isReposicion = (selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.beneficiario_n_linea_ref === "Reposición");
+                                                if (isReposicion && (!entregaData.costoEquipo || entregaData.costoEquipo <= 0)) {
+                                                    alert("Por favor ingrese el Costo del Equipo para continuar.");
+                                                    return;
+                                                }
+
+                                                try {
+                                                    const updates: any = {
+                                                        estado: "Pendiente Gerencia",
+                                                        // Update model suggestion if provided
+                                                        ...(entregaData.suggestedModel && { alternativa_modelo: entregaData.suggestedModel })
+                                                    };
+
+                                                    // Add simulation data if Reposition
+                                                    if (isReposicion) {
+                                                        updates.simulacion_descuento = {
+                                                            costoEquipo: entregaData.costoEquipo.toFixed(2),
+                                                            montoDescuento: entregaData.montoDescuento ? entregaData.montoDescuento.toFixed(2) : "0.00",
+                                                            cuotas: selectedTicket.detalle_reposicion?.cuotas || 1,
+                                                            cuotaMensual: entregaData.cuotaMensual ? entregaData.cuotaMensual.toFixed(2) : "0.00",
+                                                            periodo: `Mes 1 a ${selectedTicket.detalle_reposicion?.cuotas || 1}`,
+                                                            concepto: 'Rep. Equipo (Costo 100%)',
+                                                            descuento: `${(100 / (selectedTicket.detalle_reposicion?.cuotas || 1)).toFixed(2)}% / mes`
+                                                        };
+                                                    }
+
+                                                    await telefoniaStore.updateSolicitud(selectedTicket.id, updates);
+                                                    setToast({ type: "success", message: "Ticket Revisado. Enviado a Gerencia." });
+                                                    setSelectedTicket(null);
+                                                    loadData();
+                                                } catch (e: any) {
+                                                    setToast({ type: "error", message: "Error al guardar revisión" });
+                                                }
+                                            }}
+                                            className="w-full bg-purple-600 text-white rounded-lg py-2.5 font-medium hover:bg-purple-700 shadow-sm transition-all flex justify-center items-center gap-2"
+                                        >
+                                            <span className="text-lg">✅</span> Guardar Revisión y Enviar a Gerencia
+                                        </button>
+                                    </div>
+                                )}
+
                                 {selectedTicket.estado === "Entregado" && (
                                     <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 text-sm text-gray-600 mb-4">
                                         <p><strong className="text-gray-900">Entregado el:</strong> {new Date(selectedTicket.fecha_entrega!).toLocaleString()}</p>

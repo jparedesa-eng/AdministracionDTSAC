@@ -106,7 +106,6 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeTel_Solicitar = hasAccess("/telefonia/solicitar");
   const canSeeTel_Inventario = hasAccess("/telefonia/inventario");
   const canSeeTel_Gestion = hasAccess("/telefonia/gestion");
-  const canSeeTel_AprobIT = hasAccess("/telefonia/aprobacion-it");
   const canSeeTel_AprobGerencia = hasAccess("/telefonia/aprobacion-gerencia");
   const canSeeTel_AprobAdmin = hasAccess("/telefonia/aprobacion-admin");
 
@@ -175,10 +174,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     const telefoniaSubItems: NavItem[] = [];
     if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-sol', label: 'Solicitar', path: '/telefonia/solicitar', icon: FilePlus2 });
     if (canSeeTel_Inventario) telefoniaSubItems.push({ id: 'tel-inv', label: 'Inventario', path: '/telefonia/inventario', icon: Wrench });
-    if (canSeeTel_AprobIT) telefoniaSubItems.push({ id: 'tel-it', label: 'Aprobación IT', path: '/telefonia/aprobacion-it', icon: Wrench });
     if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ListChecks });
     if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: DollarSign });
-    if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-hist', label: 'Entregas / Historial', path: '/telefonia/gestion', icon: Truck });
+    if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-hist', label: 'Gestión de Solicitudes', path: '/telefonia/gestion', icon: ListChecks });
 
     // Catalogos (Using AprobAdmin permission for now as likely only admins should see this)
     if (canSeeTel_AprobAdmin) {

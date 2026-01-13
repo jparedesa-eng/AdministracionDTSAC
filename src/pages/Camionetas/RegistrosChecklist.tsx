@@ -597,6 +597,12 @@ async function exportPdf(row: ChecklistRow, setToast: (t: ToastState) => void) {
       useCORS: true,
       backgroundColor: "#ffffff",
       logging: false,
+      onclone: (clonedDoc) => {
+        // Remover estilos globales (tailwind v4 usa oklch que crashea html2canvas)
+        // Como usamos estilos inline para el PDF, no necesitamos los globales
+        const elements = clonedDoc.querySelectorAll('style, link[rel="stylesheet"]');
+        elements.forEach((el) => el.remove());
+      },
     });
 
     const pdf = new jsPDF({

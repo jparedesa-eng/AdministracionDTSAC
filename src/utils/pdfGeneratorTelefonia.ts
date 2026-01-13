@@ -168,13 +168,24 @@ export const generateTicketPDF = async (ticket: Solicitud) => {
             autoTable(doc, {
                 startY: currentY,
                 theme: 'striped',
-                head: [['Periodo', 'Concepto', 'Descuento']],
+                head: [['Concepto', 'Monto Total', 'Cuotas', 'Mensual']],
                 body: [
-                    [simulacion.periodo, simulacion.concepto, simulacion.descuento]
+                    [
+                        "Costo Equipo",
+                        `S/ ${simulacion.costoEquipo}`,
+                        "-",
+                        "-"
+                    ],
+                    [
+                        "A Pagar por Usuario (100%)",
+                        `S/ ${simulacion.montoDescuento}`,
+                        `${simulacion.cuotas} mes(es)`,
+                        `S/ ${simulacion.cuotaMensual}`
+                    ]
                 ],
                 styles: { fontSize: 8, halign: 'center', cellPadding: 2 },
-                headStyles: { fillColor: [220, 50, 50], textColor: 255 }, // Red/Warn color for deduction
-                foot: [['Nota: El monto exacto será calculado por RRHH según el valor libro del equipo.']],
+                headStyles: { fillColor: [220, 50, 50], textColor: 255 }, // Red/Warn color
+                foot: [['Nota: El descuento se aplicará en planilla según el periodo indicado: ' + simulacion.periodo]],
                 footStyles: { fillColor: [255, 255, 255], textColor: 80, fontStyle: 'italic', fontSize: 7 }
             });
         }
