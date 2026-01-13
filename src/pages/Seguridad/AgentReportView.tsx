@@ -1,5 +1,7 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { getPuestosState, subscribePuestos } from '../../store/puestosStore';
+import { getSedesState, subscribeSedes } from '../../store/sedesStore';
 import type { AlertSchedule, CheckpointStatus, Post } from '../../store/reportePuestoStore';
 import {
     ChevronRight,
@@ -22,7 +24,6 @@ import {
 interface AgentReportViewProps {
     schedules: AlertSchedule[];
     setSchedules: React.Dispatch<React.SetStateAction<AlertSchedule[]>>;
-    posts?: Post[];
 }
 
 interface Session {
@@ -35,7 +36,37 @@ interface Session {
     loginTime: string;
 }
 
-export const AgentReportView: React.FC<AgentReportViewProps> = ({ schedules, setSchedules, posts = [] }) => {
+export const AgentReportView: React.FC<AgentReportViewProps> = ({ schedules, setSchedules }) => {
+    // --- Store Integration ---
+    const [, setPuestosVersion] = useState(0);
+    const [, setSedesVersion] = useState(0);
+
+    useEffect(() => {
+        const unsubPuestos = subscribePuestos(() => setPuestosVersion(prev => prev + 1));
+        const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
+        return () => {
+            unsubPuestos();
+            unsubSedes();
+        };
+    }, []);
+
+    const { puestos } = getPuestosState();
+    const { sedes } = getSedesState();
+
+    const posts: Post[] = useMemo(() => {
+        return puestos
+            .filter(p => p.activo)
+            .map(p => {
+                const sede = sedes.find(s => s.id === p.sede_id);
+                return {
+                    id: p.id,
+                    name: p.nombre,
+                    site: sede ? sede.nombre : 'Unknown',
+                    requiredShifts: 'BOTH' // Default as strict mapping might not exist in simple Puesto
+                };
+            });
+    }, [puestos, sedes]);
+
     const [devicePost, setDevicePost] = useState<Post | null>(() => {
         const saved = localStorage.getItem('control_center_post');
         return saved ? JSON.parse(saved) : null;

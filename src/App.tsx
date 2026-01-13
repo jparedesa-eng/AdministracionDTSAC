@@ -61,7 +61,7 @@ import { DestinationsTable } from "./pages/Seguridad/DestinationsTable";
 import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
 import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
-import { INITIAL_POSTS } from "./mockData";
+
 
 
 /* Errores */
@@ -111,7 +111,7 @@ function ProtectedLayout() {
 export default function App() {
   const [schedules, setSchedules] = React.useState<any[]>([]);
 
-  const [posts] = React.useState(INITIAL_POSTS);
+
   return (
     <Routes>
       {/* RUTAS PÚBLICAS: login en / y /login */}
@@ -512,7 +512,6 @@ export default function App() {
                 <AgentReportView
                   schedules={schedules}
                   setSchedules={setSchedules}
-                  posts={posts}
                 />
               </ProtectedRoute>
             }
