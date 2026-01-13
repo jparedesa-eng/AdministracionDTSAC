@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import type { AlertSchedule, CheckpointStatus, Post } from '../types';
+import type { AlertSchedule, CheckpointStatus, Post } from '../../store/reportePuestoStore';
 import {
     ChevronRight,
     RotateCcw,

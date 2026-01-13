@@ -1,5 +1,39 @@
 import { supabase } from "../supabase/supabaseClient";
-import type { AlertSchedule, Checkpoint, CheckpointStatus } from "../pages/types";
+
+
+export interface Post {
+    id: string;
+    name: string;
+    site: string;
+    requiredShifts: 'DAY' | 'NIGHT' | 'BOTH';
+}
+
+export type CheckpointStatus = 'PENDING' | 'COMPLETED' | 'LATE' | 'MISSED';
+
+export interface Checkpoint {
+    id: string;
+    scheduledTime: string;
+    status: CheckpointStatus;
+    completedAt?: string;
+    comment?: string;
+    isDistress?: boolean;
+    manualOverride?: boolean;
+}
+
+export interface AlertSchedule {
+    id: string;
+    agentId: string;
+    agentName: string;
+    postId: string;
+    postName: string;
+    site: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    frequencyMinutes: number;
+    dailyIndicator: string;
+    checkpoints: Checkpoint[];
+}
 
 // Types mapped to Supabase Tables
 export interface ReportePuestoEntry {

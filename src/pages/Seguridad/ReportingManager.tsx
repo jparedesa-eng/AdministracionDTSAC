@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import type { Checkpoint, CheckpointStatus } from '../types';
+import type { Checkpoint, CheckpointStatus } from '../../store/reportePuestoStore';
 import {
     Clock,
     Plus,

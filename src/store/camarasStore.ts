@@ -208,49 +208,5 @@ export interface Agent {
     dni: string;
 }
 
-export interface Post {
-    id: string;
-    name: string;
-    site: string;
-    requiredShifts: 'DAY' | 'NIGHT' | 'BOTH';
-}
-
-export interface ShiftAssignment {
-    id: string;
-    date: string;
-    postId: string;
-    shift: 'DAY' | 'NIGHT';
-    agentId: string | 'UNCOVERED';
-    status: 'PENDING' | 'COMPLETED' | 'ABSENT';
-    absenceReason?: string;
-    absenceJustified?: boolean;
-}
-
-export type CheckpointStatus = 'PENDING' | 'COMPLETED' | 'LATE' | 'MISSED';
-
-export interface Checkpoint {
-    id: string;
-    scheduledTime: string;
-    status: CheckpointStatus;
-    completedAt?: string;
-    comment?: string;
-    isDistress?: boolean;
-    manualOverride?: boolean;
-}
-
-export interface AlertSchedule {
-    id: string;
-    agentId: string;
-    agentName: string;
-    postId: string;
-    postName: string;
-    site: string;
-    date: string;
-    startTime: string;
-    endTime: string;
-    frequencyMinutes: number;
-    dailyIndicator: string;
-    checkpoints: Checkpoint[];
-}
 
 export type ViewState = 'DASHBOARD' | 'CAMERAS' | 'TRANSPORT' | 'INSPECTION' | 'SCHEDULER' | 'ALERT_MONITOR' | 'AGENT_REPORT' | 'TRAVEL_TIMES' | 'DESTINATIONS';
