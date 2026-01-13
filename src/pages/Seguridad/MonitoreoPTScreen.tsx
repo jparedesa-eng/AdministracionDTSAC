@@ -1,8 +1,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { TransportTracker } from './MonitoreoPT';
-import type { TransportUnit } from '../types';
-import { fetchUnits, getMonitoreoState, subscribeMonitoreo } from '../../store/monitoreoStore';
+import { fetchUnits, getMonitoreoState, subscribeMonitoreo, type TransportUnit } from '../../store/monitoreoStore';
 
 class ErrorBoundary extends React.Component<any, { hasError: boolean, error: any }> {
     constructor(props: any) {

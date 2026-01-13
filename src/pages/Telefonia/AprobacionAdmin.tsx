@@ -12,6 +12,7 @@ export default function AprobacionAdmin() {
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
+    const [selectedMonth, setSelectedMonth] = useState<string>(""); // "YYYY-MM"
     const [loading, setLoading] = useState(true);
 
     const loadData = async () => {
@@ -32,6 +33,14 @@ export default function AprobacionAdmin() {
     const tickets = viewMode === "pending"
         ? telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Admin")
         : telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente Admin");
+
+    // Filter by month if selected
+    const filteredTickets = tickets.filter(t => {
+        if (!selectedMonth) return true;
+        const d = new Date(t.created_at);
+        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+        return key === selectedMonth;
+    });
 
     const handleOpenTicket = (ticket: Solicitud) => {
         setSelectedTicket(ticket);
@@ -68,9 +77,9 @@ export default function AprobacionAdmin() {
                 </div>
             </div>
 
-            {/* View Toggle */}
-            <div className="flex justify-center">
-                <div className="bg-gray-100 p-1 rounded-lg inline-flex">
+            {/* View Toggle & Filter */}
+            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
+                <div className="bg-gray-100 p-1 rounded-lg inline-flex order-2 sm:order-1">
                     <button
                         onClick={() => setViewMode("pending")}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "pending"
@@ -90,6 +99,24 @@ export default function AprobacionAdmin() {
                         Historial
                     </button>
                 </div>
+
+                <div className="flex items-center gap-2 order-1 sm:order-2">
+                    <span className="text-sm text-gray-500">Filtrar:</span>
+                    <input
+                        type="month"
+                        value={selectedMonth}
+                        onChange={(e) => setSelectedMonth(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+                    />
+                    {selectedMonth && (
+                        <button
+                            onClick={() => setSelectedMonth("")}
+                            className="text-xs text-amber-600 hover:underline"
+                        >
+                            Ver Todos
+                        </button>
+                    )}
+                </div>
             </div>
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
@@ -103,15 +130,15 @@ export default function AprobacionAdmin() {
                             <span className="ml-2">Cargando solicitudes...</span>
                         </div>
                     </div>
-                ) : tickets.length === 0 ? (
+                ) : filteredTickets.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
                             <ShoppingCart className="w-12 h-12 text-amber-100 mb-2" />
-                            <p>No hay tickets {viewMode === "pending" ? "pendientes de administración" : "en el historial"}</p>
+                            <p>No hay tickets {viewMode === "pending" ? "pendientes" : "en historial"}</p>
                         </div>
                     </div>
                 ) : (
-                    tickets.map(t => (
+                    filteredTickets.map(t => (
                         <div
                             key={t.id}
                             className="bg-white border border-gray-200 rounded-xl p-4 hover:border-amber-300 transition-all shadow-sm hover:shadow-md"
@@ -149,6 +176,10 @@ export default function AprobacionAdmin() {
 
                                 {/* MIDDLE: Specs */}
                                 <div className="md:w-1/3 md:border-l md:border-r border-gray-100 md:px-6 grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg">
+                                    <div className="col-span-2 pb-1 border-b border-gray-200 mb-1">
+                                        <span className="text-xs text-gray-400 block">Tipo Solicitud</span>
+                                        <span className="font-bold text-blue-700">{t.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                                    </div>
                                     <div>
                                         <span className="text-xs text-gray-400 block">Servicio</span>
                                         <span className="font-medium text-gray-900">{t.tipo_servicio}</span>

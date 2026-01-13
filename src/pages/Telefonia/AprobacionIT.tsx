@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { telefoniaStore } from "../../store/telefoniaStore";
-import type { Solicitud, Equipo } from "../../store/telefoniaStore";
+import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
@@ -8,7 +8,6 @@ import { Settings, Smartphone, Save, AlertCircle, CheckCircleIcon as CheckCircle
 export default function AprobacionIT() {
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
-    const [equiposDisponibles, setEquiposDisponibles] = useState<Equipo[]>([]);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
 
     // Action Form Data
@@ -20,8 +19,8 @@ export default function AprobacionIT() {
     const loadData = async () => {
         try {
             await telefoniaStore.fetchSolicitudes();
-            await telefoniaStore.fetchEquipos();
-            setEquiposDisponibles(telefoniaStore.equipos.filter(e => e.estado === "Disponible"));
+            await telefoniaStore.fetchEquipos(); // Keep fetching equipments if needed elsewhere, or remove if unused. 
+            await telefoniaStore.fetchModelos(); // Fetch Catalog
         } catch (e: any) {
             setToast({ type: "error", message: "Error cargando datos" });
         }
@@ -31,8 +30,9 @@ export default function AprobacionIT() {
         loadData();
     }, []);
 
-    const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente IT");
-    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente IT");
+    // FILTER: Only show "Línea Nueva" for IT Approval, per user request.
+    const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente IT" && t.beneficiario_n_linea_ref === "Línea Nueva");
+    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente IT" && t.beneficiario_n_linea_ref === "Línea Nueva");
 
     const displayedTickets = viewMode === "pending" ? pendingTickets : historyTickets;
 
@@ -209,19 +209,19 @@ export default function AprobacionIT() {
                                         className="block w-full rounded-md border-gray-300 shadow-sm focus:border-purple-500 focus:ring-purple-500 sm:text-sm border p-2"
                                         onChange={(e) => {
                                             if (e.target.value) {
-                                                const eq = equiposDisponibles.find(x => x.id === e.target.value);
+                                                // Directly set the selected model name
                                                 setActionData({
                                                     ...actionData,
-                                                    alternativa: eq ? `${eq.marca} ${eq.modelo} (Ref: ${eq.imei})` : actionData.alternativa
+                                                    alternativa: e.target.value
                                                 });
                                             }
                                         }}
                                         defaultValue=""
                                     >
-                                        <option value="">-- Seleccionar referencia de inventario (Opcional) --</option>
-                                        {equiposDisponibles.map(e => (
-                                            <option key={e.id} value={e.id}>
-                                                {e.marca} {e.modelo} | Estado: {e.estado}
+                                        <option value="">-- Seleccionar del Catálogo de Modelos --</option>
+                                        {telefoniaStore.modelos.map(m => (
+                                            <option key={m.id} value={`${m.marca} ${m.nombre}`}>
+                                                {m.marca} {m.nombre}
                                             </option>
                                         ))}
                                     </select>

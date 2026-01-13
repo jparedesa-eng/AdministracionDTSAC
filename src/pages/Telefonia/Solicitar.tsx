@@ -21,6 +21,7 @@ import {
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
+import { Modal } from "../../components/ui/Modal";
 
 
 
@@ -56,6 +57,14 @@ export default function SolicitarTelefonia() {
     // Modal controls
     const [isWizardOpen, setIsWizardOpen] = useState(false);
     const [appSearch, setAppSearch] = useState("");
+    const [previousDevice, setPreviousDevice] = useState<string>("");
+    const [verifyingNumber, setVerifyingNumber] = useState(false);
+    const [renewalCalculated, setRenewalCalculated] = useState<{
+        valid: boolean;
+        message: string;
+        lastDate: string;
+        equipo: string;
+    }>({ valid: false, message: "", lastDate: "", equipo: "" });
 
     // Form State
     const [formData, setFormData] = useState({
@@ -130,15 +139,11 @@ export default function SolicitarTelefonia() {
         return telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
     }, [user?.id, telefoniaStore.solicitudes]);
 
-    // Recommendation State
-    const [recommendation, setRecommendation] = useState<{
-        modelo?: string;
-        plan?: string;
-        operador?: string;
-    } | null>(null);
+
 
     // Puesto Selection State
     const [selectedPuestoId, setSelectedPuestoId] = useState<string>("");
+    const [allowedPlans, setAllowedPlans] = useState<string[]>([]);
 
     // Sync selectedPuestoId if formData.puesto is set externally (e.g. from DNI search)
     useEffect(() => {
@@ -153,7 +158,7 @@ export default function SolicitarTelefonia() {
         setSelectedPuestoId(""); // Reset ID as we are selecting by name now (which might map to multiple)
 
         if (!puestoNombre) {
-            setRecommendation(null);
+            setAllowedPlans([]);
             return;
         }
 
@@ -161,39 +166,40 @@ export default function SolicitarTelefonia() {
         const matches = telefoniaStore.puestos.filter(p => p.nombre === puestoNombre);
 
         if (matches.length > 0) {
-            // Build recommendation string
-            const models = Array.from(new Set(matches.map(p => p.modelo ? `${p.modelo.marca} ${p.modelo.nombre} ` : null).filter(Boolean)));
+            // Extract allowed plans
+            const validPlans = matches
+                .map(p => p.plan)
+                .filter((p): p is any => !!p && !!p.active);
 
-            // If strictly one match, we can auto-fill
+            const uniquePlanNames = Array.from(new Set(validPlans.map(p => p.nombre)));
+            setAllowedPlans(uniquePlanNames);
+
+            // If strictly one match, we can try to auto-fill
             if (matches.length === 1) {
-                const puesto = matches[0];
-                const rec = {
-                    modelo: models[0] || undefined,
-                    plan: puesto.plan ? puesto.plan.nombre : undefined,
-                    operador: puesto.plan ? puesto.plan.operador : undefined
-                };
-                setRecommendation(rec);
-
-                if (rec.operador && rec.plan) {
+                // Auto-select PLAN if unique
+                if (uniquePlanNames.length === 1 && validPlans[0]) {
+                    const p = validPlans[0];
                     setFormData(prev => ({
                         ...prev,
                         puesto: puestoNombre,
-                        tipo_servicio: rec.operador || "",
-                        paquete_asignado: rec.plan || ""
+                        tipo_servicio: p.operador || "",
+                        paquete_asignado: p.nombre || ""
                     }));
-                    setToast({ type: "info", message: `Se ha sugerido / aplicado el plan ${rec.operador} ${rec.plan} ` });
                 }
             } else {
-                // Multiple matches (Ambiguous configuration)
-                // We show the models available but maybe DO NOT auto-fill plan yet, or auto-fill if all share the same plan?
-                // For now, let's just show the model hint
-                setRecommendation({
-                    modelo: models.join(" o "), // e.g. "iPhone 15 o Samsung S24"
-                });
-                // We do NOT auto-fill plan/operator here as it depends on the specific choice, which "se verá al dar siguiente" or needs logic
+                // Check if ALL matches share a single plan?
+                if (uniquePlanNames.length === 1 && validPlans[0]) {
+                    const p = validPlans[0];
+                    setFormData(prev => ({
+                        ...prev,
+                        puesto: puestoNombre,
+                        tipo_servicio: p.operador || "",
+                        paquete_asignado: p.nombre || ""
+                    }));
+                }
             }
         } else {
-            setRecommendation(null);
+            setAllowedPlans([]);
         }
     };
 
@@ -230,6 +236,44 @@ export default function SolicitarTelefonia() {
         });
     };
 
+    const handleValidateReposicionNumber = async (value: string) => {
+        if (!value || value.length < 5) return;
+
+        setVerifyingNumber(true);
+        setRenewalCalculated({ ...renewalCalculated, valid: false, message: "Buscando..." });
+
+        try {
+            const result = await telefoniaStore.validateReposicion(value);
+            if (result.found && result.equipo) {
+                setPreviousDevice(result.equipo);
+            } else {
+                setPreviousDevice("");
+            }
+
+            // Capture operator and plan if found
+            if (result.found) {
+                setFormData(prev => ({
+                    ...prev,
+                    tipo_servicio: result.operador || prev.tipo_servicio,
+                    paquete_asignado: result.plan || prev.paquete_asignado
+                }));
+            }
+
+            setRenewalCalculated({
+                valid: result.found,
+                message: result.message,
+                lastDate: "",
+                equipo: result.equipo || ""
+            });
+
+        } catch (error) {
+            console.error(error);
+            setRenewalCalculated({ valid: false, message: "Error", lastDate: "", equipo: "" });
+        } finally {
+            setVerifyingNumber(false);
+        }
+    };
+
     const handleValidateRenewal = async () => {
         if (!formData.numero_telefono || formData.numero_telefono.length < 9) {
             setToast({ type: "error", message: "Ingrese un número válido para validar." });
@@ -240,6 +284,12 @@ export default function SolicitarTelefonia() {
         try {
             const res = await telefoniaStore.validateRenovacion(formData.numero_telefono);
             setValidationResult(res);
+            if (res.valid || res.equipo) {
+                if (res.equipo) setPreviousDevice(res.equipo);
+                if (res.operador) {
+                    setFormData(prev => ({ ...prev, tipo_servicio: res.operador || "Renovación" }));
+                }
+            }
             if (res.valid) {
                 setToast({ type: "success", message: "Renovación disponible." });
             } else {
@@ -307,28 +357,26 @@ export default function SolicitarTelefonia() {
             if ((formData.n_linea === "Renovación" || formData.n_linea === "Reposición") && !formData.numero_telefono) {
                 return "Debe ingresar el número de teléfono.";
             }
+        }
+        if (step === 2) {
+            // BRANCH: REPOSICIÓN
             if (formData.n_linea === "Reposición") {
-                if (!formData.motivo_reposicion) {
-                    return "Seleccione el motivo de la reposición.";
-                }
-                if (!formData.tiene_evidencia) {
-                    return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
-                }
-
+                if (!formData.motivo_reposicion) return "Seleccione el motivo de la reposición.";
+                if (!formData.tiene_evidencia) return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
                 if (["ROBO", "PERDIDA"].includes(formData.motivo_reposicion)) {
                     if (!formData.asume_costo) return "Indique quién asume el costo de la reposición.";
                 }
+            } else {
+                // BRANCH: STANDARD SERVICES
+                if (!formData.tipo_servicio) return "Seleccione el tipo de servicio";
+                if (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && !formData.paquete_asignado) {
+                    return "Seleccione un paquete asignado";
+                }
+                if (!formData.fecha_inicio) return "Ingrese fecha de inicio";
+                if (formData.periodo_uso === "CAMPAÑA" && !formData.fecha_fin) return "Ingrese fecha de fin para campaña";
+                if (!formData.fundo_planta) return "Ingrese Fundo / Planta";
+                if (!formData.cantidad_lineas || formData.cantidad_lineas < 1) return "Cantidad debe ser al menos 1";
             }
-        }
-        if (step === 2) {
-            if (!formData.tipo_servicio) return "Seleccione el tipo de servicio";
-            if (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && !formData.paquete_asignado) {
-                return "Seleccione un paquete asignado";
-            }
-            if (!formData.fecha_inicio) return "Ingrese fecha de inicio";
-            if (formData.periodo_uso === "CAMPAÑA" && !formData.fecha_fin) return "Ingrese fecha de fin para campaña";
-            if (!formData.fundo_planta) return "Ingrese Fundo / Planta";
-            if (!formData.cantidad_lineas || formData.cantidad_lineas < 1) return "Cantidad debe ser al menos 1";
         }
         if (step === 3) {
             if (!formData.justificacion) return "Ingrese una justificación";
@@ -366,8 +414,10 @@ export default function SolicitarTelefonia() {
                 beneficiario_area: formData.area,
                 beneficiario_puesto: formData.puesto,
                 beneficiario_n_linea_ref: formData.n_linea,
-                tipo_servicio: formData.tipo_servicio,
-                paquete_asignado: ["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio)
+                tipo_servicio: formData.n_linea === "Reposición"
+                    ? (formData.tipo_servicio && formData.tipo_servicio !== "PAQUETE ASIGNADO" ? formData.tipo_servicio : "REPOSICIÓN")
+                    : formData.tipo_servicio,
+                paquete_asignado: (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) || formData.n_linea === "Reposición")
                     ? formData.paquete_asignado
                     : null,
                 plan_costo: ["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio)
@@ -381,14 +431,25 @@ export default function SolicitarTelefonia() {
                 fundo_planta: formData.fundo_planta,
                 cultivo: formData.cultivo,
                 cantidad_lineas: Number(formData.cantidad_lineas),
-                justificacion: `
-                    ${formData.motivo_reposicion ? `[Motivo: ${formData.motivo_reposicion}] ` : ""}
-                    ${formData.numero_telefono ? `[Num: ${formData.numero_telefono}] ` : ""}
-                    ${formData.asume_costo ? `[Asume: ${formData.asume_costo}] ` : ""}
-                    ${formData.asume_costo === 'USUARIO' ? `[Cuotas: ${formData.cuotas}] ` : ""}
-                    ${formData.tiene_evidencia ? `[Con Evidencia] ` : ""}
-                    ${formData.justificacion}
-`.trim().replace(/\s+/g, ' '),
+                detalle_reposicion: formData.n_linea === "Reposición" ? {
+                    motivo: formData.motivo_reposicion,
+                    asume: formData.asume_costo,
+                    cuotas: formData.asume_costo === "USUARIO" ? Number(formData.cuotas) : 0,
+                    tiene_evidencia: formData.tiene_evidencia,
+                    equipoAnterior: previousDevice || "No registrado",
+                    detalleIncidente: formData.motivo_reposicion, // Map simpler if needed
+                    numero_afectado: formData.numero_telefono
+                } : null,
+                simulacion_descuento: (formData.n_linea === "Reposición" && formData.asume_costo === "USUARIO") ? {
+                    costoEquipo: "0.00", // Start with 0 or fetch if possible. For now placeholder.
+                    montoDescuento: "Pendiente RRHH",
+                    cuotas: Number(formData.cuotas),
+                    cuotaMensual: "Por definir",
+                    periodo: `Mes 1 a ${formData.cuotas}`,
+                    concepto: 'Descuento Equipo Telefónico',
+                    descuento: `${(100 / Number(formData.cuotas)).toFixed(2)}% / mes`
+                } : null,
+                justificacion: formData.justificacion,
                 aplicativos: selectedApps,
                 estado: "Pendiente Gerencia",
                 created_by: user?.id,
@@ -485,12 +546,12 @@ export default function SolicitarTelefonia() {
                                         <option value={formData.puesto}>{formData.puesto} (Manual)</option>
                                     )}
                                 </select>
-                                {recommendation?.modelo && (
-                                    <div className="mt-1 flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 p-1.5 rounded border border-indigo-100">
-                                        <Smartphone className="w-3 h-3" />
-                                        <span>Equipo sugerido: <strong>{recommendation.modelo}</strong></span>
-                                    </div>
-                                )}
+                                {
+                                    /* 
+                                     * "Equipo sugerido" REMOVED as per request.
+                                     * Logic remains in background for references if needed, but UI hidden.
+                                     */
+                                }
                             </div>
                             <div className="col-span-12 md:col-span-6">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Solicitud</label>
@@ -511,15 +572,57 @@ export default function SolicitarTelefonia() {
                                 <div className="col-span-12 md:col-span-6 animate-in fade-in slide-in-from-top-2">
                                     <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Número de Celular</label>
                                     <div className="relative">
-                                        <Smartphone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
                                         <input
                                             type="tel"
-                                            className="block w-full rounded border-gray-300 border py-2 pl-9 pr-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                            className={`block w-full rounded border p-2 pl-9 pr-2 text-sm outline-none transition-all ${formData.n_linea === "Reposición" && renewalCalculated.message === "Validado"
+                                                ? "border-green-500 ring-1 ring-green-500/20 bg-green-50"
+                                                : formData.n_linea === "Reposición" && renewalCalculated.message === "No encontrado"
+                                                    ? "border-red-300 bg-red-50 text-red-900"
+                                                    : "border-gray-300 focus:border-indigo-500"
+                                                }`}
                                             value={formData.numero_telefono}
-                                            onChange={(e) => handleChange("numero_telefono", e.target.value)}
+                                            onChange={(e) => {
+                                                handleChange("numero_telefono", e.target.value);
+                                                if (formData.n_linea === "Reposición" && renewalCalculated.message) {
+                                                    setRenewalCalculated({ ...renewalCalculated, message: "" });
+                                                }
+                                            }}
+                                            onBlur={(e) => {
+                                                if (formData.n_linea === "Reposición") {
+                                                    handleValidateReposicionNumber(e.target.value);
+                                                }
+                                            }}
                                             placeholder="999 999 999"
                                         />
+                                        <Smartphone className="absolute left-3 top-2.5 h-4 w-4 text-gray-400" />
+
+                                        {/* Status Indicator for Reposicion */}
+                                        {formData.n_linea === "Reposición" && (
+                                            <div className="absolute right-2 top-2">
+                                                {verifyingNumber ? (
+                                                    <Loader2 className="h-5 w-5 animate-spin text-gray-400" />
+                                                ) : renewalCalculated.message === "Validado" ? (
+                                                    <span className="text-[10px] font-bold text-green-600 bg-green-100 px-2 py-0.5 rounded-full border border-green-200">
+                                                        VALIDADO
+                                                    </span>
+                                                ) : renewalCalculated.message === "No encontrado" ? (
+                                                    <span className="text-[10px] font-bold text-red-600 bg-red-100 px-2 py-0.5 rounded-full border border-red-200">
+                                                        NO ENCONTRADO
+                                                    </span>
+                                                ) : null}
+                                            </div>
+                                        )}
                                     </div>
+
+                                    {/* Equipment Info Display for Reposicion - REMOVED per user request
+                                    {formData.n_linea === "Reposición" && previousDevice && (
+                                        <p className="text-xs text-green-600 mt-1 pl-1 flex items-center gap-1">
+                                            <Smartphone className="w-3 h-3" />
+                                            Modelo: <span className="font-semibold">{previousDevice}</span>
+                                        </p>
+                                    )}
+                                    */}
+
                                     {formData.n_linea === "Renovación" && (
                                         <div className="mt-2">
                                             <button
@@ -543,119 +646,149 @@ export default function SolicitarTelefonia() {
                             )}
 
                             {formData.n_linea === "Reposición" && (
-                                <>
-                                    <div className="col-span-12 md:col-span-6 animate-in fade-in slide-in-from-top-2">
-                                        <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Reposición</label>
-                                        <select
-                                            className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
-                                            value={formData.motivo_reposicion}
-                                            onChange={(e) => handleChange("motivo_reposicion", e.target.value)}
-                                        >
-                                            <option value="">Seleccione Motivo...</option>
-                                            <option value="ROBO">Robo</option>
-                                            <option value="PERDIDA">Pérdida</option>
-                                            <option value="DETERIORO">Deterioro</option>
-                                        </select>
+                                <div className="col-span-12 p-3 bg-blue-50 border border-blue-100 rounded-md text-sm text-blue-800 flex items-start gap-2 animate-in fade-in slide-in-from-top-2">
+                                    <CheckCircle2 className="w-4 h-4 mt-0.5" />
+                                    <div>
+                                        <p className="font-semibold">Proceso de Reposición</p>
+                                        <p className="text-xs mt-1">
+                                            En el siguiente paso deberás ingresar los detalles de la incidencia (Robo/Pérdida/Deterioro)
+                                            y la asunción de costos si corresponde.
+                                        </p>
                                     </div>
-
-                                    {(formData.motivo_reposicion === "ROBO" || formData.motivo_reposicion === "PERDIDA") && (
-                                        <div className="col-span-12 animate-in fade-in slide-in-from-top-2 p-4 bg-gray-50 rounded-lg border border-gray-100">
-                                            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">¿Quién asume el costo de reposición?</label>
-
-                                            <div className="flex gap-6 mb-4">
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        name="asume_costo"
-                                                        value="EMPRESA"
-                                                        checked={formData.asume_costo === "EMPRESA"}
-                                                        onChange={(e) => handleChange("asume_costo", e.target.value)}
-                                                        className="text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <span className="text-sm font-medium text-gray-700">Asume la Empresa</span>
-                                                </label>
-                                                <label className="flex items-center gap-2 cursor-pointer">
-                                                    <input
-                                                        type="radio"
-                                                        name="asume_costo"
-                                                        value="USUARIO"
-                                                        checked={formData.asume_costo === "USUARIO"}
-                                                        onChange={(e) => handleChange("asume_costo", e.target.value)}
-                                                        className="text-indigo-600 focus:ring-indigo-500"
-                                                    />
-                                                    <span className="text-sm font-medium text-gray-700">Asume el Usuario</span>
-                                                </label>
-                                            </div>
-
-                                            {formData.asume_costo === "USUARIO" && (
-                                                <div className="mt-4 border-t border-gray-200 pt-4">
-                                                    <div className="flex items-center gap-4 mb-4">
-                                                        <label className="text-sm font-medium text-gray-700">Número de Cuotas:</label>
-                                                        <select
-                                                            value={formData.cuotas}
-                                                            onChange={(e) => handleChange("cuotas", Number(e.target.value))}
-                                                            className="rounded border-gray-300 border p-1 text-sm focus:border-indigo-500 outline-none"
-                                                        >
-                                                            <option value={1}>1 Cuota</option>
-                                                            <option value={2}>2 Cuotas</option>
-                                                            <option value={3}>3 Cuotas</option>
-                                                            <option value={4}>4 Cuotas</option>
-                                                            <option value={5}>5 Cuotas</option>
-                                                            <option value={6}>6 Cuotas</option>
-                                                        </select>
-                                                    </div>
-
-                                                    <div className="bg-white border rounded-lg overflow-hidden text-sm">
-                                                        <div className="bg-indigo-50 px-3 py-2 border-b border-indigo-100 font-medium text-indigo-800 flex items-center gap-2">
-                                                            <FileText className="w-4 h-4" />
-                                                            Simulación de Descuento por Planilla
-                                                        </div>
-                                                        <table className="w-full text-left">
-                                                            <thead>
-                                                                <tr className="border-b border-gray-100 bg-gray-50/50">
-                                                                    <th className="px-3 py-2 font-medium text-gray-500">Periodo</th>
-                                                                    <th className="px-3 py-2 font-medium text-gray-500">Concepto</th>
-                                                                    <th className="px-3 py-2 font-medium text-gray-500 text-right">Porcentaje</th>
-                                                                </tr>
-                                                            </thead>
-                                                            <tbody>
-                                                                <tr>
-                                                                    <td className="px-3 py-2 text-gray-600">Mes 1 a {formData.cuotas}</td>
-                                                                    <td className="px-3 py-2 text-gray-600">Descuento Equipo Telefónico</td>
-                                                                    <td className="px-3 py-2 text-gray-900 font-medium text-right text-indigo-600">
-                                                                        {(100 / formData.cuotas).toFixed(2)}% / mes
-                                                                    </td>
-                                                                </tr>
-                                                            </tbody>
-                                                        </table>
-                                                        <div className="px-3 py-2 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-100">
-                                                            * El monto exacto será calculado por RRHH según el valor libro del equipo.
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            )}
-                                        </div>
-                                    )}
-                                    <div className="col-span-12 animate-in fade-in slide-in-from-top-2">
-                                        <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-lg">
-                                            <input
-                                                type="checkbox"
-                                                id="chkEvidencia"
-                                                checked={formData.tiene_evidencia}
-                                                onChange={(e) => handleChange("tiene_evidencia", e.target.checked)}
-                                                className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
-                                            />
-                                            <label htmlFor="chkEvidencia" className="text-sm text-gray-700 select-none cursor-pointer">
-                                                Confirmo que tengo la <strong>evidencia (Denuncia Policial o Reporte)</strong> lista para entregar.
-                                            </label>
-                                        </div>
-                                    </div>
-                                </>
+                                </div>
                             )}
                         </div>
                     </div>
                 );
             case 2:
+                if (formData.n_linea === "Reposición") {
+                    // --- RENDER REPOSICIÓN STEP 2 ---
+                    return (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
+                            <h3 className="text-lg font-medium text-gray-900">Detalles de Reposición</h3>
+                            <div className="grid grid-cols-12 gap-4">
+                                {previousDevice && (
+                                    <div className="col-span-12 p-3 bg-indigo-50 border border-indigo-100 rounded-lg mb-2">
+                                        <p className="text-xs text-indigo-600 font-bold uppercase tracking-wide">Equipo a Reponer</p>
+                                        <p className="text-gray-900 font-medium flex items-center gap-2 mt-1">
+                                            <Smartphone className="w-4 h-4 text-indigo-500" />
+                                            {previousDevice}
+                                        </p>
+                                        <p className="text-xs text-indigo-400 mt-1">Se le asignará un equipo de mismas características.</p>
+                                    </div>
+                                )}
+
+                                <div className="col-span-12 md:col-span-6">
+                                    <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Reposición</label>
+                                    <select
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                        value={formData.motivo_reposicion}
+                                        onChange={(e) => handleChange("motivo_reposicion", e.target.value)}
+                                    >
+                                        <option value="">Seleccione Motivo...</option>
+                                        <option value="ROBO">Robo</option>
+                                        <option value="PERDIDA">Pérdida</option>
+                                        <option value="DETERIORO">Deterioro</option>
+                                    </select>
+                                </div>
+
+                                {(formData.motivo_reposicion === "ROBO" || formData.motivo_reposicion === "PERDIDA") && (
+                                    <div className="col-span-12 p-4 bg-gray-50 rounded-lg border border-gray-100 animate-in fade-in slide-in-from-top-2">
+                                        <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">¿Quién asume el costo de reposición?</label>
+                                        <div className="flex gap-6 mb-4">
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="asume_costo"
+                                                    value="EMPRESA"
+                                                    checked={formData.asume_costo === "EMPRESA"}
+                                                    onChange={(e) => handleChange("asume_costo", e.target.value)}
+                                                    className="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span className="text-sm font-medium text-gray-700">Asume la Empresa</span>
+                                            </label>
+                                            <label className="flex items-center gap-2 cursor-pointer">
+                                                <input
+                                                    type="radio"
+                                                    name="asume_costo"
+                                                    value="USUARIO"
+                                                    checked={formData.asume_costo === "USUARIO"}
+                                                    onChange={(e) => handleChange("asume_costo", e.target.value)}
+                                                    className="text-indigo-600 focus:ring-indigo-500"
+                                                />
+                                                <span className="text-sm font-medium text-gray-700">Asume el Usuario</span>
+                                            </label>
+                                        </div>
+
+                                        {formData.asume_costo === "USUARIO" && (
+                                            <div className="mt-4 border-t border-gray-200 pt-4">
+                                                <div className="flex items-center gap-4 mb-4">
+                                                    <label className="text-sm font-medium text-gray-700">Número de Cuotas:</label>
+                                                    <select
+                                                        value={formData.cuotas}
+                                                        onChange={(e) => handleChange("cuotas", Number(e.target.value))}
+                                                        className="rounded border-gray-300 border p-1 text-sm focus:border-indigo-500 outline-none"
+                                                    >
+                                                        <option value={1}>1 Cuota</option>
+                                                        <option value={2}>2 Cuotas</option>
+                                                        <option value={3}>3 Cuotas</option>
+                                                        <option value={4}>4 Cuotas</option>
+                                                        <option value={5}>5 Cuotas</option>
+                                                        <option value={6}>6 Cuotas</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="bg-white border rounded-lg overflow-hidden text-sm">
+                                                    <div className="bg-indigo-50 px-3 py-2 border-b border-indigo-100 font-medium text-indigo-800 flex items-center gap-2">
+                                                        <FileText className="w-4 h-4" />
+                                                        Simulación de Descuento por Planilla
+                                                    </div>
+                                                    <table className="w-full text-left">
+                                                        <thead>
+                                                            <tr className="border-b border-gray-100 bg-gray-50/50">
+                                                                <th className="px-3 py-2 font-medium text-gray-500">Periodo</th>
+                                                                <th className="px-3 py-2 font-medium text-gray-500">Concepto</th>
+                                                                <th className="px-3 py-2 font-medium text-gray-500 text-right">Porcentaje</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            <tr>
+                                                                <td className="px-3 py-2 text-gray-600">Mes 1 a {formData.cuotas}</td>
+                                                                <td className="px-3 py-2 text-gray-600">Descuento Equipo Telefónico</td>
+                                                                <td className="px-3 py-2 text-gray-900 font-medium text-right text-indigo-600">
+                                                                    {(100 / formData.cuotas).toFixed(2)}% / mes
+                                                                </td>
+                                                            </tr>
+                                                        </tbody>
+                                                    </table>
+                                                    <div className="px-3 py-2 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-100">
+                                                        * El monto exacto será calculado por RRHH según el valor libro del equipo.
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                                <div className="col-span-12">
+                                    <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-lg">
+                                        <input
+                                            type="checkbox"
+                                            id="chkEvidencia"
+                                            checked={formData.tiene_evidencia}
+                                            onChange={(e) => handleChange("tiene_evidencia", e.target.checked)}
+                                            className="w-4 h-4 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                        />
+                                        <label htmlFor="chkEvidencia" className="text-sm text-gray-700 select-none cursor-pointer">
+                                            Confirmo que tengo la <strong>evidencia (Denuncia Policial o Reporte)</strong> lista para entregar.
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    );
+                }
+
+                // --- RENDER STANDARD SERVICES STEP 2 ---
                 return (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -753,10 +886,12 @@ export default function SolicitarTelefonia() {
                                         {telefoniaStore.planes
                                             .filter(p => {
                                                 const matchOperator = p.operador === formData.tipo_servicio && p.active;
-                                                // If we have a specific recommended plan name, filter by it
-                                                if (recommendation?.plan) {
-                                                    return matchOperator && p.nombre === recommendation.plan;
+
+                                                // Use allowedPlans filter if available
+                                                if (allowedPlans.length > 0) {
+                                                    return matchOperator && allowedPlans.includes(p.nombre);
                                                 }
+
                                                 return matchOperator;
                                             })
                                             .map(p => (
@@ -1062,6 +1197,15 @@ export default function SolicitarTelefonia() {
                                 {/* MIDDLE: Technial Details */}
                                 <div className="md:flex-1 md:border-l md:border-r border-gray-100 md:px-6 py-2 md:py-0 grid grid-cols-2 gap-x-4 gap-y-1 text-sm">
                                     <div>
+                                        <span className="text-gray-400 text-xs block">Solicitud</span>
+                                        <span className={`font-bold ${t.beneficiario_n_linea_ref === "Reposición" ? "text-orange-700" :
+                                            t.beneficiario_n_linea_ref === "Renovación" ? "text-emerald-700" :
+                                                "text-blue-700"
+                                            }`}>
+                                            {t.beneficiario_n_linea_ref || "Línea Nueva"}
+                                        </span>
+                                    </div>
+                                    <div>
                                         <span className="text-gray-400 text-xs block">Servicio</span>
                                         <span className="font-medium text-gray-700">{t.tipo_servicio}</span>
                                     </div>
@@ -1093,29 +1237,24 @@ export default function SolicitarTelefonia() {
 
             {/* DETAIL MODAL */}
             {selectedDetail && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 animate-in fade-in duration-200">
-                    <div className="bg-white rounded-xl max-w-3xl w-full p-6 shadow-xl animate-in zoom-in-95 duration-200 relative">
+                <Modal
+                    open={!!selectedDetail}
+                    onClose={() => setSelectedDetail(null)}
+                    title={`Detalle de Solicitud #${selectedDetail.id?.slice(0, 8)}`}
+                    size="lg"
+                    footer={
                         <button
                             onClick={() => setSelectedDetail(null)}
-                            className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 z-10"
+                            className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
                         >
-                            <X className="w-6 h-6" />
+                            Cerrar
                         </button>
-
-                        <div className="pt-2">
-                            <TicketDetailContent ticket={selectedDetail} />
-
-                            <div className="mt-6 pt-4 border-t border-gray-100 flex justify-end">
-                                <button
-                                    onClick={() => setSelectedDetail(null)}
-                                    className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-                                >
-                                    Cerrar
-                                </button>
-                            </div>
-                        </div>
+                    }
+                >
+                    <div className="pt-2">
+                        <TicketDetailContent ticket={selectedDetail} />
                     </div>
-                </div>
+                </Modal>
             )}
         </div>
     );

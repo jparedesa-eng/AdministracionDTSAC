@@ -123,6 +123,64 @@ export const generateTicketPDF = async (ticket: Solicitud) => {
         headStyles: { fillColor: [60, 60, 60], textColor: 255, fontStyle: 'bold' }
     });
 
+    // 2.1 DETAILS FOR REPOSITION (Parsed from justification)
+    const isReposicion = ticket.tipo_servicio === "REPOSICIÓN" || ticket.beneficiario_n_linea_ref === "Reposición";
+
+    if (isReposicion) {
+        // Parse metadata from JSON columns
+        const detalle = ticket.detalle_reposicion || {};
+        const simulacion = ticket.simulacion_descuento;
+
+        const motivo = detalle.motivo || "-";
+        const asume = detalle.asume || "-";
+        const cuotas = detalle.cuotas || 0;
+        const numRef = detalle.numero_afectado || "-";
+        const equipoAnt = detalle.equipoAnterior || detalle.equipo_anterior || "No registrado";
+
+        currentY = (doc as any).lastAutoTable.finalY + 10;
+        currentY = addSectionTitle("Información de Reposición", currentY);
+
+        autoTable(doc, {
+            startY: currentY,
+            theme: 'plain',
+            body: [
+                [
+                    { content: 'Motivo:', styles: { fontStyle: 'bold' } }, motivo,
+                    { content: 'Línea Afectada:', styles: { fontStyle: 'bold' } }, numRef
+                ],
+                [
+                    { content: 'Equipo Anterior:', styles: { fontStyle: 'bold' } }, equipoAnt,
+                    { content: 'Asume Costo:', styles: { fontStyle: 'bold' } }, asume
+                ],
+                [
+                    { content: 'Cuotas:', styles: { fontStyle: 'bold' } }, asume === "USUARIO" ? `${cuotas} Cuotas` : "-",
+                    { content: '', styles: { fontStyle: 'bold' } }, ""
+                ]
+            ],
+            styles: { fontSize: 9, cellPadding: 2 },
+            columnStyles: { 0: { cellWidth: 30 }, 2: { cellWidth: 30 } }
+        });
+
+        // SIMULATION TABLE IF USER PAYS
+        if (asume === "USUARIO" && simulacion) {
+            currentY = (doc as any).lastAutoTable.finalY + 5;
+
+            autoTable(doc, {
+                startY: currentY,
+                theme: 'striped',
+                head: [['Periodo', 'Concepto', 'Descuento']],
+                body: [
+                    [simulacion.periodo, simulacion.concepto, simulacion.descuento]
+                ],
+                styles: { fontSize: 8, halign: 'center', cellPadding: 2 },
+                headStyles: { fillColor: [220, 50, 50], textColor: 255 }, // Red/Warn color for deduction
+                foot: [['Nota: El monto exacto será calculado por RRHH según el valor libro del equipo.']],
+                footStyles: { fillColor: [255, 255, 255], textColor: 80, fontStyle: 'italic', fontSize: 7 }
+            });
+        }
+    }
+
+
     // Justificación box style
     autoTable(doc, {
         startY: (doc as any).lastAutoTable.finalY + 4,

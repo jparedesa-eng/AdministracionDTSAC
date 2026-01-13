@@ -98,6 +98,7 @@ export default function InventarioTelefonia() {
                 telefoniaStore.fetchEquipos(),
                 telefoniaStore.fetchChips(),
                 telefoniaStore.fetchPlanes(),
+                telefoniaStore.fetchModelos(),
             ]);
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error cargando datos" });
@@ -1031,31 +1032,56 @@ export default function InventarioTelefonia() {
                 title={draftEquipo.id ? "Editar Equipo" : "Nuevo Equipo"}
             >
                 <form onSubmit={saveEquipo} className="space-y-4">
+                    <div className="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                            Seleccionar Modelo del Catálogo
+                        </label>
+                        <select
+                            className="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            onChange={(e) => {
+                                const mod = telefoniaStore.modelos.find(m => m.id === e.target.value);
+                                if (mod) {
+                                    setDraftEquipo({
+                                        ...draftEquipo,
+                                        marca: mod.marca,
+                                        modelo: mod.nombre,
+                                        ram: mod.ram,
+                                        almacenamiento: mod.almacenamiento,
+                                        pantalla: mod.pantalla
+                                    });
+                                }
+                            }}
+                            defaultValue=""
+                        >
+                            <option value="">-- Buscar Modelo --</option>
+                            {telefoniaStore.modelos.map(m => (
+                                <option key={m.id} value={m.id}>
+                                    {m.marca} - {m.nombre}
+                                </option>
+                            ))}
+                        </select>
+                        <p className="text-[10px] text-gray-400 mt-1">
+                            Al seleccionar un modelo, los datos técnicos se completarán automáticamente.
+                        </p>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Marca</label>
-                            <select
+                            <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 cursor-not-allowed"
                                 value={draftEquipo.marca || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, marca: e.target.value })}
-                            >
-                                <option value="">Seleccione...</option>
-                                <option value="SAMSUNG">SAMSUNG</option>
-                                <option value="APPLE">APPLE</option>
-                                <option value="ZTE">ZTE</option>
-                                <option value="HONOR">HONOR</option>
-                                <option value="XIAOMI">XIAOMI</option>
-                                <option value="OTROS">OTROS</option>
-                            </select>
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Modelo</label>
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 cursor-not-allowed"
                                 value={draftEquipo.modelo || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, modelo: e.target.value })}
                             />
                         </div>
                     </div>
@@ -1065,28 +1091,25 @@ export default function InventarioTelefonia() {
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">RAM</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 cursor-not-allowed"
                                 value={draftEquipo.ram || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, ram: e.target.value })}
-                                placeholder="Ej: 8GB"
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">Almacenamiento</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 cursor-not-allowed"
                                 value={draftEquipo.almacenamiento || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, almacenamiento: e.target.value })}
-                                placeholder="Ej: 128GB"
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-700 uppercase">Pantalla</label>
                             <input
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 cursor-not-allowed"
                                 value={draftEquipo.pantalla || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, pantalla: e.target.value })}
-                                placeholder="Ej: 6.5''"
                             />
                         </div>
                     </div>
@@ -1103,11 +1126,22 @@ export default function InventarioTelefonia() {
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Color</label>
-                            <input
+                            <select
                                 className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.color || ""}
                                 onChange={(e) => setDraftEquipo({ ...draftEquipo, color: e.target.value })}
-                            />
+                            >
+                                <option value="">Seleccione...</option>
+                                <option value="Negro">Negro</option>
+                                <option value="Blanco">Blanco</option>
+                                <option value="Gris">Gris</option>
+                                <option value="Azul">Azul</option>
+                                <option value="Dorado">Dorado</option>
+                                <option value="Plateado">Plateado</option>
+                                <option value="Rojo">Rojo</option>
+                                <option value="Verde">Verde</option>
+                                <option value="Otro">Otro</option>
+                            </select>
                         </div>
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Condición Inicial</label>

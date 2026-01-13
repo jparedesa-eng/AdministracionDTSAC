@@ -8,6 +8,7 @@ interface ModalProps {
   onClose: () => void;
   children: React.ReactNode;
   size?: "sm" | "md" | "lg" | "xl";
+  footer?: React.ReactNode;
 }
 
 export const Modal: React.FC<ModalProps> = ({
@@ -16,6 +17,7 @@ export const Modal: React.FC<ModalProps> = ({
   onClose,
   children,
   size = "md",
+  footer,
 }) => {
   if (!open) return null;
 
@@ -31,9 +33,9 @@ export const Modal: React.FC<ModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 px-4 transition-all duration-200">
       <div
-        className={`w-full ${maxWidth} transform rounded-2xl bg-white text-left align-middle shadow-xl transition-all relative`}
+        className={`w-full ${maxWidth} transform rounded-2xl bg-white text-left align-middle shadow-xl transition-all relative flex flex-col max-h-[85vh]`}
       >
-        <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl flex items-center justify-between">
+        <div className="bg-gray-50 px-6 py-4 border-b border-gray-100 rounded-t-2xl flex items-center justify-between flex-shrink-0">
           <h3 className="text-lg font-semibold leading-6 text-gray-900">
             {title || <span>&nbsp;</span>}
           </h3>
@@ -45,9 +47,15 @@ export const Modal: React.FC<ModalProps> = ({
           </button>
         </div>
 
-        <div className="p-6">
+        <div className="p-6 overflow-y-auto flex-grow min-h-0">
           <div className="text-sm text-gray-500">{children}</div>
         </div>
+
+        {footer && (
+          <div className="bg-gray-50 px-6 py-4 border-t border-gray-100 rounded-b-2xl flex items-center justify-end flex-shrink-0 gap-2">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   );

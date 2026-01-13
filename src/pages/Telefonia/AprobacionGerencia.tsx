@@ -136,6 +136,10 @@ export default function AprobacionGerencia() {
                                 {/* MIDDLE: Detalle */}
                                 <div className="md:w-2/5 md:border-l md:border-r border-gray-100 md:px-6 py-2 md:py-0">
                                     <div className="flex justify-between items-baseline mb-1">
+                                        <span className="text-xs text-gray-500 uppercase tracking-wide">Solicitud</span>
+                                        <span className="text-sm font-bold text-blue-700">{t.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                                    </div>
+                                    <div className="flex justify-between items-baseline mb-1">
                                         <span className="text-xs text-gray-500 uppercase tracking-wide">Servicio Solicitado</span>
                                         <span className="text-sm font-semibold text-gray-900">{t.tipo_servicio}</span>
                                     </div>
@@ -167,7 +171,7 @@ export default function AprobacionGerencia() {
                     title={`Autorización: ${selectedTicket.beneficiario_nombre}`}
                     size="lg"
                 >
-                    <div className="space-y-6 max-h-[70vh] overflow-y-auto pr-2">
+                    <div className="space-y-6 pr-2">
                         <div className="pt-2">
                             <TicketDetailContent ticket={selectedTicket} />
                         </div>

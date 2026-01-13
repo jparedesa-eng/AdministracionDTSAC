@@ -22,6 +22,7 @@ export interface ValidationResult {
     lastDate?: string;
     message: string;
     equipo?: string;
+    operador?: string;
 }
 
 export interface PlanTelefonico {
@@ -95,6 +96,10 @@ export interface Solicitud {
 
     estado: EstadoSolicitud;
 
+    // New fields for Reposition
+    detalle_reposicion?: any; // JSONB
+    simulacion_descuento?: any; // JSONB
+
     // Asignaciones
     alternativa_modelo?: string | null;
     equipo_asignado_id?: string | null;
@@ -129,6 +134,7 @@ export interface Modelo {
     marca: string;
     ram?: string | null;
     almacenamiento?: string | null;
+    pantalla?: string | null;
     created_at?: string;
 }
 
@@ -400,11 +406,10 @@ export const telefoniaStore = {
         const { data, error } = await supabase
             .from("telefonia_solicitudes")
             .select(`
-        *,
-        equipo:telefonia_equipos(*),
-        chip:telefonia_chips(*),
-        usuario:created_by ( id, nombre1, nombre2, ap_pat, ap_mat )
-      `)
+                *,
+                equipo:telefonia_equipos!equipo_asignado_id(*),
+                chip:telefonia_chips!chip_asignado_id(*)
+            `)
             .order("created_at", { ascending: false });
         if (error) throw error;
 
@@ -440,10 +445,10 @@ export const telefoniaStore = {
             .update(payload)
             .eq("id", id)
             .select(`
-        *,
-        equipo:telefonia_equipos(*),
-        chip:telefonia_chips(*)
-      `)
+                        *,
+                        equipo: telefonia_equipos(*),
+                            chip: telefonia_chips(*)
+                                `)
             .single();
         if (error) throw error;
 
@@ -499,9 +504,10 @@ export const telefoniaStore = {
         const { data: chipData, error: chipError } = await supabase
             .from("telefonia_chips")
             .select(`
-                id, 
-                numero_linea, 
-                equipo:telefonia_equipos!telefonia_chips_equipo_id_fkey(*)
+                id,
+            numero_linea,
+            operador,
+            equipo: telefonia_equipos!telefonia_chips_equipo_id_fkey(*)
             `)
             .eq("numero_linea", cleanNumber)
             .maybeSingle();
@@ -514,6 +520,8 @@ export const telefoniaStore = {
         if (!chipData) {
             return { valid: false, message: `No se encontró línea activa con el número ${cleanNumber}.` };
         }
+
+        const operador = (chipData as any).operador || "DESCONOCIDO";
 
         // 2. Verificar si tiene equipo vinculado
         const equipo = chipData.equipo as any;
@@ -542,32 +550,73 @@ export const telefoniaStore = {
             yearsDiff--;
         }
 
-        console.log(`Validation: Purchase=${purchaseDate.toISOString()}, YearsDiff=${yearsDiff}`);
+        console.log(`Validation: Purchase = ${purchaseDate.toISOString()}, YearsDiff = ${yearsDiff} `);
 
         if (yearsDiff >= 3) {
             return {
                 valid: true,
                 lastDate: equipo.fecha_compra,
                 equipo: infoEquipo,
-                message: `Antigüedad: ${yearsDiff} años. Apto para renovación.`
+                message: `Antigüedad: ${yearsDiff} años.Apto para renovación.`,
+                operador: operador
             };
         } else {
             return {
                 valid: false,
                 lastDate: equipo.fecha_compra,
                 equipo: infoEquipo,
-                message: `Solo tiene ${yearsDiff} años de antigüedad (Req: 3 años).`
+                message: `Solo tiene ${yearsDiff} años de antigüedad(Req: 3 años).`,
+                operador: operador
             };
         }
+    },
+
+    async validateReposicion(numero: string): Promise<{ found: boolean; equipo?: string; message: string; operador?: string; plan?: string }> {
+        const cleanNumber = numero.replace(/\s+/g, '').trim();
+
+        const { data: chipData, error: chipError } = await supabase
+            .from("telefonia_chips")
+            .select(`
+                id,
+                numero_linea,
+                operador,
+                equipo: telefonia_equipos!telefonia_chips_equipo_id_fkey(*),
+                plan: telefonia_planes!telefonia_chips_plan_id_fkey(*)
+            `)
+            .eq("numero_linea", cleanNumber)
+            .maybeSingle();
+
+        if (chipError) {
+            return { found: false, message: "Error de conexión" };
+        }
+
+        if (!chipData) {
+            return { found: false, message: "No encontrado" };
+        }
+
+        const equipo = chipData.equipo as any;
+        const plan = chipData.plan as any;
+
+        if (!equipo) {
+            return { found: true, message: "Línea sin equipo vinculado", equipo: "N/A", operador: chipData.operador, plan: plan ? plan.nombre : undefined };
+        }
+
+        return {
+            found: true,
+            equipo: `${equipo.marca} ${equipo.modelo}`,
+            operador: chipData.operador,
+            plan: plan ? plan.nombre : undefined,
+            message: "Validado"
+        };
     },
 
     async fetchHistorialEquipo(equipoId: string) {
         const { data, error } = await supabase
             .from("telefonia_solicitudes")
             .select(`
-                *,
-                usuario:created_by ( nombre, area ) 
-            `)
+    *,
+    usuario: created_by(nombre, area)
+        `)
             .eq("equipo_asignado_id", equipoId)
             .order("created_at", { ascending: false });
 

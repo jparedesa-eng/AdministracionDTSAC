@@ -245,8 +245,34 @@ export function PropuestasModal({
     if (!open) return null;
 
     return (
-        <Modal open={open} onClose={onClose} title="Propuestas de vuelo" size="lg">
-            <div className="space-y-6 max-h-[70vh] overflow-y-auto px-1">
+        <Modal
+            open={open}
+            onClose={onClose}
+            title="Propuestas de vuelo"
+            size="lg"
+            footer={
+                <div className="flex gap-2 w-full justify-end">
+                    <button
+                        onClick={onClose}
+                        className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
+                    >
+                        Cerrar
+                    </button>
+                    {!readOnly && onSelect && (selIda || selVuelta) && (
+                        <button
+                            onClick={() => {
+                                onSelect(selIda, selVuelta);
+                                onClose();
+                            }}
+                            className="rounded-xl bg-slate-900 px-6 py-2.5 text-sm font-bold text-white shadow-lg transition hover:bg-slate-800 active:scale-95"
+                        >
+                            Confirmar Selección
+                        </button>
+                    )}
+                </div>
+            }
+        >
+            <div className="space-y-6 px-1">
                 {loading && <p className="text-center text-slate-500 py-4">Cargando...</p>}
 
                 {!loading && propuestas.length === 0 && (
@@ -332,32 +358,8 @@ export function PropuestasModal({
                                 )}
                             </div>
                         </div>
-
-                        {/* Botón Confirmar Selección */}
-                        {!readOnly && onSelect && (selIda || selVuelta) && (
-                            <div className="sticky bottom-0 bg-white/95 p-4 border-t border-slate-200 shadow-lg text-center backdrop-blur">
-                                <button
-                                    onClick={() => {
-                                        onSelect(selIda, selVuelta);
-                                        onClose();
-                                    }}
-                                    className="rounded-xl bg-slate-900 px-8 py-3 text-sm font-bold text-white shadow-lg transition hover:bg-slate-800 active:scale-95"
-                                >
-                                    Confirmar Selección
-                                </button>
-                            </div>
-                        )}
                     </div>
                 )}
-            </div>
-
-            <div className="mt-4 flex justify-end">
-                <button
-                    onClick={onClose}
-                    className="rounded-xl border border-slate-300 px-5 py-2.5 text-sm font-medium text-slate-700 transition hover:bg-slate-50"
-                >
-                    Cerrar
-                </button>
             </div>
         </Modal>
     );

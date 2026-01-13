@@ -17,7 +17,8 @@ export default function ModelosTelefonia() {
         nombre: "",
         marca: "",
         ram: "",
-        almacenamiento: ""
+        almacenamiento: "",
+        pantalla: ""
     });
 
     const loadData = async () => {
@@ -45,8 +46,9 @@ export default function ModelosTelefonia() {
         setFormData({
             nombre: modelo.nombre,
             marca: modelo.marca,
-            ram: modelo.ram || "",
-            almacenamiento: modelo.almacenamiento || ""
+            ram: (modelo.ram || "").replace(/\s*GB/i, "").trim(),
+            almacenamiento: (modelo.almacenamiento || "").replace(/\s*GB/i, "").trim(),
+            pantalla: (modelo.pantalla || "").replace(/\s*"/, "").trim()
         });
         setEditingId(modelo.id);
         setIsModalOpen(true);
@@ -65,16 +67,28 @@ export default function ModelosTelefonia() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            // Auto-format fields
+            const formattedData = { ...formData };
+            if (formattedData.ram && /^\s*\d+\s*$/.test(formattedData.ram)) {
+                formattedData.ram = formattedData.ram.trim() + " GB";
+            }
+            if (formattedData.almacenamiento && /^\s*\d+\s*$/.test(formattedData.almacenamiento)) {
+                formattedData.almacenamiento = formattedData.almacenamiento.trim() + " GB";
+            }
+            if (formattedData.pantalla && /^\s*[\d.]+\s*$/.test(formattedData.pantalla)) {
+                formattedData.pantalla = formattedData.pantalla.trim() + " \"";
+            }
+
             if (editingId) {
-                await telefoniaStore.updateModelo(editingId, formData);
+                await telefoniaStore.updateModelo(editingId, formattedData);
                 setToast({ type: "success", message: "Modelo actualizado" });
             } else {
-                await telefoniaStore.createModelo(formData);
+                await telefoniaStore.createModelo(formattedData);
                 setToast({ type: "success", message: "Modelo creado" });
             }
             setIsModalOpen(false);
             setEditingId(null);
-            setFormData({ nombre: "", marca: "", ram: "", almacenamiento: "" });
+            setFormData({ nombre: "", marca: "", ram: "", almacenamiento: "", pantalla: "" });
         } catch (error) {
             setToast({ type: "error", message: "Error al guardar" });
         }
@@ -95,7 +109,7 @@ export default function ModelosTelefonia() {
                 <button
                     onClick={() => {
                         setEditingId(null);
-                        setFormData({ nombre: "", marca: "", ram: "", almacenamiento: "" });
+                        setFormData({ nombre: "", marca: "", ram: "", almacenamiento: "", pantalla: "" });
                         setIsModalOpen(true);
                     }}
                     className="inline-flex items-center px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors shadow-sm"
@@ -127,19 +141,20 @@ export default function ModelosTelefonia() {
                                 <th className="px-6 py-3">Modelo</th>
                                 <th className="px-6 py-3">RAM</th>
                                 <th className="px-6 py-3">Almacenamiento</th>
+                                <th className="px-6 py-3">Pantalla</th>
                                 <th className="px-6 py-3 text-right">Acciones</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-100">
                             {loading ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                         Cargando modelos...
                                     </td>
                                 </tr>
                             ) : filteredData.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                                    <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
                                         No se encontraron modelos registrados.
                                     </td>
                                 </tr>
@@ -150,6 +165,7 @@ export default function ModelosTelefonia() {
                                         <td className="px-6 py-3">{m.nombre}</td>
                                         <td className="px-6 py-3 text-gray-500">{m.ram || '-'}</td>
                                         <td className="px-6 py-3 text-gray-500">{m.almacenamiento || '-'}</td>
+                                        <td className="px-6 py-3 text-gray-500">{m.pantalla || '-'}</td>
                                         <td className="px-6 py-3 text-right">
                                             <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                                                 <button
@@ -213,25 +229,64 @@ export default function ModelosTelefonia() {
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                 RAM
                             </label>
-                            <input
-                                type="text"
-                                className="block w-full rounded-md border-gray-300 border p-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="8 GB"
-                                value={formData.ram}
-                                onChange={(e) => setFormData({ ...formData, ram: e.target.value })}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    className="block w-full rounded-md border-gray-300 border p-2 pr-10 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    placeholder="8"
+                                    value={formData.ram}
+                                    onChange={(e) => {
+                                        const value = e.target.value.replace(/\D/g, "");
+                                        setFormData({ ...formData, ram: value });
+                                    }}
+                                />
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 sm:text-sm">GB</span>
+                                </div>
+                            </div>
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                 Almacenamiento
                             </label>
-                            <input
-                                type="text"
-                                className="block w-full rounded-md border-gray-300 border p-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
-                                placeholder="256 GB"
-                                value={formData.almacenamiento}
-                                onChange={(e) => setFormData({ ...formData, almacenamiento: e.target.value })}
-                            />
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    className="block w-full rounded-md border-gray-300 border p-2 pr-10 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    placeholder="256"
+                                    value={formData.almacenamiento}
+                                    onChange={(e) => {
+                                        const value = e.target.value.replace(/\D/g, "");
+                                        setFormData({ ...formData, almacenamiento: value });
+                                    }}
+                                />
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 sm:text-sm">GB</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-span-2">
+                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                Pantalla
+                            </label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    className="block w-full rounded-md border-gray-300 border p-2 pr-8 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 outline-none"
+                                    placeholder="6.1"
+                                    value={formData.pantalla}
+                                    onChange={(e) => {
+                                        // Allow only numbers and one decimal point
+                                        const value = e.target.value.replace(/[^0-9.]/g, "");
+                                        if ((value.match(/\./g) || []).length <= 1) {
+                                            setFormData({ ...formData, pantalla: value });
+                                        }
+                                    }}
+                                />
+                                <div className="absolute inset-y-0 right-0 pr-3 flex items-center pointer-events-none">
+                                    <span className="text-gray-500 sm:text-sm">"</span>
+                                </div>
+                            </div>
                         </div>
                     </div>
 

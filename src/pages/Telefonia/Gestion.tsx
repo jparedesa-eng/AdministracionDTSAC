@@ -89,6 +89,7 @@ export default function GestionTelefonia() {
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [selectedMonth, setSelectedMonth] = useState<string>(""); // "YYYY-MM"
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
@@ -152,11 +153,24 @@ export default function GestionTelefonia() {
     // --- FILTERING & GROUPING ---
     const getFilteredTickets = () => {
         const search = searchTerm.toLowerCase();
-        return telefoniaStore.solicitudes.filter(t =>
-            t.beneficiario_nombre?.toLowerCase().includes(search) ||
-            t.beneficiario_dni?.toLowerCase().includes(search) ||
-            t.beneficiario_area?.toLowerCase().includes(search)
-        );
+        return telefoniaStore.solicitudes.filter(t => {
+            // 1. Search Text
+            const matchesSearch =
+                t.beneficiario_nombre?.toLowerCase().includes(search) ||
+                t.beneficiario_dni?.toLowerCase().includes(search) ||
+                t.beneficiario_area?.toLowerCase().includes(search);
+
+            if (!matchesSearch) return false;
+
+            // 2. Month Filter
+            if (selectedMonth) {
+                const d = new Date(t.created_at);
+                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                if (key !== selectedMonth) return false;
+            }
+
+            return true;
+        });
     };
 
     const tickets = getFilteredTickets();
@@ -197,6 +211,10 @@ export default function GestionTelefonia() {
 
             <div className="bg-gray-50 rounded p-2 text-xs border border-gray-100 mb-2 space-y-1">
                 <div className="flex justify-between">
+                    <span className="text-gray-500">Solicitud:</span>
+                    <span className="font-medium text-blue-700">{ticket.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                </div>
+                <div className="flex justify-between">
                     <span className="text-gray-500">Servicio:</span>
                     <span className="font-medium">{ticket.tipo_servicio}</span>
                 </div>
@@ -233,15 +251,36 @@ export default function GestionTelefonia() {
                     <h1 className="text-2xl font-bold text-gray-900">Tablero de Gestión</h1>
                     <p className="text-gray-500 text-sm">Monitoreo global del ciclo de vida de solicitudes</p>
                 </div>
-                <div className="relative">
-                    <input
-                        type="text"
-                        placeholder="Buscar ticket..."
-                        className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 w-full md:w-64"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                    <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                <div className="flex flex-col sm:flex-row gap-3 items-center">
+                    {/* Month Filter */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">Filtrar:</span>
+                        <input
+                            type="month"
+                            value={selectedMonth}
+                            onChange={(e) => setSelectedMonth(e.target.value)}
+                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        {selectedMonth && (
+                            <button
+                                onClick={() => setSelectedMonth("")}
+                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
+                            >
+                                Ver Todo
+                            </button>
+                        )}
+                    </div>
+
+                    <div className="relative w-full md:w-64">
+                        <input
+                            type="text"
+                            placeholder="Buscar ticket..."
+                            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-indigo-500 focus:border-indigo-500 w-full"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
+                    </div>
                 </div>
             </div>
 
@@ -316,7 +355,7 @@ export default function GestionTelefonia() {
                     title={selectedTicket.estado === "Programar Entrega" ? "Confirmar y Asignar Entrega" : `Detalle: Ticket ${selectedTicket.id.slice(0, 8)}`}
                     size="lg"
                 >
-                    <div className="space-y-6 max-h-[75vh] overflow-y-auto pr-2">
+                    <div className="space-y-6 pr-2">
                         <div className="pt-2">
                             <TicketDetailContent ticket={selectedTicket} />
                         </div>
