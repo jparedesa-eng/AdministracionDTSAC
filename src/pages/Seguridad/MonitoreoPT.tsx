@@ -1,10 +1,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { UnitStatus } from '../types';
-import type { TransportUnit, LatLng, StopPoint } from '../types';
+import { createUnit, updateUnit, UnitStatus } from '../../store/monitoreoStore';
+import type { TransportUnit, LatLng, StopPoint } from '../../store/monitoreoStore';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
-import { createUnit, updateUnit } from '../../store/monitoreoStore';
 import { Toast } from '../../components/ui/Toast';
 import type { ToastState } from '../../components/ui/Toast';
 import L from 'leaflet';
@@ -70,6 +69,24 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     const [selectedUnitId, setSelectedUnitId] = useState<string | null>(null);
     const [isAddModalOpen, setIsAddModalOpen] = useState(false);
     const [isEditMode, setIsEditMode] = useState(false);
+    // State for Finish Stop/Incident
+    const [finishStopModal, setFinishStopModal] = useState<{ open: boolean, type: 'PROG' | 'NOPROG', endDate: string, index: number | null }>({
+        open: false,
+        type: 'PROG',
+        endDate: '',
+        index: null
+    });
+
+    // State for Finish Trip
+    // type: 'SINGLE' | 'DEST1' | 'DEST2'
+    const [finishTripModal, setFinishTripModal] = useState({
+        open: false,
+        date: '',
+        type: 'SINGLE',
+        dateExitD1: '',
+        dateArriveD2: ''
+    });
+
     const [isDetailOpen, setIsDetailOpen] = useState(false);
     const [activeTab, setActiveTab] = useState<TabType>('CONTROLES');
 
@@ -91,20 +108,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     const [isStopOngoing, setIsStopOngoing] = useState(false);
 
     const [newStopForm, setNewStopForm] = useState<{ location: string, start: string, end: string, time: string, cause: string, lat: string, lng: string }>({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
-
-    // State for Finish Stop Modal
-    const [finishStopModal, setFinishStopModal] = useState<{ open: boolean, type: 'PROG' | 'NOPROG' | null, index: number | null, endDate: string }>({
-        open: false,
-        type: null,
-        index: null,
-        endDate: ''
-    });
-
-    // State for Finish Trip Modal
-    const [finishTripModal, setFinishTripModal] = useState<{ open: boolean, date: string }>({
-        open: false,
-        date: ''
-    });
+    const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
@@ -152,7 +156,14 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         if (!isoString) return '-';
         try {
             const date = new Date(isoString);
-            return date.toLocaleString('es-ES', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).replace(',', '');
+            return date.toLocaleString('es-ES', {
+                day: '2-digit',
+                month: '2-digit',
+                year: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit',
+                hour12: false
+            }).replace(',', ' -');
         } catch (e) { return isoString; }
     };
 
@@ -246,13 +257,62 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     }, []);
 
     useEffect(() => {
+        const errors: Record<string, string> = {};
+        const now = new Date();
+
+        if (form.fechaIngreso) {
+            const ingresoDate = new Date(form.fechaIngreso);
+            if (ingresoDate > now) errors.fechaIngreso = "La fecha de ingreso no puede ser futura.";
+        }
+
+        if (form.fechaSalida) {
+            const salidaDate = new Date(form.fechaSalida);
+            if (salidaDate > now) errors.fechaSalida = "La fecha de salida no puede ser futura.";
+
+            if (form.fechaIngreso) {
+                const ingresoDate = new Date(form.fechaIngreso);
+                if (salidaDate < ingresoDate) errors.fechaSalida = "La salida no puede ser antes del ingreso.";
+            }
+        }
+
+        if (form.eta && form.fechaSalida) {
+            const etaDate = new Date(form.eta);
+            const salidaDate = new Date(form.fechaSalida);
+            if (etaDate < salidaDate) errors.eta = "El ETA no puede ser antes de la salida.";
+        }
+
+        setFormErrors(errors);
+
+    }, [form.fechaIngreso, form.fechaSalida, form.eta]);
+
+    useEffect(() => {
         const currentMap = mapRef.current;
         if (!currentMap) return;
         setTimeout(() => currentMap.invalidateSize(), 100);
 
         const activeBounds: any[] = [];
 
-        units.forEach(unit => {
+        // 1. Identify units to retain/render
+        // Only show units that are in filteredUnits AND match the rule "In Route" (or if user selected filter explicitly allows others)
+        // Note: filteredUnits already respects the statusFilter logic (which defaults to 'TRANSIT' or user choice).
+        // The user request "solo se deben marcar los viajes que se encuentran en ruta" implies default behavior,
+        // but "si cambiamos filtro solo los seleccionados" implies respecting the filter.
+        // Therefore, we just render filteredUnits.
+
+        const visibleUnitIds = new Set(filteredUnits.map(u => u.id));
+
+        // 2. Remove markers that are no longer visible
+        Object.keys(unitLayersRef.current).forEach(id => {
+            if (!visibleUnitIds.has(id)) {
+                const layer = unitLayersRef.current[id];
+                currentMap.removeLayer(layer.polyline);
+                currentMap.removeLayer(layer.marker);
+                delete unitLayersRef.current[id];
+            }
+        });
+
+        // 3. Render visible units
+        filteredUnits.forEach(unit => {
             const coords: [number, number][] = (unit.path || []).map(p => [p.lat, p.lng]);
             if (coords.length === 0) return;
 
@@ -280,6 +340,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
       `;
 
             if (unitLayersRef.current[unit.id]) {
+                // Update existing
                 unitLayersRef.current[unit.id].polyline.setLatLngs(coords);
                 unitLayersRef.current[unit.id].marker.setLatLng(coords[coords.length - 1]);
                 unitLayersRef.current[unit.id].polyline.setStyle({ color: routeColor, weight, opacity });
@@ -293,6 +354,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     unitLayersRef.current[unit.id].marker.openTooltip();
                 }
             } else {
+                // Create new
                 const polyline = L.polyline(coords, { color: routeColor, weight, opacity }).addTo(currentMap);
                 const marker = L.circleMarker(coords[coords.length - 1], { radius: isSelected ? 8 : 5, fillColor: routeColor, color: "#fff", weight: 1, fillOpacity: 1 }).addTo(currentMap);
                 marker.bindTooltip(tooltipContent, { permanent: true, direction: 'top', className: 'custom-leaflet-tooltip', offset: [0, -6], opacity: 0.95 });
@@ -308,7 +370,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             const bounds = L.latLngBounds(activeBounds);
             currentMap.fitBounds(bounds, { padding: [50, 50], maxZoom: 13 });
         }
-    }, [units, selectedUnitId]);
+    }, [filteredUnits, selectedUnitId]);
 
     const handleCoordPaste = (e: React.ClipboardEvent) => {
         const pastedData = e.clipboardData.getData('Text');
@@ -330,34 +392,186 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const handleInitiateFinishTrip = () => {
         if (!selectedUnitId) return;
-        const now = new Date();
-        const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
-        setFinishTripModal({ open: true, date: localIso });
-    };
-
-    const handleConfirmFinishTrip = async () => {
-        if (!selectedUnitId || !finishTripModal.date) return;
-
-        const now = new Date();
-        const finishDate = new Date(finishTripModal.date);
         const unit = units.find(u => u.id === selectedUnitId);
         if (!unit) return;
 
-        // VALIDATION FOR FINISH TRIP
+        const now = new Date();
+        const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+        // Determine Type
+        let type = 'SINGLE';
+        if (unit.almacenDestino2) {
+            if (!unit.fechaLlegadaDestino1) {
+                type = 'DEST1';
+            } else {
+                type = 'DEST2';
+            }
+        }
+
+        setFinishTripModal({
+            open: true,
+            date: localIso,
+            type: type,
+            dateExitD1: localIso,
+            dateArriveD2: localIso
+        });
+    };
+
+    const handleConfirmFinishTrip = async () => {
+        if (!selectedUnitId) return;
+
+        const unit = units.find(u => u.id === selectedUnitId);
+        if (!unit) return;
+
+        const now = new Date();
         const departureDate = new Date(unit.fechaSalidaPlanta);
         const lastUpdateDate = new Date(unit.lastUpdate);
 
-        if (finishDate < departureDate) { alert("ERROR: La fecha de llegada no puede ser anterior a la salida de planta."); return; }
-        if (finishDate < lastUpdateDate) { alert("ERROR: La fecha de llegada no puede ser anterior al último reporte registrado."); return; }
-        if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
+        const type = finishTripModal.type;
 
+
+
+        // --- HELPER: Calculate Metrics ---
+        // Calculates Time/Score based on Arrival Date relative to Departure
+        // deductMs: Optional time to subtract from Net Time (e.g., dead time at D1)
+        const calculateMetrics = (arrivalDate: Date, deductMs: number = 0) => {
+            const totalMs = arrivalDate.getTime() - departureDate.getTime();
+            const totalMins = Math.floor(totalMs / 60000);
+
+            // Total Time String
+            const totalH = Math.floor(totalMins / 60);
+            const totalM = totalMins % 60;
+            const tiempoTotal = `${totalH}h ${totalM}m`;
+
+            // Net Time (Total - Stops - Deductions)
+            const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
+                if (!stop.time) return acc;
+                let m = 0;
+                const hMatch = stop.time.match(/(\d+)h/);
+                const mMatch = stop.time.match(/(\d+)m/);
+                if (hMatch) m += parseInt(hMatch[1]) * 60;
+                if (mMatch) m += parseInt(mMatch[1]);
+                return acc + m;
+            }, 0);
+
+            // Subtract extra deduction (converted to minutes)
+            const deductMins = Math.floor(deductMs / 60000);
+            const netMins = Math.max(0, totalMins - stopsMins - deductMins);
+            const netH = Math.floor(netMins / 60);
+            const netM = netMins % 60;
+            const tiempoNeto = `${netH}h ${netM}m`;
+
+            // Score Logic (Always based on Net Time vs Checkpoints)
+            const parseMinMax = (s: string) => {
+                if (!s) return 0;
+                const parts = s.split(':').map(Number);
+                return (parts[0] * 60) + (parts[1] || 0);
+            };
+            const min = parseMinMax(unit.tiempoTransitoMin);
+            const max = parseMinMax(unit.tiempoTransitoMax);
+
+            let score = 'BUENO';
+            if (min !== 0 || max !== 0) {
+                if (netMins < min) score = 'EXCELENTE';
+                else if (netMins > max) score = 'DEFICIENTE';
+            } else {
+                score = 'PENDIENTE';
+            }
+
+            return { tiempoTotal, tiempoNeto, score };
+        };
+
+        // --- SCENARIO 1: SINGLE DESTINATION ---
+        if (type === 'SINGLE') {
+            const finishDate = new Date(finishTripModal.date);
+            if (finishDate < departureDate) { alert("ERROR: La fecha de llegada no puede ser anterior a la salida de planta."); return; }
+            if (finishDate < lastUpdateDate) { alert("ERROR: La fecha de llegada no puede ser anterior al último reporte."); return; }
+            if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
+
+            // Calculate everything based on Single/D1 logic
+            const metrics = calculateMetrics(finishDate);
+            await finalizeTrip(unit, finishDate.toISOString(), unit.almacenDestino1 || unit.destination, metrics);
+        }
+
+        // --- SCENARIO 2: ARRIVAL AT DESTINATION 1 (INTERMEDIATE) ---
+        else if (type === 'DEST1') {
+            const finishDate = new Date(finishTripModal.date);
+            if (finishDate < departureDate) { alert("ERROR: La fecha de llegada no puede ser anterior a la salida de planta."); return; }
+            if (finishDate < lastUpdateDate) { alert("ERROR: La fecha de llegada no puede ser anterior al último reporte."); return; }
+            if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
+
+            // Always calc metrics for DEST1 (Base calculation)
+            const metrics = calculateMetrics(finishDate);
+
+            let updates: any = {
+                fechaLlegadaDestino1: finishDate.toISOString(),
+                ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
+                lastUpdate: finishDate.toISOString(),
+                controles: [...unit.controles, {
+                    time: finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
+                    coords: DESTINATION_GPS
+                }],
+                // Save primary metrics here
+                tiempoTotal1: metrics.tiempoTotal,
+                tiempoNeto1: metrics.tiempoNeto,
+                calificacionTTotal: metrics.score,
+                calificacionTNeto: metrics.score
+            };
+
+            await updateUnit(unit.id, updates);
+            setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+        }
+
+        // --- SCENARIO 3: DEPARTURE D1 & ARRIVAL D2 (FINAL) ---
+        else if (type === 'DEST2') {
+            const exitD1 = new Date(finishTripModal.dateExitD1);
+            const arriveD2 = new Date(finishTripModal.dateArriveD2);
+            const arriveD1 = unit.fechaLlegadaDestino1 ? new Date(unit.fechaLlegadaDestino1) : departureDate;
+
+            if (exitD1 < arriveD1) { alert("ERROR: La salida del Punto 1 no puede ser antes de haber llegado."); return; }
+            if (arriveD2 < exitD1) { alert("ERROR: La llegada al Punto 2 no puede ser antes de salir del Punto 1."); return; }
+            if (arriveD2 > now) { alert("ERROR: La llegada final no puede ser futura."); return; }
+
+            // Dead Time at D1 = Exit D1 - Arrival D1
+            const deadTimeMs = exitD1.getTime() - arriveD1.getTime();
+
+            // Calculate Metrics for D2 (Deducting Dead Time)
+            const metrics = calculateMetrics(arriveD2, deadTimeMs);
+
+            let updates: any = {
+                status: UnitStatus.DELIVERED,
+                ubicacionActual: `LLEGADA A ${unit.almacenDestino2}`,
+                lastUpdate: arriveD2.toISOString(),
+                fechaSalidaDestino1: exitD1.toISOString(),
+                fechaLlegadaDestino2: arriveD2.toISOString(),
+                controles: [...unit.controles, {
+                    time: arriveD2.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
+                    coords: DESTINATION_GPS
+                }],
+                path: await fetchRoadRoute([GLOBAL_ORIGIN, ...unit.controles.filter(c => c.coords).map(c => c.coords as LatLng)]),
+
+                // Save secondary metrics (Score is NOT updated here per user request)
+                tiempoTotal2: metrics.tiempoTotal,
+                tiempoNeto2: metrics.tiempoNeto
+            };
+
+            await updateUnit(unit.id, updates);
+            setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+        }
+    };
+
+    // Helper for Single Finish
+    const finalizeTrip = async (unit: TransportUnit, finishDateStr: string, locationName: string, metrics: { tiempoTotal: string; tiempoNeto: string; score: string }) => {
+        const finishDate = new Date(finishDateStr);
         const formattedTime = finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const finalCoords = DESTINATION_GPS;
 
         let newControles = [...unit.controles];
         newControles.push({
             time: formattedTime,
-            location: 'LLEGADA A DESTINO',
+            location: `LLEGADA A ${locationName}`,
             coords: finalCoords
         });
 
@@ -365,88 +579,22 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
         const newPath = await fetchRoadRoute(pointsForRouting);
 
-        const updatedUnit = {
-            ...unit,
+
+
+        await updateUnit(unit.id, {
             status: UnitStatus.DELIVERED,
-            ubicacionActual: 'LLEGADA A DESTINO',
+            ubicacionActual: `LLEGADA A ${locationName}`,
             lastUpdate: finishDate.toISOString(),
             controles: newControles,
             path: newPath,
-            // Metrics & Ratings
-            fechaLlegadaDestino1: finishDate.toISOString(),
-            tiempoTotal1: (() => {
-                const totalMs = finishDate.getTime() - departureDate.getTime();
-                const h = Math.floor(Math.floor(totalMs / 60000) / 60);
-                const m = Math.floor(totalMs / 60000) % 60;
-                return `${h}h ${m}m`;
-            })(),
-            tiempoNeto1: (() => {
-                const totalMs = finishDate.getTime() - departureDate.getTime();
-                const totalMins = Math.floor(totalMs / 60000);
+            fechaLlegadaDestino1: finishDate.toISOString(), // Standard Single arrival
+            tiempoTotal1: metrics.tiempoTotal,
+            tiempoNeto1: metrics.tiempoNeto,
+            calificacionTTotal: metrics.score,
+            calificacionTNeto: metrics.score
+        });
 
-                const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
-                    if (!stop.time) return acc;
-                    let m = 0;
-                    const hMatch = stop.time.match(/(\d+)h/);
-                    const mMatch = stop.time.match(/(\d+)m/);
-                    if (hMatch) m += parseInt(hMatch[1]) * 60;
-                    if (mMatch) m += parseInt(mMatch[1]);
-                    return acc + m;
-                }, 0);
-
-                const netMins = Math.max(0, totalMins - stopsMins);
-                const h = Math.floor(netMins / 60);
-                const m = netMins % 60;
-                return `${h}h ${m}m`;
-            })(),
-            calificacionTTotal: (() => {
-                const parse = (s: string) => {
-                    if (!s) return 0;
-                    const parts = s.split(':').map(Number);
-                    return (parts[0] * 60) + (parts[1] || 0);
-                };
-                const min = parse(unit.tiempoTransitoMin);
-                const max = parse(unit.tiempoTransitoMax);
-
-                const totalMs = finishDate.getTime() - departureDate.getTime();
-                const totalMins = Math.floor(totalMs / 60000);
-
-                if (min === 0 && max === 0) return 'PENDIENTE';
-                if (totalMins < min) return 'EXCELENTE';
-                if (totalMins > max) return 'DEFICIENTE';
-                return 'BUENO';
-            })(),
-            calificacionTNeto: (() => {
-                const parse = (s: string) => {
-                    if (!s) return 0;
-                    const parts = s.split(':').map(Number);
-                    return (parts[0] * 60) + (parts[1] || 0);
-                };
-                const min = parse(unit.tiempoTransitoMin);
-                const max = parse(unit.tiempoTransitoMax);
-
-                const totalMs = finishDate.getTime() - departureDate.getTime();
-                const totalMins = Math.floor(totalMs / 60000);
-                const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
-                    if (!stop.time) return acc;
-                    let m = 0;
-                    const hMatch = stop.time.match(/(\d+)h/);
-                    const mMatch = stop.time.match(/(\d+)m/);
-                    if (hMatch) m += parseInt(hMatch[1]) * 60;
-                    if (mMatch) m += parseInt(mMatch[1]);
-                    return acc + m;
-                }, 0);
-                const netMins = Math.max(0, totalMins - stopsMins);
-
-                if (min === 0 && max === 0) return 'PENDIENTE';
-                if (netMins < min) return 'EXCELENTE';
-                if (netMins > max) return 'DEFICIENTE';
-                return 'BUENO';
-            })()
-        };
-
-        await updateUnit(unit.id, updatedUnit);
-        setFinishTripModal({ open: false, date: '' });
+        setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
     };
 
     // State for Cancel Trip Confirmation
@@ -471,11 +619,21 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const handleEditUnit = () => {
         if (!selectedUnit) return;
+
+        // Helper to format UTC ISO string to Local ISO string for input[type="datetime-local"]
+        const toLocalISO = (dateStr: string) => {
+            if (!dateStr) return '';
+            const date = new Date(dateStr);
+            // Adjust to local time
+            const local = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
+            return local.toISOString().slice(0, 16);
+        };
+
         setForm({
             unitName: selectedUnit.unitName || '',
             proceso: selectedUnit.proceso || '',
-            fechaIngreso: (selectedUnit.fechaIngresoPlanta || '').slice(0, 16),
-            fechaSalida: selectedUnit.fechaSalidaPlanta.slice(0, 16),
+            fechaIngreso: toLocalISO(selectedUnit.fechaIngresoPlanta),
+            fechaSalida: toLocalISO(selectedUnit.fechaSalidaPlanta),
             tipoEnvio: selectedUnit.tipoEnvio || '',
             operador: selectedUnit.operadorLogistico || '',
             booking: selectedUnit.booking || '',
@@ -487,7 +645,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             origin: selectedUnit.origin || '',
             destination: selectedUnit.destination || '',
             area: selectedUnit.area || '',
-            eta: (selectedUnit.fechaEstimadaLlegada || '').slice(0, 16),
+            eta: toLocalISO(selectedUnit.fechaEstimadaLlegada),
             almacenDestino1: selectedUnit.almacenDestino1 || '',
             almacenDestino2: selectedUnit.almacenDestino2 || ''
         });
@@ -499,17 +657,17 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const handleSaveUnit = async (e: React.FormEvent) => {
         e.preventDefault();
+        // Check for existing errors before proceeding
+        if (Object.keys(formErrors).length > 0) {
+            return;
+        }
+
         const ingresoDate = new Date(form.fechaIngreso);
         const salidaDate = new Date(form.fechaSalida);
-        const etaDate = new Date(form.eta);
         const now = new Date();
         const matched = routeMatrix.find(r => r.origen === form.origin && r.destino === form.destination);
 
-        // VALIDATION LOGIC FOR NEW/EDIT UNIT
-        if (ingresoDate > now) { alert("ERROR: La fecha de ingreso a planta no puede ser futura."); return; }
-        if (salidaDate < ingresoDate) { alert("ERROR: La fecha de salida no puede ser anterior al ingreso."); return; }
-        if (salidaDate > now) { alert("ERROR: La fecha de salida no puede ser futura."); return; }
-        if (etaDate < salidaDate) { alert("ERROR: La fecha estimada de llegada no puede ser anterior a la salida de planta."); return; }
+
 
         try {
             if (isEditMode && selectedUnitId) {
@@ -528,6 +686,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     fechaEstimadaLlegada: form.eta,
                     origin: form.origin,
                     destination: form.destination,
+                    almacenDestino1: form.almacenDestino1,
+                    almacenDestino2: form.almacenDestino2,
                     rutaName: matched ? `${matched.origen} - ${matched.destino}` : '',
                 });
                 setIsAddModalOpen(false);
@@ -555,13 +715,18 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     paradasNoProg: [],
                     origin: form.origin,
                     destination: form.destination,
-                    almacenDestino1: form.destination,
+                    almacenDestino1: form.almacenDestino1,
                     fechaLlegadaDestino1: '',
                     tiempoTotal1: '',
                     tiempoNeto1: '',
-                    almacenDestino2: '',
+                    almacenDestino2: form.almacenDestino2,
                     fechaLlegadaDestino2: '',
                     tiempoTotal2: '',
+                    tiempoNeto2: '', // New field initialized
+
+                    fechaSalidaDestino1: '',
+                    fechaSalidaDestino2: '',
+
                     calificacionTNeto: 'PENDIENTE',
                     calificacionTTotal: 'PENDIENTE',
                     incidente: '',
@@ -573,7 +738,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     mes: now.toLocaleDateString('es-ES', { month: 'short' }),
                     fecha: now.toLocaleDateString('es-ES'),
                     tipoViaje: 'REGULAR',
-                    cumplimiento: 'PENDIENTE',
                     unidadEstandar: form.plateRemolque.toUpperCase(),
                     area: form.area,
                     lastLocation: 'Origen Planta',
@@ -750,12 +914,18 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const lastUpdateDate = new Date(u.lastUpdate);
 
         // DATE VALIDATION FOR CONTROLS
-        if (reportDateTime < departureDate) { alert("ERROR: La fecha del control no puede ser anterior a la salida de planta."); return; }
         if (reportDateTime > now) { alert("ERROR: La fecha del control no puede ser futura."); return; }
-        // Ensure chronological order relative to the last recorded update
-        if (reportDateTime < lastUpdateDate && editingControlIndex === null) {
-            alert("ERROR: La fecha del nuevo control no puede ser anterior al último reporte registrado (Secuencialidad).");
-            return;
+
+        if (u.controles.length === 0) {
+            // First control: Cannot be before departure
+            if (reportDateTime < departureDate) { alert("ERROR: La fecha del control no puede ser anterior a la salida de planta."); return; }
+        } else {
+            // Subsequent controls: Cannot be before last update
+            // We use lastUpdate because it tracks the timestamp of the latest event
+            if (reportDateTime < lastUpdateDate && editingControlIndex === null) {
+                alert("ERROR: La fecha del nuevo control no puede ser anterior al último reporte registrado (Secuencialidad).");
+                return;
+            }
         }
 
         const newPoint: LatLng = { lat: nLat, lng: nLng };
@@ -917,7 +1087,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: currentList
         });
 
-        setFinishStopModal({ open: false, type: null, index: null, endDate: '' });
+        setFinishStopModal({ open: false, type: 'PROG', index: null, endDate: '' });
     };
 
     const handleDeleteStop = async (type: 'PROG' | 'NOPROG', index: number) => {
@@ -1061,8 +1231,19 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     <span className="text-[7px] font-bold text-slate-400 uppercase block">SALIDA</span>
                                                     <span className="text-[9px] font-bold text-slate-600">{formatDate(unit.fechaSalidaPlanta)}</span>
                                                 </div>
-                                                <div className="text-right">
-
+                                                <div className="text-right flex flex-col items-end">
+                                                    {unit.almacenDestino1 && (
+                                                        <div className="mb-0.5">
+                                                            <span className="text-[7px] font-bold text-slate-400 uppercase block">LLEGADA 1 {unit.fechaLlegadaDestino1 ? `- ${formatDate(unit.fechaLlegadaDestino1)}` : ''}</span>
+                                                            <span className="text-[9px] font-bold text-slate-600 truncate max-w-[100px] block" title={unit.almacenDestino1}>{unit.almacenDestino1}</span>
+                                                        </div>
+                                                    )}
+                                                    {unit.almacenDestino2 && (
+                                                        <div>
+                                                            <span className="text-[7px] font-bold text-slate-400 uppercase block">LLEGADA 2</span>
+                                                            <span className="text-[9px] font-bold text-slate-600 truncate max-w-[100px] block" title={unit.almacenDestino2}>{unit.almacenDestino2}</span>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             </div>
                                         </div>
@@ -1115,7 +1296,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     <div className="absolute top-4 left-4 z-[1] bg-white/95 px-3 py-2 rounded-lg border border-slate-300 pointer-events-none">
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-[#ff0000] rounded-full animate-pulse" />
-                            <span className="text-[10px] font-black uppercase text-slate-900">Mapa SOC</span>
+                            <span className="text-[8px] font-medium uppercase text-slate-900">Mapa Monitoreo</span>
                         </div>
                     </div>
                 </div>
@@ -1134,23 +1315,54 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         <div className="p-6 space-y-4">
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-2">
                                 <p className="text-[10px] text-blue-700 font-bold">
-                                    Se registrará automáticamente la ubicación de llegada en destino (GPS Sede).
+                                    {finishTripModal.type === 'DEST1'
+                                        ? 'Se registrará la llegada al primer punto de destino. El viaje continuará activo.'
+                                        : 'Se registrará el cierre definitivo del viaje.'}
                                 </p>
                             </div>
-                            <div className="space-y-1">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha y Hora de Llegada</label>
-                                <input
-                                    type="datetime-local"
-                                    className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
-                                    value={finishTripModal.date}
-                                    onChange={(e) => setFinishTripModal({ ...finishTripModal, date: e.target.value })}
-                                />
-                            </div>
+
+                            {(finishTripModal.type === 'SINGLE' || finishTripModal.type === 'DEST1') && (
+                                <div className="space-y-1">
+                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                        {finishTripModal.type === 'DEST1' ? 'Fecha Llegada (1er Punto)' : 'Fecha y Hora de Llegada'}
+                                    </label>
+                                    <input
+                                        type="datetime-local"
+                                        className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
+                                        value={finishTripModal.date}
+                                        onChange={(e) => setFinishTripModal({ ...finishTripModal, date: e.target.value })}
+                                    />
+                                </div>
+                            )}
+
+                            {finishTripModal.type === 'DEST2' && (
+                                <div className="space-y-3">
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Salida del 1er Punto</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
+                                            value={finishTripModal.dateExitD1}
+                                            onChange={(e) => setFinishTripModal({ ...finishTripModal, dateExitD1: e.target.value })}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Llegada al 2do Punto</label>
+                                        <input
+                                            type="datetime-local"
+                                            className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
+                                            value={finishTripModal.dateArriveD2}
+                                            onChange={(e) => setFinishTripModal({ ...finishTripModal, dateArriveD2: e.target.value })}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
                             <button
                                 onClick={handleConfirmFinishTrip}
                                 className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
                             >
-                                Confirmar Cierre de Viaje
+                                {finishTripModal.type === 'DEST1' ? 'Confirmar Llegada (1er Punto)' : 'Confirmar Cierre de Viaje'}
                             </button>
                         </div>
                     </div>
@@ -1498,28 +1710,72 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
                                             <FormInput
-                                                label="Almacén Descarga"
+                                                label="1er Punto de Llegada"
                                                 type="select"
-                                                options={destinations.filter(d => d.city_zone === form.destination && d.type === 'DESCARGA' && d.active).map(d => d.name)}
+                                                options={destinations.filter(d => d.city_zone === form.destination && d.active).map(d => d.name)}
                                                 value={form.almacenDestino1}
                                                 onChange={v => setForm({ ...form, almacenDestino1: v })}
                                             />
                                             <FormInput
-                                                label="Almacén Muestras (Opcional)"
+                                                label={(() => {
+                                                    const dest1 = destinations.find(d => d.name === form.almacenDestino1);
+                                                    if (dest1?.type === 'MUESTRAS') return "2do Punto de Llegada (Obligatorio)";
+                                                    return "2do Punto de Llegada (Opcional)";
+                                                })()}
                                                 type="select"
-                                                options={destinations.filter(d => d.city_zone === form.destination && d.type === 'MUESTRAS' && d.active).map(d => d.name)}
+                                                required={(() => {
+                                                    const dest1 = destinations.find(d => d.name === form.almacenDestino1);
+                                                    return dest1?.type === 'MUESTRAS';
+                                                })()}
+                                                options={(() => {
+                                                    const dest1 = destinations.find(d => d.name === form.almacenDestino1);
+                                                    let relevant = destinations.filter(d => d.city_zone === form.destination && d.active);
+
+                                                    if (dest1) {
+                                                        // Validacion cruzada: Si es descaga solo muestra muestras, si es muestras solo muestra descarga
+                                                        if (dest1.type === 'DESCARGA') {
+                                                            relevant = relevant.filter(d => d.type === 'MUESTRAS');
+                                                        } else if (dest1.type === 'MUESTRAS') {
+                                                            relevant = relevant.filter(d => d.type === 'DESCARGA');
+                                                        }
+                                                    }
+
+                                                    return relevant.map(d => d.name);
+                                                })()}
                                                 value={form.almacenDestino2}
                                                 onChange={v => setForm({ ...form, almacenDestino2: v })}
                                             />
                                         </div>
                                         <div className="grid grid-cols-2 gap-3">
-                                            <FormInput label="Ingreso Planta" type="datetime-local" value={form.fechaIngreso} onChange={v => setForm({ ...form, fechaIngreso: v })} />
-                                            <FormInput label="Salida Planta" type="datetime-local" value={form.fechaSalida} onChange={v => setForm({ ...form, fechaSalida: v })} />
+                                            <FormInput label="Ingreso Planta" type="datetime-local" value={form.fechaIngreso} onChange={v => setForm({ ...form, fechaIngreso: v })} error={formErrors.fechaIngreso} />
+                                            <FormInput label="Salida Planta" type="datetime-local" value={form.fechaSalida} onChange={v => setForm({ ...form, fechaSalida: v })} error={formErrors.fechaSalida} />
                                         </div>
                                         <div className="col-span-2 grid grid-cols-3 gap-3">
-                                            <FormInput label="ETA (Estimado Llegada)" type="datetime-local" value={form.eta} onChange={v => setForm({ ...form, eta: v })} />
-                                            <FormInput label="Proceso" type="select" options={['CONSERVA', 'FRESCO', 'CONGELADO', 'HARINA', 'ACEITE']} value={form.proceso} onChange={v => setForm({ ...form, proceso: v })} />
-                                            <FormInput label="Tipo Envío" type="select" options={['TERRESTRE', 'MARITIMO', 'AEREO', 'BIMODAL']} value={form.tipoEnvio} onChange={v => setForm({ ...form, tipoEnvio: v })} />
+                                            <FormInput label="ETA (Estimado Llegada)" type="datetime-local" value={form.eta} onChange={v => setForm({ ...form, eta: v })} error={formErrors.eta} />
+                                            <FormInput
+                                                label="Proceso"
+                                                type="select"
+                                                options={(() => {
+                                                    const relevant = form.origin && form.destination
+                                                        ? routeMatrix.filter(r => r.origen === form.origin && r.destino === form.destination)
+                                                        : routeMatrix;
+                                                    return Array.from(new Set(relevant.map(r => r.proceso))).filter(Boolean).sort();
+                                                })()}
+                                                value={form.proceso}
+                                                onChange={v => setForm({ ...form, proceso: v })}
+                                            />
+                                            <FormInput
+                                                label="Tipo Envío"
+                                                type="select"
+                                                options={(() => {
+                                                    const relevant = form.origin && form.destination
+                                                        ? routeMatrix.filter(r => r.origen === form.origin && r.destino === form.destination)
+                                                        : routeMatrix;
+                                                    return Array.from(new Set(relevant.map(r => r.tipo_envio))).filter(Boolean).sort();
+                                                })()}
+                                                value={form.tipoEnvio}
+                                                onChange={v => setForm({ ...form, tipoEnvio: v })}
+                                            />
                                         </div>
                                     </div>
                                 </div>
@@ -1595,12 +1851,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     );
 };
 
-const FormInput = ({ label, value, onChange, type = "text", options = [], placeholder = "" }: { label: string, value: string, onChange: (v: string) => void, type?: string, options?: string[], placeholder?: string }) => (
+const FormInput = ({ label, value, onChange, type = "text", options = [], placeholder = "", required = true, error }: { label: string, value: string, onChange: (v: string) => void, type?: string, options?: string[], placeholder?: string, required?: boolean, error?: string }) => (
     <div className="group space-y-1 w-full">
         <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
         {type === 'select' ? (
             <div className="relative">
-                <select required className="w-full p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 appearance-none cursor-pointer" value={value} onChange={e => onChange(e.target.value)}>
+                <select required={required} className={`w-full p-2.5 bg-white border-2 ${error ? 'border-red-500' : 'border-slate-200 hover:border-slate-300'} rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 appearance-none cursor-pointer`} value={value} onChange={e => onChange(e.target.value)}>
                     <option value="">Seleccionar...</option>
                     {(options || []).map(o => <option key={o} value={o}>{o}</option>)}
                 </select>
@@ -1612,13 +1868,14 @@ const FormInput = ({ label, value, onChange, type = "text", options = [], placeh
             </div>
         ) : (
             <input
-                required
+                required={required}
                 type={type}
-                className="w-full p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 placeholder:text-slate-300 placeholder:font-normal"
+                className={`w-full p-2.5 bg-white border-2 ${error ? 'border-red-500' : 'border-slate-200 hover:border-slate-300'} rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 placeholder:text-slate-300 placeholder:font-normal`}
                 value={value}
                 onChange={e => onChange(e.target.value)}
                 placeholder={placeholder}
             />
         )}
+        {error && <p className="text-[9px] font-bold text-red-500 ml-1 mt-0.5 animate-in slide-in-from-top-1">{error}</p>}
     </div>
 );

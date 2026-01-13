@@ -52,7 +52,7 @@ export default function InventarioTelefonia() {
     const [bajaData, setBajaData] = useState({ motivo: "" });
 
     // Drafts
-    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo" });
+    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "" });
     const [draftChip, setDraftChip] = useState<Partial<Chip>>({ estado: "Disponible" });
     const [draftPlan, setDraftPlan] = useState<Partial<PlanTelefonico>>({
         operador: "CLARO",
@@ -188,7 +188,7 @@ export default function InventarioTelefonia() {
     };
 
     const handleNewEquipo = () => {
-        setDraftEquipo({ estado: "Disponible", marca: "", modelo: "", imei: "", color: "", condicion: "Nuevo" });
+        setDraftEquipo({ estado: "Disponible", marca: "", modelo: "", imei: "", color: "", condicion: "Nuevo", fecha_compra: "" });
         setIncludeEsim(false);
         setEsimData({ numero: "", operador: "" });
         setOpenEquipo(true);
@@ -543,6 +543,7 @@ export default function InventarioTelefonia() {
                                 {activeTab === "equipos" && (
                                     <tr>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
@@ -584,6 +585,11 @@ export default function InventarioTelefonia() {
                                                     {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
                                                 </div>
                                             )}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <div className="text-sm text-gray-600">
+                                                {item.fecha_compra ? new Date(item.fecha_compra).toLocaleDateString() : "-"}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="flex flex-col gap-1 items-start">
@@ -1114,6 +1120,16 @@ export default function InventarioTelefonia() {
                                 <option value="Segundo Uso">Segundo Uso</option>
                             </select>
                         </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Fecha de Compra</label>
+                        <input
+                            type="date"
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={draftEquipo.fecha_compra || ""}
+                            onChange={(e) => setDraftEquipo({ ...draftEquipo, fecha_compra: e.target.value })}
+                        />
                     </div>
 
                     <div>

@@ -39,12 +39,15 @@ import GestionTelefonia from "./pages/Telefonia/Gestion";
 import AprobacionIT from "./pages/Telefonia/AprobacionIT";
 import AprobacionGerencia from "./pages/Telefonia/AprobacionGerencia";
 import AprobacionAdmin from "./pages/Telefonia/AprobacionAdmin";
+import ModelosTelefonia from "./pages/Telefonia/Catalogos/Modelos";
+import PuestosTelefonia from "./pages/Telefonia/Catalogos/Puestos";
 
 /* Configuración */
 import PersonalPage from "./pages/configuracion/PersonalPage";
 import GerenciasPage from "./pages/configuracion/GerenciasPage";
 import SedesPage from "./pages/configuracion/SedesPage";
 import CctvCentralesPage from "./pages/configuracion/CctvCentralesPage";
+import CoberturaOperadores from "./pages/configuracion/CoberturaOperadores";
 import SupervisorST from "./pages/configuracion/SupervisorST";
 import AplicativosCelular from "./pages/configuracion/AplicativosCelular";
 
@@ -59,7 +62,7 @@ import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
 import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
 import { INITIAL_POSTS } from "./mockData";
-import type { AlertSchedule, Post } from "./pages/types";
+
 
 /* Errores */
 import Forbidden403 from "./pages/Errors/403";
@@ -106,9 +109,9 @@ function ProtectedLayout() {
 }
 
 export default function App() {
-  const [schedules, setSchedules] = React.useState<AlertSchedule[]>([]);
+  const [schedules, setSchedules] = React.useState<any[]>([]);
 
-  const [posts] = React.useState<Post[]>(INITIAL_POSTS);
+  const [posts] = React.useState(INITIAL_POSTS);
   return (
     <Routes>
       {/* RUTAS PÚBLICAS: login en / y /login */}
@@ -351,6 +354,22 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+          <Route
+            path="/telefonia/modelos"
+            element={
+              <ProtectedRoute path="/telefonia/modelos">
+                <ModelosTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/puestos"
+            element={
+              <ProtectedRoute path="/telefonia/puestos">
+                <PuestosTelefonia />
+              </ProtectedRoute>
+            }
+          />
 
           {/* Configuración */}
           <Route
@@ -374,6 +393,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/configuracion/sedes">
                 <SedesPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/cobertura-operadores"
+            element={
+              <ProtectedRoute path="/configuracion/cobertura-operadores">
+                <CoberturaOperadores />
               </ProtectedRoute>
             }
           />

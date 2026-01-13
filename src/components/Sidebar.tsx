@@ -21,7 +21,8 @@ import {
   ChevronsLeft,
   ChevronsRight,
   Monitor,
-  Route
+  Route,
+  SignalHigh
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -110,12 +111,13 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeTel_AprobAdmin = hasAccess("/telefonia/aprobacion-admin");
 
   // Configuración
-  const canSeeConfig = hasAccess("/config");
+
   const canSeeConfigPersonal = hasAccess("/configuracion/personal");
   const canSeeConfigGerencias = hasAccess("/configuracion/gerencias");
   const canSeeConfigSedes = hasAccess("/configuracion/sedes");
   const canSeeConfigCentrales = hasAccess("/configuracion/centrales-cctv");
   const canSeeAppsCelular = hasAccess("/configuracion/aplicativos-celular");
+  const canSeeCoberturaOperadores = hasAccess("/configuracion/cobertura-operadores");
 
   // Seguridad
   const canSeeSeg_Programacion = hasAccess("/seguridad/programacion");
@@ -123,6 +125,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeSeg_ChecklistCamaras = hasAccess("/seguridad/checklist-camaras");
   const canSeeSeg_InventarioCamaras = hasAccess("/seguridad/inventario-camaras");
   const canSeeSeg_MonitoreoPT = hasAccess("/seguridad/monitoreo-pt");
+  const canSeeSeg_Destinos = hasAccess("/seguridad/destinos");
+  const canSeeSeg_TiemposViaje = hasAccess("/seguridad/tiempos-viaje");
   const canSeeSeg_ReportingManager = hasAccess("/seguridad/reporting-manager");
   const canSeeSeg_AgentReport = hasAccess("/seguridad/agent-report");
   const canSeeAyuda = hasAccess("/ayuda");
@@ -176,6 +180,12 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: DollarSign });
     if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-hist', label: 'Entregas / Historial', path: '/telefonia/gestion', icon: Truck });
 
+    // Catalogos (Using AprobAdmin permission for now as likely only admins should see this)
+    if (canSeeTel_AprobAdmin) {
+      telefoniaSubItems.push({ id: 'tel-modelos', label: 'Catálogo Modelos', path: '/telefonia/modelos', icon: Smartphone });
+      telefoniaSubItems.push({ id: 'tel-puestos', label: 'Catálogo Puestos', path: '/telefonia/puestos', icon: Briefcase });
+    }
+
     if (telefoniaSubItems.length > 0) {
       ticketItems.push({ id: 'telefonia', label: 'Telefonía', icon: Smartphone, subItems: telefoniaSubItems });
     }
@@ -208,8 +218,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     // 3. Monitoreo de Unidades
     const monitoreoSubItems: NavItem[] = [];
     if (canSeeSeg_MonitoreoPT) monitoreoSubItems.push({ id: 'seg-mon', label: 'Monitoreo PT', path: '/seguridad/monitoreo-pt', icon: Monitor });
-    monitoreoSubItems.push({ id: 'seg-dest', label: 'Lugares de Destino', path: '/seguridad/destinos', icon: MapPin });
-    monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/seguridad/tiempos-viaje', icon: Truck });
+    if (canSeeSeg_Destinos) monitoreoSubItems.push({ id: 'seg-dest', label: 'Lugares de Destino', path: '/seguridad/destinos', icon: MapPin });
+    if (canSeeSeg_TiemposViaje) monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/seguridad/tiempos-viaje', icon: Truck });
 
     if (monitoreoSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-unidades', label: 'Monitoreo de Unidades', icon: Route, subItems: monitoreoSubItems });
@@ -234,12 +244,14 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // --- Configuración ---
     const configSubItems: NavItem[] = [];
-    if (canSeeConfig) configSubItems.push({ id: 'conf-gen', label: 'General', path: '/config', icon: Settings });
+
     if (canSeeConfigPersonal) configSubItems.push({ id: 'conf-pers', label: 'Personal', path: '/configuracion/personal', icon: Users });
     if (canSeeConfigGerencias) configSubItems.push({ id: 'conf-ger', label: 'Gerencias', path: '/configuracion/gerencias', icon: ClipboardList });
     if (canSeeConfigSedes) configSubItems.push({ id: 'conf-sedes', label: 'Sedes', path: '/configuracion/sedes', icon: MapPin });
     if (canSeeConfigCentrales) configSubItems.push({ id: 'conf-cctv', label: 'Centrales CCTV', path: '/configuracion/centrales-cctv', icon: Building2 });
-    configSubItems.push({ id: 'conf-sup', label: 'Supervisores ST', path: '/configuracion/supervisores', icon: Briefcase }); // Always visible?
+    const canSeeConfigSupervisores = hasAccess("/configuracion/supervisores");
+    if (canSeeConfigSupervisores) configSubItems.push({ id: 'conf-sup', label: 'Supervisores ST', path: '/configuracion/supervisores', icon: Briefcase });
+    if (canSeeCoberturaOperadores) configSubItems.push({ id: 'conf-cob-ops', label: 'Cobertura Operadores', path: '/configuracion/cobertura-operadores', icon: SignalHigh });
     if (canSeeAppsCelular) configSubItems.push({ id: 'conf-apps', label: 'Aplicativos MDM', path: '/configuracion/aplicativos-celular', icon: Smartphone });
 
     if (configSubItems.length > 0) {

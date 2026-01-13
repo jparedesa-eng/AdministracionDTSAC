@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore } from "../../store/telefoniaStore";
+import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import type { ValidationResult } from "../../store/telefoniaStore";
 import { aplicativosStore } from "../../store/aplicativosStore";
 
@@ -22,21 +23,7 @@ import { supabase } from "../../supabase/supabaseClient";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 
-const COMMON_ROLES = [
-    "Gerente General",
-    "Gerente Central",
-    "Gerente",
-    "Jefe",
-    "Superintendente",
-    "Coordinador",
-    "Supervisor",
-    "Analista",
-    "Asistente",
-    "Auxiliar",
-    "Practicante",
-    "Operario",
-    "Otros"
-];
+
 
 const StatusBadge = ({ estado }: { estado: string }) => {
     let color = "bg-gray-100 text-gray-800 border-gray-200";
@@ -89,6 +76,8 @@ export default function SolicitarTelefonia() {
         cantidad_lineas: 1,
         paquete_asignado: "", // New field
         justificacion: "",
+        asume_costo: "", // "EMPRESA" | "USUARIO"
+        cuotas: 3,
     });
 
     const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -106,11 +95,16 @@ export default function SolicitarTelefonia() {
         loadApps();
     }, []);
 
-    // Cargar historial
+    // Cargar historial y catalogos
     const loadHistory = async () => {
         setHistoryLoading(true);
         try {
-            await telefoniaStore.fetchSolicitudes();
+            await Promise.all([
+                telefoniaStore.fetchSolicitudes(),
+                telefoniaStore.fetchPuestos(), // New
+                telefoniaStore.fetchPlanes(),  // Ensure planes are loaded
+                telefoniaStore.fetchModelos()  // New
+            ]);
         } catch (error) {
             console.error("Error loading history:", error);
         } finally {
@@ -120,7 +114,12 @@ export default function SolicitarTelefonia() {
 
     useEffect(() => {
         loadHistory();
+        const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
+        return () => unsubSedes();
     }, []);
+
+    const [, setSedesVersion] = useState(0);
+    const { sedes } = getSedesState();
 
     // Detail Modal State
     const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
@@ -130,6 +129,78 @@ export default function SolicitarTelefonia() {
         if (!user?.id) return [];
         return telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
     }, [user?.id, telefoniaStore.solicitudes]);
+
+    // Recommendation State
+    const [recommendation, setRecommendation] = useState<{
+        modelo?: string;
+        plan?: string;
+        operador?: string;
+    } | null>(null);
+
+    // Puesto Selection State
+    const [selectedPuestoId, setSelectedPuestoId] = useState<string>("");
+
+    // Sync selectedPuestoId if formData.puesto is set externally (e.g. from DNI search)
+    useEffect(() => {
+        if (formData.puesto && !selectedPuestoId) {
+            const match = telefoniaStore.puestos.find(p => p.nombre === formData.puesto);
+            if (match) setSelectedPuestoId(match.id);
+        }
+    }, [formData.puesto, telefoniaStore.puestos]);
+
+    const handlePuestoChange = (puestoNombre: string) => {
+        setFormData(prev => ({ ...prev, puesto: puestoNombre }));
+        setSelectedPuestoId(""); // Reset ID as we are selecting by name now (which might map to multiple)
+
+        if (!puestoNombre) {
+            setRecommendation(null);
+            return;
+        }
+
+        // Find all matches for this name
+        const matches = telefoniaStore.puestos.filter(p => p.nombre === puestoNombre);
+
+        if (matches.length > 0) {
+            // Build recommendation string
+            const models = Array.from(new Set(matches.map(p => p.modelo ? `${p.modelo.marca} ${p.modelo.nombre} ` : null).filter(Boolean)));
+
+            // If strictly one match, we can auto-fill
+            if (matches.length === 1) {
+                const puesto = matches[0];
+                const rec = {
+                    modelo: models[0] || undefined,
+                    plan: puesto.plan ? puesto.plan.nombre : undefined,
+                    operador: puesto.plan ? puesto.plan.operador : undefined
+                };
+                setRecommendation(rec);
+
+                if (rec.operador && rec.plan) {
+                    setFormData(prev => ({
+                        ...prev,
+                        puesto: puestoNombre,
+                        tipo_servicio: rec.operador || "",
+                        paquete_asignado: rec.plan || ""
+                    }));
+                    setToast({ type: "info", message: `Se ha sugerido / aplicado el plan ${rec.operador} ${rec.plan} ` });
+                }
+            } else {
+                // Multiple matches (Ambiguous configuration)
+                // We show the models available but maybe DO NOT auto-fill plan yet, or auto-fill if all share the same plan?
+                // For now, let's just show the model hint
+                setRecommendation({
+                    modelo: models.join(" o "), // e.g. "iPhone 15 o Samsung S24"
+                });
+                // We do NOT auto-fill plan/operator here as it depends on the specific choice, which "se verá al dar siguiente" or needs logic
+            }
+        } else {
+            setRecommendation(null);
+        }
+    };
+
+    // ... (logic for unique names)
+    const uniquePuestoNames = useMemo(() => {
+        return Array.from(new Set(telefoniaStore.puestos.map(p => p.nombre))).sort();
+    }, [telefoniaStore.puestos]);
 
 
     const handleChange = (field: string, value: any) => {
@@ -141,6 +212,13 @@ export default function SolicitarTelefonia() {
                 newState.numero_telefono = "";
                 newState.motivo_reposicion = "";
                 newState.tiene_evidencia = false;
+                newState.asume_costo = "";
+                newState.cuotas = 3;
+            }
+
+            // Reset sub-fields if reposicion motive changes
+            if (field === "motivo_reposicion" && value !== "ROBO" && value !== "PERDIDA") {
+                newState.asume_costo = "";
             }
 
             // Reset fecha_fin if switching to PERMANENTE
@@ -236,6 +314,10 @@ export default function SolicitarTelefonia() {
                 if (!formData.tiene_evidencia) {
                     return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
                 }
+
+                if (["ROBO", "PERDIDA"].includes(formData.motivo_reposicion)) {
+                    if (!formData.asume_costo) return "Indique quién asume el costo de la reposición.";
+                }
             }
         }
         if (step === 2) {
@@ -302,9 +384,11 @@ export default function SolicitarTelefonia() {
                 justificacion: `
                     ${formData.motivo_reposicion ? `[Motivo: ${formData.motivo_reposicion}] ` : ""}
                     ${formData.numero_telefono ? `[Num: ${formData.numero_telefono}] ` : ""}
+                    ${formData.asume_costo ? `[Asume: ${formData.asume_costo}] ` : ""}
+                    ${formData.asume_costo === 'USUARIO' ? `[Cuotas: ${formData.cuotas}] ` : ""}
                     ${formData.tiene_evidencia ? `[Con Evidencia] ` : ""}
                     ${formData.justificacion}
-                `.trim().replace(/\s+/g, ' '),
+`.trim().replace(/\s+/g, ' '),
                 aplicativos: selectedApps,
                 estado: "Pendiente Gerencia",
                 created_by: user?.id,
@@ -318,7 +402,7 @@ export default function SolicitarTelefonia() {
                 tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
-                paquete_asignado: ""
+                paquete_asignado: "", asume_costo: "", cuotas: 3
             });
             setSelectedApps([]);
             setCurrentStep(1);
@@ -388,13 +472,25 @@ export default function SolicitarTelefonia() {
                                 <select
                                     className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
                                     value={formData.puesto}
-                                    onChange={(e) => handleChange("puesto", e.target.value)}
+                                    onChange={(e) => handlePuestoChange(e.target.value)}
                                 >
                                     <option value="">Seleccione Puesto...</option>
-                                    {COMMON_ROLES.map(role => (
-                                        <option key={role} value={role}>{role}</option>
+                                    {uniquePuestoNames.map(name => (
+                                        <option key={name} value={name}>
+                                            {name}
+                                        </option>
                                     ))}
+                                    {/* Handle manual case */}
+                                    {!uniquePuestoNames.includes(formData.puesto) && formData.puesto && (
+                                        <option value={formData.puesto}>{formData.puesto} (Manual)</option>
+                                    )}
                                 </select>
+                                {recommendation?.modelo && (
+                                    <div className="mt-1 flex items-center gap-1 text-xs text-indigo-600 bg-indigo-50 p-1.5 rounded border border-indigo-100">
+                                        <Smartphone className="w-3 h-3" />
+                                        <span>Equipo sugerido: <strong>{recommendation.modelo}</strong></span>
+                                    </div>
+                                )}
                             </div>
                             <div className="col-span-12 md:col-span-6">
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Motivo de Solicitud</label>
@@ -430,10 +526,10 @@ export default function SolicitarTelefonia() {
                                                 type="button"
                                                 onClick={handleValidateRenewal}
                                                 disabled={validating || !formData.numero_telefono}
-                                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium flex items-center gap-1"
+                                                className="mt-1 w-full inline-flex justify-center items-center px-4 py-2 border border-indigo-200 shadow-sm text-sm font-medium rounded-md text-indigo-700 bg-indigo-50 hover:bg-indigo-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-colors"
                                             >
-                                                {validating ? <Loader2 className="w-3 h-3 animate-spin" /> : <History className="w-3 h-3" />}
-                                                Validar Antigüedad
+                                                {validating ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <History className="w-4 h-4 mr-2" />}
+                                                Validar Antigüedad del Equipo
                                             </button>
                                             {validationResult && (
                                                 <div className={`mt-2 p-2 rounded text-xs border ${validationResult.valid ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-700'}`}>
@@ -461,6 +557,85 @@ export default function SolicitarTelefonia() {
                                             <option value="DETERIORO">Deterioro</option>
                                         </select>
                                     </div>
+
+                                    {(formData.motivo_reposicion === "ROBO" || formData.motivo_reposicion === "PERDIDA") && (
+                                        <div className="col-span-12 animate-in fade-in slide-in-from-top-2 p-4 bg-gray-50 rounded-lg border border-gray-100">
+                                            <label className="block text-xs font-semibold text-gray-700 uppercase tracking-wide mb-3">¿Quién asume el costo de reposición?</label>
+
+                                            <div className="flex gap-6 mb-4">
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="asume_costo"
+                                                        value="EMPRESA"
+                                                        checked={formData.asume_costo === "EMPRESA"}
+                                                        onChange={(e) => handleChange("asume_costo", e.target.value)}
+                                                        className="text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-sm font-medium text-gray-700">Asume la Empresa</span>
+                                                </label>
+                                                <label className="flex items-center gap-2 cursor-pointer">
+                                                    <input
+                                                        type="radio"
+                                                        name="asume_costo"
+                                                        value="USUARIO"
+                                                        checked={formData.asume_costo === "USUARIO"}
+                                                        onChange={(e) => handleChange("asume_costo", e.target.value)}
+                                                        className="text-indigo-600 focus:ring-indigo-500"
+                                                    />
+                                                    <span className="text-sm font-medium text-gray-700">Asume el Usuario</span>
+                                                </label>
+                                            </div>
+
+                                            {formData.asume_costo === "USUARIO" && (
+                                                <div className="mt-4 border-t border-gray-200 pt-4">
+                                                    <div className="flex items-center gap-4 mb-4">
+                                                        <label className="text-sm font-medium text-gray-700">Número de Cuotas:</label>
+                                                        <select
+                                                            value={formData.cuotas}
+                                                            onChange={(e) => handleChange("cuotas", Number(e.target.value))}
+                                                            className="rounded border-gray-300 border p-1 text-sm focus:border-indigo-500 outline-none"
+                                                        >
+                                                            <option value={1}>1 Cuota</option>
+                                                            <option value={2}>2 Cuotas</option>
+                                                            <option value={3}>3 Cuotas</option>
+                                                            <option value={4}>4 Cuotas</option>
+                                                            <option value={5}>5 Cuotas</option>
+                                                            <option value={6}>6 Cuotas</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div className="bg-white border rounded-lg overflow-hidden text-sm">
+                                                        <div className="bg-indigo-50 px-3 py-2 border-b border-indigo-100 font-medium text-indigo-800 flex items-center gap-2">
+                                                            <FileText className="w-4 h-4" />
+                                                            Simulación de Descuento por Planilla
+                                                        </div>
+                                                        <table className="w-full text-left">
+                                                            <thead>
+                                                                <tr className="border-b border-gray-100 bg-gray-50/50">
+                                                                    <th className="px-3 py-2 font-medium text-gray-500">Periodo</th>
+                                                                    <th className="px-3 py-2 font-medium text-gray-500">Concepto</th>
+                                                                    <th className="px-3 py-2 font-medium text-gray-500 text-right">Porcentaje</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                <tr>
+                                                                    <td className="px-3 py-2 text-gray-600">Mes 1 a {formData.cuotas}</td>
+                                                                    <td className="px-3 py-2 text-gray-600">Descuento Equipo Telefónico</td>
+                                                                    <td className="px-3 py-2 text-gray-900 font-medium text-right text-indigo-600">
+                                                                        {(100 / formData.cuotas).toFixed(2)}% / mes
+                                                                    </td>
+                                                                </tr>
+                                                            </tbody>
+                                                        </table>
+                                                        <div className="px-3 py-2 bg-yellow-50 text-yellow-800 text-xs border-t border-yellow-100">
+                                                            * El monto exacto será calculado por RRHH según el valor libro del equipo.
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
                                     <div className="col-span-12 animate-in fade-in slide-in-from-top-2">
                                         <div className="flex items-center gap-2 p-3 bg-orange-50 border border-orange-100 rounded-lg">
                                             <input
@@ -484,6 +659,47 @@ export default function SolicitarTelefonia() {
                 return (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
                         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            {/* MOVED TO TOP: Fundo/Planta & Cultivo */}
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fundo / Planta</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.fundo_planta}
+                                    onChange={(e) => {
+                                        // Reset operator if current selection is not available in new sede (optional but cleaner)
+                                        // For now, let's just update the sede. The operator validation happens next.
+                                        handleChange("fundo_planta", e.target.value);
+                                    }}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    {sedes.map(sede => (
+                                        <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
+                                    ))}
+                                    {/* Fallback for legacy values not in DB or 'OTROS' if needed, but user wanted strict list from config */}
+                                    {!sedes.find(s => s.nombre === formData.fundo_planta) && formData.fundo_planta && (
+                                        <option value={formData.fundo_planta}>{formData.fundo_planta} (Legacy)</option>
+                                    )}
+                                </select>
+                            </div>
+                            <div className="md:col-span-2">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cultivo</label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.cultivo}
+                                    onChange={(e) => handleChange("cultivo", e.target.value)}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="ARANDANO">ARANDANO</option>
+                                    <option value="PALTA">PALTA</option>
+                                    <option value="ESPARRAGO">ESPARRAGO</option>
+                                    <option value="UVA">UVA</option>
+                                    <option value="MANGO">MANGO</option>
+                                    <option value="PIMIENTO">PIMIENTO</option>
+                                    <option value="OTROS">OTROS</option>
+                                </select>
+                            </div>
+
+                            {/* Service Type - Filtered */}
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Tipo de Servicio</label>
                                 <select
@@ -493,12 +709,35 @@ export default function SolicitarTelefonia() {
                                     onChange={(e) => setFormData({ ...formData, tipo_servicio: e.target.value, paquete_asignado: "" })}
                                 >
                                     <option value="">Seleccione...</option>
-                                    <option value="CLARO">CLARO</option>
-                                    <option value="ENTEL">ENTEL</option>
-                                    <option value="MOVISTAR">MOVISTAR</option>
+
+                                    {/* 
+                                        Logic: 
+                                        1. Find selected Sede
+                                        2. Get allowed operators
+                                        3. If no coverage defined (empty array), show ALL (fail-safe) or NONE? 
+                                           User requested explicit assignment. But if DB is empty, user is blocked. 
+                                           I will show ALL if operators array is empty/undefined, BUT if it has values, restrict to them.
+                                    */}
+                                    {(() => {
+                                        const activeSede = sedes.find(s => s.nombre === formData.fundo_planta);
+                                        const allowedOps = activeSede?.operadores;
+                                        const hasRestrictions = allowedOps && allowedOps.length > 0;
+
+                                        // Get all unique operators from Plans
+                                        const allOps = Array.from(new Set(telefoniaStore.planes.filter(p => p.active).map(p => p.operador)));
+
+                                        return allOps.map(op => {
+                                            if (hasRestrictions && !allowedOps.includes(op)) return null;
+                                            return <option key={op} value={op}>{op}</option>;
+                                        });
+                                    })()}
+
                                     <option value="SOLO CHIP">SOLO CHIP</option>
                                     <option value="REPOSICIÓN">REPOSICIÓN DE EQUIPO</option>
                                 </select>
+                                {formData.fundo_planta && sedes.find(s => s.nombre === formData.fundo_planta)?.operadores?.length === 0 && (
+                                    <p className="text-[10px] text-orange-500 mt-1">* Sede sin cobertura configurada (se muestran todos)</p>
+                                )}
                             </div>
 
                             {["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && (
@@ -512,7 +751,14 @@ export default function SolicitarTelefonia() {
                                     >
                                         <option value="">Seleccione Plan...</option>
                                         {telefoniaStore.planes
-                                            .filter(p => p.operador === formData.tipo_servicio && p.active)
+                                            .filter(p => {
+                                                const matchOperator = p.operador === formData.tipo_servicio && p.active;
+                                                // If we have a specific recommended plan name, filter by it
+                                                if (recommendation?.plan) {
+                                                    return matchOperator && p.nombre === recommendation.plan;
+                                                }
+                                                return matchOperator;
+                                            })
                                             .map(p => (
                                                 <option key={p.id} value={p.nombre}>
                                                     {p.nombre} ({p.gigas})
@@ -560,41 +806,6 @@ export default function SolicitarTelefonia() {
                                     value={formData.fecha_fin}
                                     onChange={(e) => handleChange("fecha_fin", e.target.value)}
                                 />
-                            </div>
-
-                            <div>
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fundo / Planta</label>
-                                <select
-                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
-                                    value={formData.fundo_planta}
-                                    onChange={(e) => handleChange("fundo_planta", e.target.value)}
-                                >
-                                    <option value="">Seleccione...</option>
-                                    <option value="PLANTA FRESCO">PLANTA FRESCO</option>
-                                    <option value="PLANTA AREQUITA">PLANTA AREQUITA</option>
-                                    <option value="FUNDO MUCHIK">FUNDO MUCHIK</option>
-                                    <option value="COMPOSITAN">COMPOSITAN</option>
-                                    <option value="EL ARENAL">EL ARENAL</option>
-                                    <option value="CERRO PRIETO">CERRO PRIETO</option>
-                                    <option value="OTROS">OTROS</option>
-                                </select>
-                            </div>
-                            <div className="md:col-span-3">
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Cultivo</label>
-                                <select
-                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
-                                    value={formData.cultivo}
-                                    onChange={(e) => handleChange("cultivo", e.target.value)}
-                                >
-                                    <option value="">Seleccione...</option>
-                                    <option value="ARANDANO">ARANDANO</option>
-                                    <option value="PALTA">PALTA</option>
-                                    <option value="ESPARRAGO">ESPARRAGO</option>
-                                    <option value="UVA">UVA</option>
-                                    <option value="MANGO">MANGO</option>
-                                    <option value="PIMIENTO">PIMIENTO</option>
-                                    <option value="OTROS">OTROS</option>
-                                </select>
                             </div>
                         </div>
                     </div>

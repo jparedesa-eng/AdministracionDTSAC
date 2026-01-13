@@ -159,3 +159,98 @@ export function getCamarasByCentral(centralId: string): Camara[] {
 export function getCamarasBySede(sedeId: string): Camara[] {
     return state.camaras.filter(c => c.sede_id === sedeId);
 }
+
+// ===== LEGACY TYPES FROM types.ts =====
+export interface Inspection {
+    id: string;
+    unitPlate: string;
+    agentName: string;
+    timestamp: string;
+    checklist: {
+        tires: boolean;
+        lights: boolean;
+        fluids: boolean;
+        documents: boolean;
+        safetyGear: boolean;
+    };
+    signatureData: string;
+    approved: boolean;
+}
+
+export type ImageQuality = 'GOOD' | 'FAIR' | 'POOR' | 'UNREADABLE';
+
+// Renamed from Camera to avoid conflict with existing Camara type
+export interface LegacyCamera {
+    id: string;
+    systemId: string;
+    site: string;
+    name: string;
+    location: string;
+    status: 'ONLINE' | 'OFFLINE';
+    imageQuality?: ImageQuality;
+    lastCheck: string;
+    lastCheckType?: 'AM' | 'PM';
+    lastCheckBy?: string;
+}
+
+export interface Incident {
+    id: string;
+    type: 'NETWORK' | 'POWER' | 'VANDALISM' | 'OTHER';
+    description: string;
+    timestamp: string;
+    resolved: boolean;
+    cameraId?: string;
+}
+
+export interface Agent {
+    id: string;
+    name: string;
+    dni: string;
+}
+
+export interface Post {
+    id: string;
+    name: string;
+    site: string;
+    requiredShifts: 'DAY' | 'NIGHT' | 'BOTH';
+}
+
+export interface ShiftAssignment {
+    id: string;
+    date: string;
+    postId: string;
+    shift: 'DAY' | 'NIGHT';
+    agentId: string | 'UNCOVERED';
+    status: 'PENDING' | 'COMPLETED' | 'ABSENT';
+    absenceReason?: string;
+    absenceJustified?: boolean;
+}
+
+export type CheckpointStatus = 'PENDING' | 'COMPLETED' | 'LATE' | 'MISSED';
+
+export interface Checkpoint {
+    id: string;
+    scheduledTime: string;
+    status: CheckpointStatus;
+    completedAt?: string;
+    comment?: string;
+    isDistress?: boolean;
+    manualOverride?: boolean;
+}
+
+export interface AlertSchedule {
+    id: string;
+    agentId: string;
+    agentName: string;
+    postId: string;
+    postName: string;
+    site: string;
+    date: string;
+    startTime: string;
+    endTime: string;
+    frequencyMinutes: number;
+    dailyIndicator: string;
+    checkpoints: Checkpoint[];
+}
+
+export type ViewState = 'DASHBOARD' | 'CAMERAS' | 'TRANSPORT' | 'INSPECTION' | 'SCHEDULER' | 'ALERT_MONITOR' | 'AGENT_REPORT' | 'TRAVEL_TIMES' | 'DESTINATIONS';

@@ -44,6 +44,7 @@ export interface Equipo {
     color?: string | null;
     estado: EstadoEquipo;
     condicion?: CondicionEquipo;
+    fecha_compra?: string | null;
     created_at?: string;
     // Relations
     chip_id?: string | null;
@@ -122,6 +123,26 @@ export interface Solicitud {
     usuario?: any;
 }
 
+export interface Modelo {
+    id: string;
+    nombre: string;
+    marca: string;
+    ram?: string | null;
+    almacenamiento?: string | null;
+    created_at?: string;
+}
+
+export interface Puesto {
+    id: string;
+    nombre: string;
+    modelo_recomendado_id?: string | null;
+    plan_recomendado_id?: string | null;
+    created_at?: string;
+    // Relations
+    modelo?: Modelo | null;
+    plan?: PlanTelefonico | null;
+}
+
 /* =========================
  * Store
  * ========================= */
@@ -129,7 +150,99 @@ export const telefoniaStore = {
     equipos: [] as Equipo[],
     chips: [] as Chip[],
     planes: [] as PlanTelefonico[],
+    modelos: [] as Modelo[],
+    puestos: [] as Puesto[],
     solicitudes: [] as Solicitud[],
+
+    // --- MODELOS ---
+    async fetchModelos() {
+        const { data, error } = await supabase
+            .from("telefonia_modelos")
+            .select("*")
+            .order("nombre", { ascending: true });
+        if (error) throw error;
+        this.modelos = data as Modelo[];
+    },
+
+    async createModelo(modelo: Omit<Modelo, "id" | "created_at">) {
+        const { data, error } = await supabase
+            .from("telefonia_modelos")
+            .insert([modelo])
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchModelos();
+        return data as Modelo;
+    },
+
+    async updateModelo(id: string, updates: Partial<Modelo>) {
+        const { data, error } = await supabase
+            .from("telefonia_modelos")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchModelos();
+        return data as Modelo;
+    },
+
+    async deleteModelo(id: string) {
+        const { error } = await supabase
+            .from("telefonia_modelos")
+            .delete()
+            .eq("id", id);
+        if (error) throw error;
+        this.modelos = this.modelos.filter((m) => m.id !== id);
+    },
+
+    // --- PUESTOS ---
+    async fetchPuestos() {
+        const { data, error } = await supabase
+            .from("telefonia_puestos")
+            .select(`
+                *,
+                modelo:telefonia_modelos(*),
+                plan:telefonia_planes(*)
+            `)
+            .order("nombre", { ascending: true });
+        if (error) throw error;
+        this.puestos = data as Puesto[];
+    },
+
+    async createPuesto(puesto: Omit<Puesto, "id" | "created_at" | "modelo" | "plan">) {
+        const { data, error } = await supabase
+            .from("telefonia_puestos")
+            .insert([puesto])
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchPuestos();
+        return data as Puesto;
+    },
+
+    async updatePuesto(id: string, updates: Partial<Puesto>) {
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { modelo, plan, ...payload } = updates;
+        const { data, error } = await supabase
+            .from("telefonia_puestos")
+            .update(payload)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchPuestos();
+        return data as Puesto;
+    },
+
+    async deletePuesto(id: string) {
+        const { error } = await supabase
+            .from("telefonia_puestos")
+            .delete()
+            .eq("id", id);
+        if (error) throw error;
+        this.puestos = this.puestos.filter((p) => p.id !== id);
+    },
 
     // --- EQUIPOS ---
     async fetchEquipos() {
@@ -378,54 +491,72 @@ export const telefoniaStore = {
 
     // --- LOGIC / VALIDATIONS ---
     async validateRenovacion(numero: string): Promise<ValidationResult> {
-        const { data, error } = await supabase
-            .from("telefonia_solicitudes")
-            .select(`*, equipo:telefonia_equipos(*)`)
-            .eq("detalle_numero_telefono", numero) // Warning: Check if column exists, might need adjustment
-            .eq("estado", "Entregado")
-            .order("fecha_entrega", { ascending: false })
-            .limit(1);
+        // Clean input (remove spaces, hyphens)
+        const cleanNumber = numero.replace(/\s+/g, '').trim();
+        console.log("Validating renovation for:", cleanNumber);
 
-        if (error) {
-            // Silently fail or return message if column doesn't exist yet
-            console.error("Error validating renovation:", error);
-            return { valid: false, message: "Error al consultar historial." };
+        // 1. Buscar el chip activo con ese número
+        const { data: chipData, error: chipError } = await supabase
+            .from("telefonia_chips")
+            .select(`
+                id, 
+                numero_linea, 
+                equipo:telefonia_equipos!telefonia_chips_equipo_id_fkey(*)
+            `)
+            .eq("numero_linea", cleanNumber)
+            .maybeSingle();
+
+        if (chipError) {
+            console.error("Error finding chip:", chipError);
+            return { valid: false, message: "Error al consultar inventario." };
         }
 
-        if (!data || data.length === 0) {
-            return { valid: false, message: "No se encontró historial de entregas para este número." };
+        if (!chipData) {
+            return { valid: false, message: `No se encontró línea activa con el número ${cleanNumber}.` };
         }
 
-        const lastSolicitud = data[0];
-        if (!lastSolicitud.fecha_entrega) {
-            return { valid: false, message: "El registro existe pero no tiene fecha de entrega." };
+        // 2. Verificar si tiene equipo vinculado
+        const equipo = chipData.equipo as any;
+        if (!equipo) {
+            return { valid: false, message: "La línea existe pero no tiene un equipo vinculado." };
         }
 
-        const deliveryDate = new Date(lastSolicitud.fecha_entrega);
+        const infoEquipo = `${equipo.marca} ${equipo.modelo}`;
+
+        // 3. Verificar fecha de compra
+        if (!equipo.fecha_compra) {
+            return {
+                valid: false,
+                equipo: infoEquipo,
+                message: "El equipo no tiene Fecha de Compra registrada."
+            };
+        }
+
+        const purchaseDate = new Date(equipo.fecha_compra);
         const today = new Date();
-        let yearsDiff = today.getFullYear() - deliveryDate.getFullYear();
-        const m = today.getMonth() - deliveryDate.getMonth();
-        if (m < 0 || (m === 0 && today.getDate() < deliveryDate.getDate())) {
+
+        // Calculate precise year difference
+        let yearsDiff = today.getFullYear() - purchaseDate.getFullYear();
+        const m = today.getMonth() - purchaseDate.getMonth();
+        if (m < 0 || (m === 0 && today.getDate() < purchaseDate.getDate())) {
             yearsDiff--;
         }
 
-        const infoEquipo = lastSolicitud.equipo
-            ? `${lastSolicitud.equipo.marca} ${lastSolicitud.equipo.modelo}`
-            : "Equipo desconocido";
+        console.log(`Validation: Purchase=${purchaseDate.toISOString()}, YearsDiff=${yearsDiff}`);
 
         if (yearsDiff >= 3) {
             return {
                 valid: true,
-                lastDate: lastSolicitud.fecha_entrega,
+                lastDate: equipo.fecha_compra,
                 equipo: infoEquipo,
-                message: `Última renovación: ${deliveryDate.toLocaleDateString()}. Han pasado ${yearsDiff} años.`
+                message: `Antigüedad: ${yearsDiff} años. Apto para renovación.`
             };
         } else {
             return {
                 valid: false,
-                lastDate: lastSolicitud.fecha_entrega,
+                lastDate: equipo.fecha_compra,
                 equipo: infoEquipo,
-                message: `Solo han pasado ${yearsDiff} años (Regla: 3 años).`
+                message: `Solo tiene ${yearsDiff} años de antigüedad (Req: 3 años).`
             };
         }
     },
