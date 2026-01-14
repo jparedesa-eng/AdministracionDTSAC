@@ -34,7 +34,7 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
     };
 
     // Helper para status de aprobación individual
-    const ApprovalStatus = ({ title, approved, date }: { title: string, approved: boolean, date?: string | null }) => {
+    const ApprovalStatus = ({ title, approved, date }: { title: string, approved?: boolean | null, date?: string | null }) => {
         // Lógica: Si está aprobado = Verde. Si no, y el ticket está rechazado o cancelado = Rojo/Gris?
         // Si no está aprobado, asumimos Pendiente (Ambar) salvo que el ticket global esté rechazado/cancelado.
 

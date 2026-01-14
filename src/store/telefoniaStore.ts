@@ -72,6 +72,24 @@ export interface Chip {
     plan?: PlanTelefonico | null;
 }
 
+export interface Asignacion {
+    id: string;
+    solicitud_id: string;
+    equipo_id: string;
+    chip_id?: string | null;
+    fecha_entrega?: string | null;
+    fecha_entrega_final?: string | null;
+    fecha_devolucion?: string | null;
+    estado: string;
+    usuario_final_dni?: string | null;
+    usuario_final_nombre?: string | null;
+    usuario_final_area?: string | null;
+    created_at?: string;
+    // Relations
+    equipo?: Equipo | null;
+    chip?: Chip | null;
+}
+
 export interface Solicitud {
     id: string;
     created_at: string;
@@ -105,22 +123,14 @@ export interface Solicitud {
 
     // Asignaciones
     alternativa_modelo?: string | null;
+
+    // DEPRECATED COLUMNS (Legacy Data)
     equipo_asignado_id?: string | null;
     chip_asignado_id?: string | null;
-
-    // Aprobaciones
-    aprobacion_gerencia: boolean;
-    fecha_aprobacion_gerencia?: string | null;
-    aprobacion_admin: boolean;
-    fecha_aprobacion_admin?: string | null;
-
-    // Entrega / Asignación
-    fecha_entrega?: string | null;
-    recibido_por?: string | null;
-
-    // Devolución / Retorno
+    fecha_entrega?: string | null; // Keeps global delivery date
+    recibido_por?: string | null; // Global signature
     fecha_devolucion?: string | null;
-    estado_retorno?: string | null; // Bueno, Dañado, Robado
+    estado_retorno?: string | null;
     observaciones_retorno?: string | null;
 
     created_by?: string | null;
@@ -129,6 +139,15 @@ export interface Solicitud {
     equipo?: Equipo | null;
     chip?: Chip | null;
     usuario?: any;
+
+    // Approvals
+    aprobacion_gerencia?: boolean | null;
+    fecha_aprobacion_gerencia?: string | null;
+    aprobacion_admin?: boolean | null;
+    fecha_aprobacion_admin?: string | null;
+
+    // NEW: Multi-assignment
+    asignaciones?: Asignacion[];
 }
 
 export interface Modelo {
@@ -162,6 +181,7 @@ export const telefoniaStore = {
     modelos: [] as Modelo[],
     puestos: [] as Puesto[],
     solicitudes: [] as Solicitud[],
+    asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
 
     // --- MODELOS ---
     async fetchModelos() {
@@ -288,6 +308,46 @@ export const telefoniaStore = {
             });
         }
 
+        // New Assignments (Graceful fetch)
+        try {
+            const { data: newAssigns, error: newAssignError } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .select(`
+                    id, 
+                    equipo_id, 
+                    usuario_final_nombre, 
+                    usuario_final_area, 
+                    fecha_entrega, 
+                    solicitud_id,
+                    solicitud:telefonia_solicitudes (
+                        beneficiario_nombre,
+                        beneficiario_area
+                    )
+                `)
+                .eq("estado", "Entregado")
+                .is("fecha_devolucion", null);
+
+            if (!newAssignError && newAssigns) {
+                newAssigns.forEach((a: any) => {
+                    if (a.equipo_id) {
+                        // Priority: Ticket Info > Assignment Info
+                        const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "Usuario Asignado";
+                        const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "Área asignada";
+
+                        activeMap.set(a.equipo_id, {
+                            id: a.solicitud_id,
+                            beneficiario_nombre: nombre,
+                            beneficiario_area: area,
+                            fecha_entrega: a.fecha_entrega,
+                            tipo_servicio: "Asignación Múltiple"
+                        });
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("Could not fetch new assignments in fetchEquipos", e);
+        }
+
         this.equipos = (equiposData as Equipo[]).map(e => ({
             ...e,
             asignacion_activa: activeMap.get(e.id) || null
@@ -406,7 +466,8 @@ export const telefoniaStore = {
 
     // --- SOLICITUDES ---
     async fetchSolicitudes() {
-        const { data, error } = await supabase
+        // 1. Fetch Tickets
+        const { data: tickets, error } = await supabase
             .from("telefonia_solicitudes")
             .select(`
                 *,
@@ -416,10 +477,37 @@ export const telefoniaStore = {
             .order("created_at", { ascending: false });
         if (error) throw error;
 
-        this.solicitudes = data.map((d: any) => ({
+        let assignmentsMap: Record<string, Asignacion[]> = {};
+
+        // 2. Try Fetch Assignments (Graceful degradation if table missing)
+        try {
+            const { data: allAssignments, error: assignError } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .select(`
+                    *,
+                    equipo:telefonia_equipos(*),
+                    chip:telefonia_chips(*)
+                `);
+
+            if (!assignError && allAssignments) {
+                // Group by solicitud_id
+                allAssignments.forEach((a: any) => {
+                    if (!assignmentsMap[a.solicitud_id]) {
+                        assignmentsMap[a.solicitud_id] = [];
+                    }
+                    assignmentsMap[a.solicitud_id].push(a);
+                });
+            }
+        } catch (e) {
+            console.warn("Could not fetch assignments. Table might be missing.", e);
+        }
+
+        // 3. Merge
+        this.solicitudes = tickets.map((d: any) => ({
             ...d,
             equipo: d.equipo,
             chip: d.chip,
+            asignaciones: assignmentsMap[d.id] || []
         })) as Solicitud[];
     },
 
@@ -615,68 +703,79 @@ export const telefoniaStore = {
 
     async fetchHistorialEquipo(equipoId: string) {
         const { data, error } = await supabase
-            .from("telefonia_solicitudes")
+            .from("telefonia_solicitud_asignaciones")
             .select(`
-    *,
-    usuario: created_by(nombre, area)
-        `)
-            .eq("equipo_asignado_id", equipoId)
+                *,
+                solicitud:telefonia_solicitudes (
+                    id,
+                    beneficiario_nombre,
+                    beneficiario_area,
+                    beneficiario_puesto
+                )
+            `)
+            .eq("equipo_id", equipoId)
             .order("created_at", { ascending: false });
 
         if (error) throw error;
-        return data as Solicitud[];
+        return data as any[];
     },
 
     // --- ACCIONES AVANZADAS ---
 
-    async registrarDevolucion(solicitudId: string, estadoRetorno: string, observaciones: string) {
-        // 1. Fetch info
+    async registrarDevolucion(solicitudId: string, equipoId: string, estadoRetorno: string, observaciones: string) {
+        const fechaDevolucion = new Date().toISOString();
+
+        // 1. Update Specific Assignment in History Table (Preserves History)
+        const { error: assignErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                fecha_devolucion: fechaDevolucion,
+                estado: 'Devuelto'
+            })
+            .eq("solicitud_id", solicitudId)
+            .eq("equipo_id", equipoId)
+            .is("fecha_devolucion", null); // Close actively assigned only
+
+        if (assignErr) throw assignErr;
+
+        // 2. Fetch info for Legacy/Chip handling
+        // We still check the ticket to see if there's a linked chip to free
         const { data: solData, error: fetchErr } = await supabase
             .from("telefonia_solicitudes")
-            .select("equipo_asignado_id, chip_asignado_id")
+            .select("chip_asignado_id, equipo_asignado_id")
             .eq("id", solicitudId)
             .single();
 
         if (fetchErr) throw fetchErr;
 
-        const { equipo_asignado_id, chip_asignado_id } = solData;
-        const fechaDevolucion = new Date().toISOString();
+        // 3. Update Legacy Ticket (if it matches this equipment, or just to close the ticket lifecycle)
+        // If the ticket has multiple items, this might be tricky, but for now we assume we close the "Active" status of the ticket if it was Entregado.
+        // We only update the global ticket return date if it's the main equipment.
+        if (solData.equipo_asignado_id === equipoId) {
+            await supabase
+                .from("telefonia_solicitudes")
+                .update({
+                    fecha_devolucion: fechaDevolucion,
+                    estado_retorno: estadoRetorno,
+                    observaciones_retorno: observaciones,
+                    estado: 'Devuelto' // Optional: Mark ticket as closed/returned
+                })
+                .eq("id", solicitudId);
+        }
 
-        // 2. Update Solicitud
-        const { error: solUpdateErr } = await supabase
-            .from("telefonia_solicitudes")
-            .update({
-                fecha_devolucion: fechaDevolucion,
-                estado_retorno: estadoRetorno,
-                observaciones_retorno: observaciones
-            })
-            .eq("id", solicitudId);
-
-        if (solUpdateErr) throw solUpdateErr;
-
-        // 3. Update Equipo
+        // 4. Update Equipo Status (Free it)
         const nuevoEstadoEquipo: EstadoEquipo = (estadoRetorno === "Dañado" || estadoRetorno === "Robado")
             ? "Mantenimiento"
             : "Disponible";
 
-        if (equipo_asignado_id) {
-            await supabase
-                .from("telefonia_equipos")
-                .update({
-                    estado: nuevoEstadoEquipo,
-                    condicion: "Segundo Uso"
-                })
-                .eq("id", equipo_asignado_id);
+        await supabase
+            .from("telefonia_equipos")
+            .update({
+                estado: nuevoEstadoEquipo,
+                condicion: "Segundo Uso"
+            })
+            .eq("id", equipoId);
 
-            // Si hay chip, desvincular y liberar
-            if (chip_asignado_id) {
-                await this.desvincular(equipo_asignado_id, chip_asignado_id);
-                await supabase
-                    .from("telefonia_chips")
-                    .update({ estado: "Disponible" })
-                    .eq("id", chip_asignado_id);
-            }
-        }
         await this.fetchEquipos();
     },
 
@@ -758,6 +857,126 @@ export const telefoniaStore = {
 
         // Aquí deberíamos buscar la solicitud de BAJA_INTERNA pendiente y cerrarla
         // pero por ahora simplificamos solo actualizando el equipo.
+        await this.fetchEquipos();
+    },
+
+    async fetchAsignaciones(solicitudId: string) {
+        const { data, error } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                *,
+                equipo:telefonia_equipos(*),
+                chip:telefonia_chips(*)
+            `)
+            .eq("solicitud_id", solicitudId);
+
+        if (error) throw error;
+        return data as Asignacion[];
+    },
+
+    async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string) {
+        // 1. Insert Assignments
+        const assignmentsPayload = items.map(item => ({
+            solicitud_id: solicitudId,
+            equipo_id: item.equipoId,
+            chip_id: item.chipId || null,
+            fecha_entrega: new Date().toISOString(),
+            estado: 'Entregado'
+        }));
+
+        const { error: assignError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .insert(assignmentsPayload);
+
+        if (assignError) throw assignError;
+
+        // 2. Update Equipment Status
+        const equipoIds = items.map(i => i.equipoId);
+        const { error: eqError } = await supabase
+            .from("telefonia_equipos")
+            .update({ estado: "Asignado" })
+            .in("id", equipoIds);
+
+        if (eqError) throw eqError;
+
+        // 3. Update Chips Status (if any)
+        const chipIds = items.map(i => i.chipId).filter(id => id);
+        if (chipIds.length > 0) {
+            await supabase
+                .from("telefonia_chips")
+                .update({ estado: "Asignado" })
+                .in("id", chipIds);
+        }
+
+        // 4. Update Solicitud Status (Entregado) and Main Signature
+        // NOTE: We persist the MAIN signature in the ticket for record of "Bulk Delivery".
+        // Recipient is the "Responsable del Bloque".
+        await this.updateSolicitud(solicitudId, {
+            estado: "Entregado",
+            fecha_entrega: new Date().toISOString(),
+            recibido_por: firma
+        });
+
+        await this.fetchSolicitudes();
+        await this.fetchEquipos();
+    },
+
+    async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; fecha_entrega_final?: string }) {
+        const { error } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                usuario_final_dni: datos.dni,
+                usuario_final_nombre: datos.nombre,
+                usuario_final_area: datos.area,
+                fecha_entrega_final: datos.fecha_entrega_final
+            })
+            .eq("id", asignacionId);
+
+        if (error) throw error;
+        await this.fetchSolicitudes();
+    },
+
+    async registrarDevolucionItem(asignacionId: string, estadoRetorno: string, _observaciones: string) {
+        // 1. Update Asignacion
+        const { data: asignacion, error: fetchErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                fecha_devolucion: new Date().toISOString(),
+                estado: "Devuelto",
+                // We might want to store return condition per item in a separate log or field if needed,
+                // but schema only has status. For now we assume 'Devuelto' status implies return.
+                // We can use the 'estado' field for tracking 'Devuelto' status.
+            })
+            .eq("id", asignacionId)
+            .select()
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        // 2. Update Equipo Status
+        if (asignacion.equipo_id) {
+            await supabase
+                .from("telefonia_equipos")
+                .update({
+                    estado: (estadoRetorno === "Dañado" || estadoRetorno === "Robado") ? "Mantenimiento" : "Disponible",
+                    condicion: "Segundo Uso"
+                })
+                .eq("id", asignacion.equipo_id);
+        }
+
+        // 3. Update Chip Status
+        if (asignacion.chip_id) {
+            await supabase
+                .from("telefonia_chips")
+                .update({ estado: "Disponible" })
+                .eq("id", asignacion.chip_id);
+        }
+
+        // 4. Check if ALL items in the ticket are returned?
+        // Optional: If all returned, mark Ticket as "Finalizado/Devuelto"?
+        // For now, we leave the ticket as "Entregado" but items are free.
+
+        await this.fetchSolicitudes();
         await this.fetchEquipos();
     }
 };

@@ -95,16 +95,31 @@ export default function GestionTelefonia() {
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
-    const [entregaData, setEntregaData] = useState({ recibidoPor: "", equipoId: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" });
+    // Multi-assignment state
+    const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string }[]>([]);
+
+    // Legacy support or extra fields
+    const [entregaData, setEntregaData] = useState({ recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" });
     const sig = useSignaturePad();
 
     // Clear signature when modal opens
     useEffect(() => {
         if (selectedTicket) {
             // Reset state when opening a ticket
-            setEntregaData(prev => ({ ...prev, recibidoPor: "", equipoId: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" }));
+            setEntregaData(prev => ({ ...prev, recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" }));
+            setSelectedItems([]);
 
             if (selectedTicket.estado === "Programar Entrega") {
+                // Initialize slots based on quantity (default 1 if null)
+                const qty = selectedTicket.cantidad_lineas || 1;
+                const initialSlots = Array.from({ length: qty }).map((_, i) => ({ index: i, equipoId: "" }));
+
+                // If legacy assignment exists, pre-fill slot 0
+                if (selectedTicket.equipo_asignado_id) {
+                    initialSlots[0].equipoId = selectedTicket.equipo_asignado_id;
+                }
+                setSelectedItems(initialSlots);
+
                 setTimeout(() => sig.clear(), 100);
             }
         }
@@ -131,29 +146,37 @@ export default function GestionTelefonia() {
         if (!selectedTicket) return;
         const firma = sig.toDataURL();
 
-        // Basic check if empty (not perfect but prevents blank submits if canvas wasn't touched)
-        // ideally we track "has drawn" state
         if (!firma) {
             alert("Error al obtener firma.");
             return;
         }
 
+        // Validate all slots filled
+        const filled = selectedItems.filter(i => i.equipoId !== "");
+        const qty = selectedTicket.cantidad_lineas || 1;
+
+        if (filled.length !== qty) {
+            alert(`Debe seleccionar ${qty} equipos para completar la entrega.`);
+            return;
+        }
+
         try {
-            await telefoniaStore.updateSolicitud(selectedTicket.id, {
-                fecha_entrega: new Date().toISOString(),
-                recibido_por: firma, // Save signature as Data URI
-                equipo_asignado_id: entregaData.equipoId || selectedTicket.equipo_asignado_id,
-                estado: "Entregado"
+            // Map to store format
+            const itemsToAssign = filled.map(i => {
+                const eq = telefoniaStore.equipos.find(e => e.id === i.equipoId);
+                return {
+                    equipoId: i.equipoId,
+                    chipId: eq?.chip_id || null
+                };
             });
 
-            if (entregaData.equipoId) {
-                await telefoniaStore.updateEquipo(entregaData.equipoId, { estado: "Asignado" });
-            }
+            await telefoniaStore.asignarEquipos(selectedTicket.id, itemsToAssign, firma);
+
             setToast({ type: "success", message: "Entrega registrada correctamente" });
             setSelectedTicket(null);
             loadData();
         } catch (e: any) {
-            setToast({ type: "error", message: e.message });
+            setToast({ type: "error", message: e.message || "Error al registrar entrega" });
         }
     };
 
@@ -376,29 +399,46 @@ export default function GestionTelefonia() {
                                 </div>
 
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">Equipo a Asignar / Entregar</label>
-                                    <select
-                                        className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                        value={entregaData.equipoId}
-                                        onChange={(e) => setEntregaData({ ...entregaData, equipoId: e.target.value })}
-                                        disabled={loading}
-                                    >
-                                        <option value="">
-                                            {selectedTicket.equipo_asignado_id
-                                                ? "-- Mantener asignación previa --"
-                                                : "-- Seleccionar de Inventario --"}
-                                        </option>
-                                        {telefoniaStore.equipos
-                                            .filter(e => e.estado === "Disponible" || e.id === selectedTicket.equipo_asignado_id)
-                                            .map(e => (
-                                                <option key={e.id} value={e.id}>
-                                                    {e.marca} {e.modelo} | IMEI: {e.imei}
-                                                </option>
-                                            ))
-                                        }
-                                    </select>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Asignación de Equipos ({selectedItems.filter(i => i.equipoId).length} / {selectedTicket.cantidad_lineas || 1})
+                                    </label>
+
+                                    <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                                        {selectedItems.map((slot) => (
+                                            <div key={slot.index} className="p-2 bg-gray-50 border border-gray-200 rounded-md">
+                                                <span className="text-xs font-bold text-gray-500 uppercase mb-1 block">Equipo #{slot.index + 1}</span>
+                                                <select
+                                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                                    value={slot.equipoId}
+                                                    onChange={(e) => {
+                                                        const newVal = e.target.value;
+                                                        // Prevent selecting same equipment in multiple slots (optional validation)
+                                                        const alreadySelected = selectedItems.some(i => i.equipoId === newVal && i.index !== slot.index);
+                                                        if (alreadySelected && newVal !== "") {
+                                                            alert("Este equipo ya está seleccionado en otro espacio.");
+                                                            return;
+                                                        }
+
+                                                        setSelectedItems(prev => prev.map(item => item.index === slot.index ? { ...item, equipoId: newVal } : item));
+                                                    }}
+                                                    disabled={loading}
+                                                >
+                                                    <option value="">-- Seleccionar Equipo Disponible --</option>
+                                                    {telefoniaStore.equipos
+                                                        .filter(e => e.estado === "Disponible" || e.id === slot.equipoId) // Show available + currently selected by this slot
+                                                        .filter(e => !selectedItems.some(item => item.equipoId === e.id && item.index !== slot.index)) // Exclude selected by OTHERS
+                                                        .map(e => (
+                                                            <option key={e.id} value={e.id}>
+                                                                {e.marca} {e.modelo} | IMEI: {e.imei}
+                                                            </option>
+                                                        ))
+                                                    }
+                                                </select>
+                                            </div>
+                                        ))}
+                                    </div>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        Seleccione el equipo físico que se está entregando para asignarlo definitivamente.
+                                        Seleccione los equipos físicos a entregar. Debe completar la cantidad solicitada.
                                     </p>
                                 </div>
 
@@ -432,7 +472,7 @@ export default function GestionTelefonia() {
                                 <div className="flex flex-col gap-2">
                                     <button
                                         onClick={submitEntrega}
-                                        disabled={!entregaData.equipoId && !selectedTicket.equipo_asignado_id}
+                                        disabled={selectedItems.some(i => i.equipoId === "")}
                                         className="w-full bg-green-600 text-white rounded-lg py-2.5 font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
                                     >
                                         Confirmar Entrega

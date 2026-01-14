@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../auth/AuthContext";
-import { telefoniaStore } from "../../store/telefoniaStore";
+import { telefoniaStore, type Solicitud } from "../../store/telefoniaStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getPersonalState, subscribePersonal } from "../../store/personalStore";
 import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore"; // NEW
@@ -22,6 +22,7 @@ import {
     X,
 } from "lucide-react";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
+import { RedistributionModal } from "../../components/telefonia/RedistributionModal";
 import { Modal } from "../../components/ui/Modal";
 
 
@@ -56,6 +57,8 @@ export default function SolicitarTelefonia() {
     const [validating, setValidating] = useState(false);
 
     // Modal controls
+    const [selectedDetail, setSelectedDetail] = useState<Solicitud | null>(null);
+    const [redistributionTicket, setRedistributionTicket] = useState<Solicitud | null>(null);
     const [isWizardOpen, setIsWizardOpen] = useState(false);
     const [appSearch, setAppSearch] = useState("");
     const [previousDevice, setPreviousDevice] = useState<string>("");
@@ -139,8 +142,7 @@ export default function SolicitarTelefonia() {
     const [, setSedesVersion] = useState(0);
     const { sedes } = getSedesState();
 
-    // Detail Modal State
-    const [selectedDetail, setSelectedDetail] = useState<any | null>(null);
+
 
     // Filter mis tickets
     const myTickets = useMemo(() => {
@@ -1351,19 +1353,44 @@ export default function SolicitarTelefonia() {
                     title={`Detalle de Solicitud #${selectedDetail.id?.slice(0, 8)}`}
                     size="lg"
                     footer={
-                        <button
-                            onClick={() => setSelectedDetail(null)}
-                            className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
-                        >
-                            Cerrar
-                        </button>
+                        <div className="flex gap-2">
+                            {selectedDetail?.estado === "Entregado" && (
+                                <button
+                                    onClick={() => {
+                                        setRedistributionTicket(selectedDetail);
+                                        setSelectedDetail(null);
+                                    }}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
+                                >
+                                    <span className="text-lg">👥</span> Asignar Responsables
+                                </button>
+                            )}
+                            <button
+                                onClick={() => setSelectedDetail(null)}
+                                className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     }
                 >
                     <div className="pt-2">
                         <TicketDetailContent ticket={selectedDetail} />
                     </div>
                 </Modal>
-            )}
-        </div>
+            )
+            }
+
+            {/* REDISTRIBUTION MODAL */}
+            {
+                redistributionTicket && (
+                    <RedistributionModal
+                        isOpen={!!redistributionTicket}
+                        onClose={() => setRedistributionTicket(null)}
+                        ticket={redistributionTicket}
+                    />
+                )
+            }
+        </div >
     );
 }

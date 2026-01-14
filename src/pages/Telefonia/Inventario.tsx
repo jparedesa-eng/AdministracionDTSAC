@@ -125,6 +125,7 @@ export default function InventarioTelefonia() {
         try {
             await telefoniaStore.registrarDevolucion(
                 modalActionItem.asignacion_activa.id,
+                modalActionItem.id,
                 devolucionData.estado,
                 devolucionData.observaciones
             );
@@ -1427,51 +1428,65 @@ export default function InventarioTelefonia() {
                         </div>
 
                     ) : (
-                        <div className="space-y-4 text-sm">
-                            {historyData.map((req: any) => (
-                                <div key={req.id} className="flex flex-col border-b border-gray-100 pb-3 last:border-0 last:pb-0">
-                                    <div className="flex justify-between items-start">
-                                        <div>
-                                            <p className="font-semibold text-gray-900 flex items-center gap-2">
-                                                {req.beneficiario_nombre || "Usuario Desconocido"}
-                                                <span className="text-xs font-normal text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">
-                                                    Ticket #{req.id.substring(0, 8)}
+                        <div className="overflow-hidden border border-gray-200 rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsable Ticket</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario Final</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fechas</th>
+                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {historyData.map((assign: any) => (
+                                        <tr key={assign.id} className="hover:bg-gray-50">
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="text-sm font-medium text-gray-900">
+                                                    {assign.solicitud?.beneficiario_nombre || "N/A"}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {assign.solicitud?.beneficiario_area || assign.solicitud?.beneficiario_puesto || "-"}
+                                                </div>
+                                                {assign.solicitud_id && (
+                                                    <div className="mt-1">
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 font-mono">
+                                                            #{assign.solicitud_id.substring(0, 8)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="text-sm font-medium text-indigo-700">
+                                                    {assign.usuario_final_nombre || "Mismo Beneficiario"}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {assign.usuario_final_area || "-"}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                                                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                                                        <span>Entrega: {assign.fecha_entrega ? new Date(assign.fecha_entrega).toLocaleDateString() : "Pendiente"}</span>
+                                                    </div>
+                                                    {assign.fecha_devolucion && (
+                                                        <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded w-fit">
+                                                            <ArrowLeftRight className="w-3.5 h-3.5" />
+                                                            <span>Devolución: {new Date(assign.fecha_devolucion).toLocaleDateString()}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top text-right">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
+                                                    {assign.fecha_devolucion ? "Devuelto" : "Activo"}
                                                 </span>
-                                            </p>
-                                            <p className="text-xs text-gray-500 mt-0.5">{req.beneficiario_puesto}</p>
-                                        </div>
-                                        <div className="flex flex-col items-end gap-1">
-                                            <span className={`px-2 py-0.5 text-xs rounded-full font-medium ${req.estado === 'Entregado' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                {req.estado}
-                                            </span>
-                                            {req.tipo_servicio === 'ASIGNACION_DIRECTA' && (
-                                                <span className="text-[10px] bg-blue-50 text-blue-700 px-1 rounded border border-blue-100">Directa</span>
-                                            )}
-                                        </div>
-                                    </div>
-                                    <div className="flex gap-4 mt-2 text-xs text-gray-500">
-                                        <div className="flex items-center gap-2">
-                                            <Calendar className="w-3.5 h-3.5" />
-                                            <span className="font-medium">
-                                                Entrega: {req.fecha_entrega ? new Date(req.fecha_entrega).toLocaleDateString() : <span className="text-gray-400 italic">Pendiente</span>}
-                                            </span>
-                                        </div>
-                                        {req.fecha_devolucion && (
-                                            <div className="flex items-center gap-2 text-amber-600">
-                                                <ArrowLeftRight className="w-3.5 h-3.5" />
-                                                <span className="font-medium">
-                                                    Devolución: {new Date(req.fecha_devolucion).toLocaleDateString()}
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                    {req.observaciones_retorno && (
-                                        <div className="mt-2 bg-gray-50 p-2 rounded text-xs text-gray-600 italic">
-                                            "{req.observaciones_retorno}"
-                                        </div>
-                                    )}
-                                </div>
-                            ))}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
                     )}
                 </div>

@@ -41,6 +41,8 @@ import AprobacionAdmin from "./pages/Telefonia/AprobacionAdmin";
 import ModelosTelefonia from "./pages/Telefonia/Catalogos/Modelos";
 import PuestosTelefonia from "./pages/Telefonia/Catalogos/Puestos";
 
+import MisEquipos from "./pages/Telefonia/MisEquipos";
+
 /* Configuración */
 import PersonalPage from "./pages/configuracion/PersonalPage";
 import GerenciasPage from "./pages/configuracion/GerenciasPage";
@@ -318,6 +320,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/telefonia/solicitar">
                 <SolicitarTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/mis-equipos"
+            element={
+              <ProtectedRoute path="/telefonia/solicitar">
+                <MisEquipos />
               </ProtectedRoute>
             }
           />

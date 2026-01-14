@@ -22,7 +22,8 @@ import {
   ChevronsRight,
   Monitor,
   Route,
-  SignalHigh
+  SignalHigh,
+  User
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -172,6 +173,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // --- Telefonia (Merged into Administracion) ---
     const telefoniaSubItems: NavItem[] = [];
+    if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-mis-equipos', label: 'Mis Equipos', path: '/telefonia/mis-equipos', icon: User });
     if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-sol', label: 'Solicitar', path: '/telefonia/solicitar', icon: FilePlus2 });
     if (canSeeTel_Inventario) telefoniaSubItems.push({ id: 'tel-inv', label: 'Inventario', path: '/telefonia/inventario', icon: Wrench });
     if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ListChecks });
