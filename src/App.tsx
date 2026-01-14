@@ -63,6 +63,10 @@ import { DestinationsTable } from "./pages/Seguridad/DestinationsTable";
 import { ReportingManager } from "./pages/Seguridad/ReportingManager";
 import { AgentReportView } from "./pages/Seguridad/AgentReportView";
 import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
+import InventarioSensores from "./pages/Seguridad/InventarioSensores";
+import InventarioPantallas from "./pages/Seguridad/InventarioPantallas";
+import InventarioNVR from "./pages/Seguridad/InventarioNVR";
+import RegistroEventosMayores from "./pages/Seguridad/RegistroEventosMayores";
 
 
 
@@ -504,6 +508,38 @@ export default function App() {
             element={
               <ProtectedRoute path="/seguridad/monitoreo-pt">
                 <DestinationsTable />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/sensores"
+            element={
+              <ProtectedRoute path="/seguridad/sensores">
+                <InventarioSensores />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/pantallas"
+            element={
+              <ProtectedRoute path="/seguridad/pantallas">
+                <InventarioPantallas />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/nvr"
+            element={
+              <ProtectedRoute path="/seguridad/nvr">
+                <InventarioNVR />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/eventos"
+            element={
+              <ProtectedRoute path="/seguridad/eventos">
+                <RegistroEventosMayores />
               </ProtectedRoute>
             }
           />

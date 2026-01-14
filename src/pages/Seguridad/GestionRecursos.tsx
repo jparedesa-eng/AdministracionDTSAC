@@ -79,35 +79,55 @@ export default function GestionRecursos() {
                         </div>
 
                         {/* Mobile Only: Counters appear here next to title */}
-                        <div className="flex flex-col items-end gap-1.5 sm:hidden">
-                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50/50 rounded-md border border-blue-100">
-                                <Users size={12} className="text-blue-600" />
-                                <span className="text-xs font-bold text-blue-900">{activeAgentesCount}</span>
-                                <span className="text-[10px] text-blue-400">/ {agentes.length}</span>
+                        <div className="flex items-end gap-2 sm:hidden">
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-gray-200">
+                                <div className="p-1 bg-blue-50 rounded-md">
+                                    <Users size={14} className="text-blue-600" />
+                                </div>
+                                <div className="flex flex-col items-end leading-none">
+                                    <span className="text-base font-bold text-gray-900">{activeAgentesCount}</span>
+                                    <span className="text-[10px] text-gray-500 font-medium">Agentes</span>
+                                </div>
                             </div>
-                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50/50 rounded-md border border-emerald-100">
-                                <MapPin size={12} className="text-emerald-600" />
-                                <span className="text-xs font-bold text-emerald-900">{activePuestosCount}</span>
-                                <span className="text-[10px] text-emerald-400">/ {puestos.length}</span>
+                            <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-lg border border-gray-200">
+                                <div className="p-1 bg-emerald-50 rounded-md">
+                                    <MapPin size={14} className="text-emerald-600" />
+                                </div>
+                                <div className="flex flex-col items-end leading-none">
+                                    <span className="text-base font-bold text-gray-900">{activePuestosCount}</span>
+                                    <span className="text-[10px] text-gray-500 font-medium">Puestos</span>
+                                </div>
                             </div>
                         </div>
                     </div>
 
                     {/* Desktop Only: Counters appear inline */}
-                    <div className="hidden sm:flex items-center gap-3">
-                        <div className="h-8 w-px bg-gray-200"></div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 rounded-lg border border-blue-100">
-                            <Users size={14} className="text-blue-600" />
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-sm font-bold text-blue-900">{activeAgentesCount}</span>
-                                <span className="text-[10px] text-blue-400">/ {agentes.length}</span>
+                    <div className="hidden sm:flex items-center gap-4">
+                        <div className="h-10 w-px bg-gray-200"></div>
+
+                        <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-gray-200">
+                            <div className="p-2 bg-blue-50 rounded-lg">
+                                <Users size={20} className="text-blue-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Agentes</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-bold text-gray-900">{activeAgentesCount}</span>
+                                    <span className="text-xs text-gray-400 font-medium">/ {agentes.length}</span>
+                                </div>
                             </div>
                         </div>
-                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50/50 rounded-lg border border-emerald-100">
-                            <MapPin size={14} className="text-emerald-600" />
-                            <div className="flex items-baseline gap-1">
-                                <span className="text-sm font-bold text-emerald-900">{activePuestosCount}</span>
-                                <span className="text-[10px] text-emerald-400">/ {puestos.length}</span>
+
+                        <div className="flex items-center gap-3 px-4 py-2 bg-white rounded-xl border border-gray-200">
+                            <div className="p-2 bg-emerald-50 rounded-lg">
+                                <MapPin size={20} className="text-emerald-600" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-gray-500 font-medium uppercase tracking-wide">Puestos</p>
+                                <div className="flex items-baseline gap-1">
+                                    <span className="text-2xl font-bold text-gray-900">{activePuestosCount}</span>
+                                    <span className="text-xs text-gray-400 font-medium">/ {puestos.length}</span>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -148,15 +168,7 @@ export default function GestionRecursos() {
             <div className="min-h-[500px]">
                 {activeTab === "agentes" ? (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
-                            <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center border border-blue-100">
-                                <Users size={20} />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900">Directorio de Agentes</h2>
-                                <p className="text-sm text-gray-500">Gestione la información y asignaciones del personal.</p>
-                            </div>
-                        </div>
+
                         <TabAgentes
                             agentes={agentes}
                             supervisores={supervisores}
@@ -189,15 +201,7 @@ export default function GestionRecursos() {
                     </div>
                 ) : (
                     <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
-                            <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center border border-emerald-100">
-                                <MapPin size={20} />
-                            </div>
-                            <div>
-                                <h2 className="text-lg font-bold text-gray-900">Directorio de Puestos</h2>
-                                <p className="text-sm text-gray-500">Administre las ubicaciones y turnos de vigilancia.</p>
-                            </div>
-                        </div>
+
                         <TabPuestos
                             sedes={sedes}
                             puestos={puestos}
@@ -305,13 +309,13 @@ function TabAgentes({
                         <input
                             type="text"
                             placeholder="Buscar agente..."
-                            className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
+                            className="pl-9 w-full rounded-xl border border-gray-300 text-sm focus:ring-red-500 focus:border-red-500 h-10"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                         />
                     </div>
                     <select
-                        className="h-10 rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 w-40"
+                        className="h-10 rounded-xl border border-gray-300 text-sm focus:ring-red-500 focus:border-red-500 w-40"
                         value={supervisorFilter}
                         onChange={e => setSupervisorFilter(e.target.value)}
                     >
@@ -519,13 +523,13 @@ function TabPuestos({
                         <input
                             type="text"
                             placeholder="Buscar puesto..."
-                            className="pl-9 w-full rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 h-10"
+                            className="pl-9 w-full rounded-xl border border-gray-300 text-sm focus:ring-red-500 focus:border-red-500 h-10"
                             value={search}
                             onChange={e => setSearch(e.target.value)}
                         />
                     </div>
                     <select
-                        className="h-10 rounded-xl border-gray-200 text-sm focus:ring-red-500 focus:border-red-500 w-40"
+                        className="h-10 rounded-xl border border-gray-300 text-sm focus:ring-red-500 focus:border-red-500 w-40"
                         value={sedeFilter}
                         onChange={e => setSedeFilter(e.target.value)}
                     >

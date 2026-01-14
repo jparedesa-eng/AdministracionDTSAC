@@ -23,7 +23,8 @@ import {
   Monitor,
   Route,
   SignalHigh,
-  User
+  User,
+  Activity
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -208,13 +209,17 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
       seguridadItems.push({ id: 'seg-puestos', label: 'Programación de Puestos', icon: CalendarDays, subItems: progSubItems });
     }
 
-    // 2. Checklist de Camaras
+    // 2. Checklist CCTV
     const checklistSubItems: NavItem[] = [];
     if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/seguridad/inventario-camaras', icon: Wrench });
+    if (hasAccess("/seguridad/sensores")) checklistSubItems.push({ id: 'seg-sens', label: 'Inventario Sens.', path: '/seguridad/sensores', icon: Activity });
+    if (hasAccess("/seguridad/pantallas")) checklistSubItems.push({ id: 'seg-pant', label: 'Inventario Pan.', path: '/seguridad/pantallas', icon: Monitor });
+    if (hasAccess("/seguridad/nvr")) checklistSubItems.push({ id: 'seg-nvr', label: 'Inventario NVR', path: '/seguridad/nvr', icon: Building2 });
     if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
+    if (hasAccess("/seguridad/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos Mayores', path: '/seguridad/eventos', icon: Settings });
 
     if (checklistSubItems.length > 0) {
-      seguridadItems.push({ id: 'seg-camaras', label: 'Checklist de Cámaras', icon: ClipboardList, subItems: checklistSubItems });
+      seguridadItems.push({ id: 'seg-camaras', label: 'Checklist CCTV', icon: ClipboardList, subItems: checklistSubItems });
     }
 
     // 3. Monitoreo de Unidades
