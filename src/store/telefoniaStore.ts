@@ -143,8 +143,11 @@ export interface Solicitud {
     // Approvals
     aprobacion_gerencia?: boolean | null;
     fecha_aprobacion_gerencia?: string | null;
+    aprobacion_gerencia_nombre?: string | null;
+
     aprobacion_admin?: boolean | null;
     fecha_aprobacion_admin?: string | null;
+    aprobacion_admin_nombre?: string | null;
 
     // NEW: Multi-assignment
     asignaciones?: Asignacion[];

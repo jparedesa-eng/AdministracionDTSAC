@@ -9,9 +9,11 @@ import {
     Search,
     Calendar,
     Eraser,
-    FileDown
+    FileDown,
+    XCircle
 } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
+import { Html5QrcodeScanner } from "html5-qrcode";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 // STANDARD_MODELS removed in favor of telefoniaStore.modelos
@@ -88,7 +90,7 @@ function useSignaturePad() {
 }
 
 export default function GestionTelefonia() {
-    const [loading, setLoading] = useState(false);
+
     const [toast, setToast] = useState<ToastState>(null);
     const [searchTerm, setSearchTerm] = useState("");
     const [selectedMonth, setSelectedMonth] = useState<string>(""); // "YYYY-MM"
@@ -97,6 +99,104 @@ export default function GestionTelefonia() {
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     // Multi-assignment state
     const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string }[]>([]);
+
+    // NEW: Unified Scanner State
+    const [imeiInput, setImeiInput] = useState("");
+    const [showCamera, setShowCamera] = useState(false);
+
+    // Derived state for filtered options (Unified Search)
+    const filteredEquipos = telefoniaStore.equipos
+        .filter(e => e.estado === "Disponible" && !selectedItems.some(i => i.equipoId === e.id))
+        .filter(e => {
+            if (!imeiInput) return false; // Show nothing until typed? Or show all? User asked for "filter dropdown"
+            const search = imeiInput.toLowerCase();
+            return e.imei.includes(search) || e.modelo.toLowerCase().includes(search) || e.marca.toLowerCase().includes(search);
+        });
+
+    const assignEquipmentToSlot = (eqId: string) => {
+        // Find equipment
+        const eq = telefoniaStore.equipos.find(item => item.id === eqId);
+        if (!eq) return;
+
+        // Check if already selected locally
+        if (selectedItems.some(i => i.equipoId === eq.id)) {
+            setToast({ type: "warning", message: `El equipo ${eq.modelo} (${eq.imei}) ya está seleccionado.` });
+            return;
+        }
+
+        // Find first empty slot
+        const emptySlotIndex = selectedItems.findIndex(i => i.equipoId === "");
+        if (emptySlotIndex === -1) {
+            setToast({ type: "info", message: "Todos los espacios ya están completos. Elimine uno para cambiarlo." });
+            return;
+        }
+
+        // Assign
+        setSelectedItems(prev => prev.map(item => item.index === emptySlotIndex ? { ...item, equipoId: eq.id } : item));
+        setToast({ type: "success", message: `Equipo agregado: ${eq.modelo}` });
+        setImeiInput(""); // Clear inputs
+        setShowCamera(false);
+    };
+
+    const handleImeiScan = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === "Enter") {
+            e.preventDefault();
+            const imei = imeiInput.trim();
+            if (!imei) return;
+
+            // 1. Try exact IMEI match
+            const exact = telefoniaStore.equipos.find(eq => eq.imei === imei && eq.estado === "Disponible");
+            if (exact) {
+                assignEquipmentToSlot(exact.id);
+                return;
+            }
+
+            // 2. Try single filtered match? (Optional, maybe risky)
+            // If only 1 result stays in filter, maybe select it? Nah, better safe.
+
+            setToast({ type: "error", message: `IMEI ${imei} no encontrado o no disponible.` });
+        }
+    };
+
+    // Camera Handler
+    useEffect(() => {
+        if (showCamera) {
+            const scanner = new Html5QrcodeScanner(
+                "reader",
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                /* verbose= */ false
+            );
+
+            scanner.render((decodedText) => {
+                // Success
+                console.log("Scanned:", decodedText);
+                const imei = decodedText;
+
+                // Find equipment by IMEI
+                const eq = telefoniaStore.equipos.find(item => item.imei === imei && item.estado === "Disponible");
+
+                if (eq) {
+                    assignEquipmentToSlot(eq.id);
+                    scanner.clear();
+                    setShowCamera(false);
+                } else {
+                    setToast({ type: "error", message: `IMEI ${imei} escaneado no encontrado disponible.` });
+                    // Don't close immediately so they can try again? Or close?
+                    // Let's pause or let them retry.
+                }
+            }, (_err) => {
+                // ignore
+            });
+
+            return () => {
+                scanner.clear().catch(err => console.error("Failed to clear scanner", err));
+            };
+        }
+    }, [showCamera]);
+
+    const handleRemoveSlot = (index: number) => {
+        setSelectedItems(prev => prev.map(item => item.index === index ? { ...item, equipoId: "" } : item));
+    };
 
     // Legacy support or extra fields
     const [entregaData, setEntregaData] = useState({ recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" });
@@ -126,15 +226,11 @@ export default function GestionTelefonia() {
     }, [selectedTicket]);
 
     const loadData = async () => {
-        setLoading(true);
         try {
             await telefoniaStore.fetchSolicitudes();
             await telefoniaStore.fetchEquipos();
-            await telefoniaStore.fetchChips();
         } catch (e: any) {
             setToast({ type: "error", message: "Error cargando datos" });
-        } finally {
-            setLoading(false);
         }
     };
 
@@ -398,48 +494,135 @@ export default function GestionTelefonia() {
                                     Registrar Entrega y Asignación
                                 </div>
 
+                                {/* UNIFIED ASSIGNMENT TOOLS */}
+                                <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm space-y-4">
+                                    <h4 className="text-sm font-bold text-gray-800 flex items-center gap-2">
+                                        <Search className="w-4 h-4 text-indigo-500" />
+                                        Buscar y Agregar Equipo
+                                    </h4>
+
+                                    <div className="relative">
+                                        <div className="flex gap-2">
+                                            <div className="relative flex-1">
+                                                <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+                                                <input
+                                                    type="text"
+                                                    placeholder="Escanear IMEI o Buscar por Modelo..."
+                                                    className="pl-9 pr-4 py-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border"
+                                                    value={imeiInput}
+                                                    onChange={(e) => setImeiInput(e.target.value)}
+                                                    onKeyDown={handleImeiScan}
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <button
+                                                onClick={() => setShowCamera(!showCamera)}
+                                                className={`px-3 py-2 rounded-lg border flex items-center gap-2 transition-colors ${showCamera ? 'bg-red-50 text-red-600 border-red-200 hover:bg-red-100' : 'bg-gray-50 text-gray-700 border-gray-200 hover:bg-gray-100'}`}
+                                                title="Abrir Cámara"
+                                            >
+                                                📷 <span className="hidden sm:inline text-xs font-medium">{showCamera ? "Cerrar" : "Escanear"}</span>
+                                            </button>
+                                        </div>
+
+                                        {/* CAMERA CONTAINER */}
+                                        {showCamera && (
+                                            <div className="mt-4 p-4 bg-black rounded-lg">
+                                                <div id="reader" className="w-full bg-white rounded-lg overflow-hidden"></div>
+                                                <p className="text-center text-white text-xs mt-2">Apunte la cámara al código de barras del IMEI</p>
+                                            </div>
+                                        )}
+
+                                        {/* DROPDOWN RESULTS (Like Typeahead) */}
+                                        {imeiInput && !showCamera && filteredEquipos.length > 0 && (
+                                            <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
+                                                {filteredEquipos.map(e => (
+                                                    <div
+                                                        key={e.id}
+                                                        onClick={() => assignEquipmentToSlot(e.id)}
+                                                        className="p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center"
+                                                    >
+                                                        <div>
+                                                            <p className="text-sm font-bold text-gray-800">{e.marca} {e.modelo}</p>
+                                                            <p className="text-xs text-gray-500">IMEI: <span className="font-mono text-gray-700">{e.imei}</span></p>
+                                                        </div>
+                                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${e.condicion === 'Nuevo' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                            {e.condicion || "Estado ?"}
+                                                        </span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                        {imeiInput && filteredEquipos.length === 0 && !showCamera && (
+                                            <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-3 text-center text-xs text-gray-500">
+                                                No se encontraron equipos disponibles con ese criterio.
+                                            </div>
+                                        )}
+                                    </div>
+                                    <p className="text-[10px] text-gray-400">
+                                        Use el escáner o la lista manual para agregar equipos a la lista de entrega.
+                                    </p>
+                                </div>
+
+                                {/* ASSIGNED LIST */}
                                 <div>
-                                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                                        Asignación de Equipos ({selectedItems.filter(i => i.equipoId).length} / {selectedTicket.cantidad_lineas || 1})
-                                    </label>
+                                    <div className="flex justify-between items-center mb-2 px-1">
+                                        <label className="block text-sm font-bold text-gray-700">
+                                            Lista de Equipos a Entregar ({selectedItems.filter(i => i.equipoId).length} / {selectedTicket.cantidad_lineas || 1})
+                                        </label>
+                                        <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
+                                            Pendientes: {selectedItems.filter(i => !i.equipoId).length}
+                                        </span>
+                                    </div>
 
                                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
-                                        {selectedItems.map((slot) => (
-                                            <div key={slot.index} className="p-2 bg-gray-50 border border-gray-200 rounded-md">
-                                                <span className="text-xs font-bold text-gray-500 uppercase mb-1 block">Equipo #{slot.index + 1}</span>
-                                                <select
-                                                    className="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                                    value={slot.equipoId}
-                                                    onChange={(e) => {
-                                                        const newVal = e.target.value;
-                                                        // Prevent selecting same equipment in multiple slots (optional validation)
-                                                        const alreadySelected = selectedItems.some(i => i.equipoId === newVal && i.index !== slot.index);
-                                                        if (alreadySelected && newVal !== "") {
-                                                            alert("Este equipo ya está seleccionado en otro espacio.");
-                                                            return;
-                                                        }
+                                        {selectedItems.map((slot) => {
+                                            const eq = telefoniaStore.equipos.find(e => e.id === slot.equipoId);
 
-                                                        setSelectedItems(prev => prev.map(item => item.index === slot.index ? { ...item, equipoId: newVal } : item));
-                                                    }}
-                                                    disabled={loading}
-                                                >
-                                                    <option value="">-- Seleccionar Equipo Disponible --</option>
-                                                    {telefoniaStore.equipos
-                                                        .filter(e => e.estado === "Disponible" || e.id === slot.equipoId) // Show available + currently selected by this slot
-                                                        .filter(e => !selectedItems.some(item => item.equipoId === e.id && item.index !== slot.index)) // Exclude selected by OTHERS
-                                                        .map(e => (
-                                                            <option key={e.id} value={e.id}>
-                                                                {e.marca} {e.modelo} | IMEI: {e.imei}
-                                                            </option>
-                                                        ))
-                                                    }
-                                                </select>
-                                            </div>
-                                        ))}
+                                            // RENDER FILLED SLOT
+                                            if (eq) {
+                                                return (
+                                                    <div key={slot.index} className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg shadow-sm group hover:border-green-300 transition-colors">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-bold text-xs ring-4 ring-green-50">
+                                                                #{slot.index + 1}
+                                                            </div>
+                                                            <div>
+                                                                <p className="text-sm font-bold text-gray-800">{eq.marca} {eq.modelo}</p>
+                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                    <span className="font-mono bg-gray-100 px-1 rounded">IMEI: {eq.imei}</span>
+                                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${eq.condicion === 'Nuevo' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                                        {eq.condicion || "Estado ?"}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => handleRemoveSlot(slot.index)}
+                                                            className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors"
+                                                            title="Remover equipo"
+                                                        >
+                                                            <XCircle className="w-5 h-5" />
+                                                        </button>
+                                                    </div>
+                                                );
+                                            }
+
+                                            // RENDER EMPTY SLOT
+                                            return (
+                                                <div key={slot.index} className="flex items-center justify-between p-3 bg-gray-50 border border-gray-200 border-dashed rounded-lg opacity-70">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 font-bold text-xs">
+                                                            #{slot.index + 1}
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-sm font-medium text-gray-400 italic">Espacio Vacio</p>
+                                                            <p className="text-[10px] text-gray-400">Escanee o seleccione un equipo para asignar aquí.</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
                                     </div>
-                                    <p className="text-xs text-gray-500 mt-1">
-                                        Seleccione los equipos físicos a entregar. Debe completar la cantidad solicitada.
-                                    </p>
                                 </div>
 
                                 <div>

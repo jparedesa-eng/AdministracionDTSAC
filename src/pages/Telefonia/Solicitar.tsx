@@ -43,7 +43,7 @@ const StatusBadge = ({ estado }: { estado: string }) => {
 };
 
 export default function SolicitarTelefonia() {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
 
     // Hooks
     const [toast, setToast] = useState<ToastState>(null);
@@ -138,6 +138,18 @@ export default function SolicitarTelefonia() {
             unsubGerencias();
         };
     }, []);
+
+    // Auto-fill user data from profile
+    useEffect(() => {
+        if (profile) {
+            setFormData(prev => ({
+                ...prev,
+                dni: profile.dni || prev.dni,
+                nombre: profile.nombre || prev.nombre,
+                area: profile.area || prev.area
+            }));
+        }
+    }, [profile]);
 
     const [, setSedesVersion] = useState(0);
     const { sedes } = getSedesState();
@@ -481,7 +493,7 @@ export default function SolicitarTelefonia() {
                 } : null,
                 justificacion: formData.justificacion,
                 aplicativos: selectedApps,
-                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Línea Nueva" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
+                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Línea Nueva" || formData.n_linea === "Línea de Segundo Uso" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
                 created_by: user?.id,
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW 
@@ -594,6 +606,7 @@ export default function SolicitarTelefonia() {
                                 >
                                     <option value="">Seleccione...</option>
                                     <option value="Línea Nueva">Solicitar Línea Nueva</option>
+                                    <option value="Línea de Segundo Uso">Solicitar Línea de Segundo Uso</option>
                                     <option value="Renovación">Renovación de Equipo</option>
                                     <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
                                 </select>

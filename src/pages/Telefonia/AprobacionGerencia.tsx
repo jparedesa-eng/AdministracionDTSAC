@@ -8,7 +8,10 @@ import { UserCheck, Check, X, FileDown } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
+import { useAuth } from "../../auth/AuthContext";
+
 export default function AprobacionGerencia() {
+    const { profile } = useAuth();
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
@@ -41,6 +44,7 @@ export default function AprobacionGerencia() {
             await telefoniaStore.updateSolicitud(selectedTicket.id, {
                 aprobacion_gerencia: approved,
                 fecha_aprobacion_gerencia: new Date().toISOString(),
+                aprobacion_gerencia_nombre: approved ? (profile?.nombre || "Gerencia") : null,
                 estado: approved ? "Pendiente Admin" : "Rechazada"
             });
 
@@ -56,8 +60,8 @@ export default function AprobacionGerencia() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Aprobación Gerencia</h1>
-                    <p className="text-gray-500 text-sm">Revisión y autorización de solicitudes de telefonía</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Aprobación Gerencia Área Usuaria</h1>
+                    <p className="text-gray-500 text-sm">Validación por parte del área solicitante</p>
                 </div>
                 <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
                     <UserCheck className="w-4 h-4" />

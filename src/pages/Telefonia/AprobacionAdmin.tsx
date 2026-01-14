@@ -8,7 +8,10 @@ import { CheckCircle2, ShoppingCart, X, FileDown } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
+import { useAuth } from "../../auth/AuthContext";
+
 export default function AprobacionAdmin() {
+    const { profile } = useAuth();
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
@@ -53,6 +56,7 @@ export default function AprobacionAdmin() {
             await telefoniaStore.updateSolicitud(selectedTicket.id, {
                 aprobacion_admin: approved,
                 fecha_aprobacion_admin: new Date().toISOString(),
+                aprobacion_admin_nombre: approved ? (profile?.nombre || "Administracion") : null,
                 estado: approved ? "Programar Entrega" : "Rechazada"
             });
 
@@ -68,8 +72,8 @@ export default function AprobacionAdmin() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-2xl font-bold text-gray-900">Aprobación Administrativa</h1>
-                    <p className="text-gray-500 text-sm">Validación final y autorización de compra/despacho</p>
+                    <h1 className="text-2xl font-bold text-gray-900">Aprobación Gerencia Administración</h1>
+                    <p className="text-gray-500 text-sm">Validación final y autorización de despacho</p>
                 </div>
                 <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
