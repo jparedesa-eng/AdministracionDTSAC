@@ -32,6 +32,9 @@ export default function GestionRecursos() {
     const [, setAgentesVersion] = useState(0);
     const [, setSupervisoresVersion] = useState(0);
 
+    // View State
+    const [activeTab, setActiveTab] = useState<"agentes" | "puestos">("agentes");
+
     useEffect(() => {
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
         const unsubPuestos = subscribePuestos(() => setPuestosVersion(prev => prev + 1));
@@ -53,91 +56,178 @@ export default function GestionRecursos() {
 
     const [toast, setToast] = useState<ToastState>(null);
 
+    // Calculate Counts
+    const activeAgentesCount = agentes.filter(a => a.activo).length;
+    const activePuestosCount = puestos.filter(p => p.activo).length;
+
     return (
-        <div className="space-y-6 pb-20">
+        <div className="space-y-8 pb-20">
             <Toast toast={toast} onClose={() => setToast(null)} />
 
-            <div className="px-1">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                    Gestión de Recursos
-                </h1>
-                <p className="mt-1 text-sm text-gray-500">
-                    Administración de agentes de seguridad y puestos de vigilancia.
-                </p>
+            {/* Header, Counters & Toggle */}
+            <div className="bg-white/50 backdrop-blur-sm p-3 sm:p-4 rounded-2xl border border-gray-100 space-y-3 sm:space-y-0 sm:flex sm:items-center sm:justify-between sm:gap-4">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:gap-6 w-full">
+                    {/* Title & Subtitle */}
+                    <div className="flex items-start justify-between w-full sm:w-auto gap-2">
+                        <div>
+                            <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-gray-900 leading-tight">
+                                Gestión de Recursos
+                            </h1>
+                            <p className="text-xs sm:text-sm text-gray-500">
+                                Administración de seguridad.
+                            </p>
+                        </div>
+
+                        {/* Mobile Only: Counters appear here next to title */}
+                        <div className="flex flex-col items-end gap-1.5 sm:hidden">
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-blue-50/50 rounded-md border border-blue-100">
+                                <Users size={12} className="text-blue-600" />
+                                <span className="text-xs font-bold text-blue-900">{activeAgentesCount}</span>
+                                <span className="text-[10px] text-blue-400">/ {agentes.length}</span>
+                            </div>
+                            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-emerald-50/50 rounded-md border border-emerald-100">
+                                <MapPin size={12} className="text-emerald-600" />
+                                <span className="text-xs font-bold text-emerald-900">{activePuestosCount}</span>
+                                <span className="text-[10px] text-emerald-400">/ {puestos.length}</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Desktop Only: Counters appear inline */}
+                    <div className="hidden sm:flex items-center gap-3">
+                        <div className="h-8 w-px bg-gray-200"></div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-blue-50/50 rounded-lg border border-blue-100">
+                            <Users size={14} className="text-blue-600" />
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-sm font-bold text-blue-900">{activeAgentesCount}</span>
+                                <span className="text-[10px] text-blue-400">/ {agentes.length}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-50/50 rounded-lg border border-emerald-100">
+                            <MapPin size={14} className="text-emerald-600" />
+                            <div className="flex items-baseline gap-1">
+                                <span className="text-sm font-bold text-emerald-900">{activePuestosCount}</span>
+                                <span className="text-[10px] text-emerald-400">/ {puestos.length}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                {/* Toggle */}
+                <div className="bg-gray-100/80 p-1 rounded-lg border border-gray-200 self-start sm:self-auto w-full sm:w-auto">
+                    <div className="flex w-full sm:w-auto">
+                        <button
+                            onClick={() => setActiveTab("agentes")}
+                            className={`
+                                    flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                                    ${activeTab === "agentes"
+                                    ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5"
+                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"}
+                                `}
+                        >
+                            <Users size={14} />
+                            Agentes
+                        </button>
+                        <button
+                            onClick={() => setActiveTab("puestos")}
+                            className={`
+                                    flex-1 sm:flex-none justify-center items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-all duration-200
+                                    ${activeTab === "puestos"
+                                    ? "bg-white text-gray-900 shadow-sm ring-1 ring-black/5"
+                                    : "text-gray-500 hover:text-gray-700 hover:bg-gray-200/50"}
+                                `}
+                        >
+                            <MapPin size={14} />
+                            Puestos
+                        </button>
+                    </div>
+                </div>
             </div>
 
-            {/* 2-Column Grid Layout */}
-            <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                        <Users className="h-5 w-5 text-gray-600" />
-                        <h2 className="text-lg font-semibold text-gray-900">Agentes de Seguridad</h2>
+            {/* Content Area */}
+            <div className="min-h-[500px]">
+                {activeTab === "agentes" ? (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                            <div className="h-10 w-10 bg-blue-50 text-blue-600 rounded-lg flex items-center justify-center border border-blue-100">
+                                <Users size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900">Directorio de Agentes</h2>
+                                <p className="text-sm text-gray-500">Gestione la información y asignaciones del personal.</p>
+                            </div>
+                        </div>
+                        <TabAgentes
+                            agentes={agentes}
+                            supervisores={supervisores}
+                            setToast={setToast}
+                            onAdd={async (nombre, dni, supervisor) => {
+                                try {
+                                    await upsertAgente({ nombre, dni, supervisor });
+                                    setToast({ type: "success", message: "Agente creado correctamente." });
+                                } catch (error: any) {
+                                    setToast({ type: "error", message: error.message || "Error al crear agente." });
+                                }
+                            }}
+                            onUpdate={async (id, data) => {
+                                try {
+                                    const agente = agentes.find(a => a.id === id);
+                                    if (!agente) return;
+                                    await upsertAgente({
+                                        id,
+                                        nombre: data.nombre ?? agente.nombre,
+                                        dni: data.dni ?? agente.dni ?? undefined,
+                                        supervisor: data.supervisor ?? agente.supervisor ?? undefined,
+                                        activo: data.activo ?? agente.activo
+                                    });
+                                    setToast({ type: "success", message: "Agente actualizado." });
+                                } catch (error: any) {
+                                    setToast({ type: "error", message: error.message || "Error al actualizar agente." });
+                                }
+                            }}
+                        />
                     </div>
-                    <TabAgentes
-                        agentes={agentes}
-                        supervisores={supervisores}
-                        setToast={setToast}
-                        onAdd={async (nombre, dni, supervisor) => {
-                            try {
-                                await upsertAgente({ nombre, dni, supervisor });
-                                setToast({ type: "success", message: "Agente creado correctamente." });
-                            } catch (error: any) {
-                                setToast({ type: "error", message: error.message || "Error al crear agente." });
-                            }
-                        }}
-                        onUpdate={async (id, data) => {
-                            try {
-                                const agente = agentes.find(a => a.id === id);
-                                if (!agente) return;
-                                await upsertAgente({
-                                    id,
-                                    nombre: data.nombre ?? agente.nombre,
-                                    dni: data.dni ?? agente.dni ?? undefined,
-                                    supervisor: data.supervisor ?? agente.supervisor ?? undefined,
-                                    activo: data.activo ?? agente.activo
-                                });
-                                setToast({ type: "success", message: "Agente actualizado." });
-                            } catch (error: any) {
-                                setToast({ type: "error", message: error.message || "Error al actualizar agente." });
-                            }
-                        }}
-                    />
-                </div>
-
-                <div className="space-y-4">
-                    <div className="flex items-center gap-2 pb-2 border-b border-gray-100">
-                        <MapPin className="h-5 w-5 text-gray-600" />
-                        <h2 className="text-lg font-semibold text-gray-900">Puestos de Vigilancia</h2>
+                ) : (
+                    <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
+                        <div className="flex items-center gap-3 pb-2 border-b border-gray-100">
+                            <div className="h-10 w-10 bg-emerald-50 text-emerald-600 rounded-lg flex items-center justify-center border border-emerald-100">
+                                <MapPin size={20} />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900">Directorio de Puestos</h2>
+                                <p className="text-sm text-gray-500">Administre las ubicaciones y turnos de vigilancia.</p>
+                            </div>
+                        </div>
+                        <TabPuestos
+                            sedes={sedes}
+                            puestos={puestos}
+                            onAdd={async (nombre, sede_id, turnos) => {
+                                try {
+                                    await upsertPuesto({ nombre, sede_id, turnos });
+                                    setToast({ type: "success", message: "Puesto creado correctamente." });
+                                } catch (error: any) {
+                                    setToast({ type: "error", message: error.message || "Error al crear puesto." });
+                                }
+                            }}
+                            onUpdate={async (id, data) => {
+                                try {
+                                    const puesto = puestos.find(p => p.id === id);
+                                    if (!puesto) return;
+                                    await upsertPuesto({
+                                        id,
+                                        nombre: data.nombre ?? puesto.nombre,
+                                        sede_id: data.sede_id ?? puesto.sede_id,
+                                        turnos: data.turnos ?? puesto.turnos,
+                                        activo: data.activo ?? puesto.activo
+                                    });
+                                    setToast({ type: "success", message: "Puesto actualizado." });
+                                } catch (error: any) {
+                                    setToast({ type: "error", message: error.message || "Error al actualizar puesto." });
+                                }
+                            }}
+                        />
                     </div>
-                    <TabPuestos
-                        sedes={sedes}
-                        puestos={puestos}
-                        onAdd={async (nombre, sede_id, turnos) => {
-                            try {
-                                await upsertPuesto({ nombre, sede_id, turnos });
-                                setToast({ type: "success", message: "Puesto creado correctamente." });
-                            } catch (error: any) {
-                                setToast({ type: "error", message: error.message || "Error al crear puesto." });
-                            }
-                        }}
-                        onUpdate={async (id, data) => {
-                            try {
-                                const puesto = puestos.find(p => p.id === id);
-                                if (!puesto) return;
-                                await upsertPuesto({
-                                    id,
-                                    nombre: data.nombre ?? puesto.nombre,
-                                    sede_id: data.sede_id ?? puesto.sede_id,
-                                    turnos: data.turnos ?? puesto.turnos,
-                                    activo: data.activo ?? puesto.activo
-                                });
-                                setToast({ type: "success", message: "Puesto actualizado." });
-                            } catch (error: any) {
-                                setToast({ type: "error", message: error.message || "Error al actualizar puesto." });
-                            }
-                        }}
-                    />
-                </div>
+                )}
             </div>
         </div>
     );
@@ -235,7 +325,8 @@ function TabAgentes({
                 </div>
                 <button
                     onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors shrink-0"
+                    style={{ backgroundColor: "#ff0000" }}
+                    className="flex items-center gap-2 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-700 transition-colors shrink-0 shadow-sm shadow-red-200"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo Agente
@@ -444,7 +535,8 @@ function TabPuestos({
                 </div>
                 <button
                     onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-gray-900 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-gray-800 transition-colors shrink-0"
+                    style={{ backgroundColor: "#ff0000" }}
+                    className="flex items-center gap-2 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-red-700 transition-colors shrink-0 shadow-sm shadow-red-200"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo Puesto
