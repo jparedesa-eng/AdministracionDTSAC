@@ -15,7 +15,9 @@ export default function AprobacionAdmin() {
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
-    const [selectedMonth, setSelectedMonth] = useState<string>(""); // "YYYY-MM"
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [showHistory, setShowHistory] = useState(false);
     const [loading, setLoading] = useState(true);
 
     const loadData = async () => {
@@ -33,17 +35,39 @@ export default function AprobacionAdmin() {
         loadData();
     }, []);
 
-    const tickets = viewMode === "pending"
-        ? telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Admin")
-        : telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente Admin");
+    // Logic: Pending shows all. History requires filter.
+    const getDisplayedTickets = () => {
+        if (viewMode === "pending") {
+            return telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Admin");
+        }
 
-    // Filter by month if selected
-    const filteredTickets = tickets.filter(t => {
-        if (!selectedMonth) return true;
-        const d = new Date(t.created_at);
-        const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-        return key === selectedMonth;
-    });
+        // History Mode
+        if (!showHistory) return [];
+
+        return telefoniaStore.solicitudes.filter(t => {
+            if (t.estado === "Pendiente Admin") return false;
+
+            // Date Filter
+            if (!startDate || !endDate) return false;
+
+            const ticketDate = new Date(t.created_at);
+            // Normalize dates to ignore time for inclusive comparison
+            const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+
+            return ticketDate >= start && ticketDate <= end;
+        });
+    };
+
+    const displayedTickets = getDisplayedTickets();
+
+    const handleFilter = () => {
+        if (!startDate || !endDate) {
+            setToast({ type: "warning", message: "Seleccione fecha inicial y final" });
+            return;
+        }
+        setShowHistory(true);
+    };
 
     const handleOpenTicket = (ticket: Solicitud) => {
         setSelectedTicket(ticket);
@@ -77,15 +101,18 @@ export default function AprobacionAdmin() {
                 </div>
                 <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
-                    {tickets.length} {viewMode === "pending" ? "Pendientes" : "Registros"}
+                    {viewMode === "pending"
+                        ? `${displayedTickets.length} Pendientes`
+                        : "Historial de Aprobaciones"
+                    }
                 </div>
             </div>
 
             {/* View Toggle & Filter */}
-            <div className="flex flex-col sm:flex-row gap-4 items-center justify-between">
-                <div className="bg-gray-100 p-1 rounded-lg inline-flex order-2 sm:order-1">
+            <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
+                <div className="bg-gray-100 p-1 rounded-lg inline-flex">
                     <button
-                        onClick={() => setViewMode("pending")}
+                        onClick={() => { setViewMode("pending"); setShowHistory(false); }}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "pending"
                             ? "bg-white text-gray-900 shadow-sm"
                             : "text-gray-500 hover:text-gray-700"
@@ -104,28 +131,39 @@ export default function AprobacionAdmin() {
                     </button>
                 </div>
 
-                <div className="flex items-center gap-2 order-1 sm:order-2">
-                    <span className="text-sm text-gray-500">Filtrar:</span>
-                    <input
-                        type="month"
-                        value={selectedMonth}
-                        onChange={(e) => setSelectedMonth(e.target.value)}
-                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm"
-                    />
-                    {selectedMonth && (
+                {viewMode === "history" && (
+                    <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
+                            <span className="text-xs font-medium text-gray-500 px-2">DESDE</span>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => { setStartDate(e.target.value); setShowHistory(false); }}
+                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8"
+                            />
+                        </div>
+                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
+                            <span className="text-xs font-medium text-gray-500 px-2">HASTA</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => { setEndDate(e.target.value); setShowHistory(false); }}
+                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8"
+                            />
+                        </div>
                         <button
-                            onClick={() => setSelectedMonth("")}
-                            className="text-xs text-amber-600 hover:underline"
+                            onClick={handleFilter}
+                            className="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
                         >
-                            Ver Todos
+                            Filtrar
                         </button>
-                    )}
-                </div>
+                    </div>
+                )}
             </div>
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
-            {/* CARD VIEW (FULL WIDTH ROW STYLE) */}
+            {/* CARD VIEW */}
             <div className="flex flex-col gap-3">
                 {loading ? (
                     <div className="py-12 text-center text-gray-500">
@@ -134,24 +172,28 @@ export default function AprobacionAdmin() {
                             <span className="ml-2">Cargando solicitudes...</span>
                         </div>
                     </div>
-                ) : filteredTickets.length === 0 ? (
+                ) : (viewMode === "history" && !showHistory) ? (
+                    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
+                        <p>Seleccione un rango de fechas y haga clic en "Filtrar" para ver el historial.</p>
+                    </div>
+                ) : displayedTickets.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
-                            <ShoppingCart className="w-12 h-12 text-amber-100 mb-2" />
-                            <p>No hay tickets {viewMode === "pending" ? "pendientes" : "en historial"}</p>
+                            <ShoppingCart className="w-12 h-12 text-gray-200 mb-2" />
+                            <p>No se encontraron registros {viewMode === "pending" ? "pendientes" : "en este periodo"}</p>
                         </div>
                     </div>
                 ) : (
-                    filteredTickets.map(t => (
+                    displayedTickets.map(t => (
                         <div
                             key={t.id}
-                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-amber-300 transition-all shadow-sm hover:shadow-md"
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-amber-300 transition-colors"
                         >
                             <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
                                 {/* LEFT: Info */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-gray-400 border border-gray-100 bg-gray-50 px-2 py-0.5 rounded">
+                                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                                             {new Date(t.created_at).toLocaleDateString()}
                                         </span>
                                         {t.aprobacion_gerencia ? (
@@ -198,7 +240,7 @@ export default function AprobacionAdmin() {
                                 <div className="w-full md:w-auto">
                                     <button
                                         onClick={() => handleOpenTicket(t)}
-                                        className="w-full md:w-auto px-6 py-2.5 bg-amber-50 text-amber-700 font-medium text-sm rounded-lg border border-amber-100 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"
+                                        className="w-full md:w-auto px-6 py-2.5 bg-amber-50 text-amber-700 font-medium text-sm rounded-lg border border-amber-200 hover:bg-amber-100 transition-colors flex items-center justify-center gap-2"
                                     >
                                         <ShoppingCart className="w-4 h-4" />
                                         {viewMode === "pending" ? "Gestionar Compra" : "Ver Detalle"}

@@ -93,7 +93,6 @@ export default function GestionTelefonia() {
 
     const [toast, setToast] = useState<ToastState>(null);
     const [searchTerm, setSearchTerm] = useState("");
-    const [selectedMonth, setSelectedMonth] = useState<string>(""); // "YYYY-MM"
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
@@ -280,22 +279,20 @@ export default function GestionTelefonia() {
     const getFilteredTickets = () => {
         const search = searchTerm.toLowerCase();
         return telefoniaStore.solicitudes.filter(t => {
-            // 1. Search Text
-            const matchesSearch =
-                t.beneficiario_nombre?.toLowerCase().includes(search) ||
-                t.beneficiario_dni?.toLowerCase().includes(search) ||
-                t.beneficiario_area?.toLowerCase().includes(search);
+            if (!search) return true;
 
-            if (!matchesSearch) return false;
+            // 1. Search Text (Safe check)
+            const name = t.beneficiario_nombre || "";
+            const dni = t.beneficiario_dni || "";
+            const area = t.beneficiario_area || "";
+            const id = t.id || "";
 
-            // 2. Month Filter
-            if (selectedMonth) {
-                const d = new Date(t.created_at);
-                const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                if (key !== selectedMonth) return false;
-            }
-
-            return true;
+            return (
+                name.toLowerCase().includes(search) ||
+                dni.toLowerCase().includes(search) ||
+                area.toLowerCase().includes(search) ||
+                id.toLowerCase().includes(search)
+            );
         });
     };
 
@@ -305,7 +302,7 @@ export default function GestionTelefonia() {
         revisionAdmin: tickets.filter(t => t.estado === "Revisión Admin"),
         approvals: tickets.filter(t => ["Pendiente Gerencia", "Pendiente Admin"].includes(t.estado)),
         delivery: tickets.filter(t => t.estado === "Programar Entrega"),
-        history: tickets.filter(t => ["Entregado", "Rechazada", "Cancelada"].includes(t.estado))
+        history: tickets.filter(t => ["Entregado", "Rechazada", "Cancelada"].includes(t.estado)).slice(0, 5)
     };
 
     const StatusBadge = ({ estado }: { estado: string }) => {
@@ -378,25 +375,6 @@ export default function GestionTelefonia() {
                     <p className="text-gray-500 text-sm">Monitoreo global del ciclo de vida de solicitudes</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
-                    {/* Month Filter */}
-                    <div className="flex items-center gap-2">
-                        <span className="text-sm text-gray-500">Filtrar:</span>
-                        <input
-                            type="month"
-                            value={selectedMonth}
-                            onChange={(e) => setSelectedMonth(e.target.value)}
-                            className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
-                        />
-                        {selectedMonth && (
-                            <button
-                                onClick={() => setSelectedMonth("")}
-                                className="text-xs text-indigo-600 hover:text-indigo-800 font-medium"
-                            >
-                                Ver Todo
-                            </button>
-                        )}
-                    </div>
-
                     <div className="relative w-full md:w-64">
                         <input
                             type="text"

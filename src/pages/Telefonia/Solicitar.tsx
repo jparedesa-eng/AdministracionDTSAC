@@ -157,10 +157,20 @@ export default function SolicitarTelefonia() {
 
 
     // Filter mis tickets
+    // Filter mis tickets
     const myTickets = useMemo(() => {
         if (!user?.id) return [];
         return telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
     }, [user?.id, telefoniaStore.solicitudes]);
+
+    const [viewMode, setViewMode] = useState<"active" | "history">("active");
+
+    const filteredTickets = useMemo(() => {
+        return myTickets.filter(t => {
+            const isHistory = ["Entregado", "Rechazada"].includes(t.estado);
+            return viewMode === "active" ? !isHistory : isHistory;
+        });
+    }, [myTickets, viewMode]);
 
 
 
@@ -1274,29 +1284,56 @@ export default function SolicitarTelefonia() {
                 </div>
             )}
 
-            {/* List of Requests - CARD VIEW */}
-            <div className="flex items-center gap-2 mb-4 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
-                <History className="h-5 w-5 text-gray-500" />
-                <h2 className="text-lg font-semibold text-gray-900">Mis Solicitudes</h2>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4 bg-gray-50/50 p-2 rounded-lg border border-gray-100">
+                <div className="flex items-center gap-2">
+                    <History className="h-5 w-5 text-gray-500" />
+                    <h2 className="text-lg font-semibold text-gray-900">Mis Solicitudes</h2>
+                </div>
+
+                <div className="flex bg-white rounded-lg p-1 border border-gray-200 shadow-sm">
+                    <button
+                        onClick={() => setViewMode("active")}
+                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${viewMode === "active"
+                            ? "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                            }`}
+                    >
+                        Pendientes ({myTickets.filter(t => !["Entregado", "Rechazada"].includes(t.estado)).length})
+                    </button>
+                    <button
+                        onClick={() => setViewMode("history")}
+                        className={`px-4 py-1.5 text-sm font-medium rounded-md transition-all ${viewMode === "history"
+                            ? "bg-indigo-50 text-indigo-700 shadow-sm ring-1 ring-indigo-200"
+                            : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                            }`}
+                    >
+                        Historial
+                    </button>
+                </div>
             </div>
 
             {historyLoading ? (
                 <div className="p-12 flex justify-center">
                     <Loader2 className="h-8 w-8 animate-spin text-indigo-500" />
                 </div>
-            ) : myTickets.length === 0 ? (
+            ) : filteredTickets.length === 0 ? (
                 <div className="bg-white rounded-xl border border-gray-200 p-16 text-center">
                     <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-gray-100 mb-4">
                         <FileText className="h-8 w-8 text-gray-400" />
                     </div>
-                    <h3 className="text-lg font-medium text-gray-900">No tienes solicitudes</h3>
+                    <h3 className="text-lg font-medium text-gray-900">
+                        {viewMode === "active" ? "No tienes solicitudes pendientes" : "No tienes historial de solicitudes"}
+                    </h3>
                     <p className="text-gray-500 mt-1 max-w-sm mx-auto">
-                        Aún no has registrado solicitudes de telefonía. Presiona "Nuevo Ticket" para comenzar.
+                        {viewMode === "active"
+                            ? 'Presiona "Nuevo Ticket" para comenzar una nueva solicitud.'
+                            : 'Las solicitudes finalizadas o rechazadas aparecerán aquí.'}
                     </p>
                 </div>
             ) : (
                 <div className="flex flex-col gap-3">
-                    {myTickets.map((t) => (
+                    {filteredTickets.map((t) => (
                         <div
                             key={t.id}
                             className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-all group"

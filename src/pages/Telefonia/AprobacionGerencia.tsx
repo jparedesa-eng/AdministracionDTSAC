@@ -16,6 +16,10 @@ export default function AprobacionGerencia() {
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
 
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [showHistory, setShowHistory] = useState(false);
+
     const loadData = async () => {
         try {
             await telefoniaStore.fetchSolicitudes();
@@ -28,10 +32,38 @@ export default function AprobacionGerencia() {
         loadData();
     }, []);
 
-    const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Gerencia");
-    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente Gerencia");
+    const getDisplayedTickets = () => {
+        if (viewMode === "pending") {
+            return telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Gerencia");
+        }
 
-    const displayedTickets = viewMode === "pending" ? pendingTickets : historyTickets;
+        // History Mode
+        if (!showHistory) return [];
+
+        return telefoniaStore.solicitudes.filter(t => {
+            if (t.estado === "Pendiente Gerencia") return false;
+
+            // Date Filter
+            if (!startDate || !endDate) return false;
+
+            const ticketDate = new Date(t.created_at);
+            // Normalize dates to ignore time for inclusive comparison
+            const start = new Date(startDate); start.setHours(0, 0, 0, 0);
+            const end = new Date(endDate); end.setHours(23, 59, 59, 999);
+
+            return ticketDate >= start && ticketDate <= end;
+        });
+    };
+
+    const displayedTickets = getDisplayedTickets();
+
+    const handleFilter = () => {
+        if (!startDate || !endDate) {
+            setToast({ type: "warning", message: "Seleccione fecha inicial y final" });
+            return;
+        }
+        setShowHistory(true);
+    };
 
     const handleOpenTicket = (ticket: Solicitud) => {
         setSelectedTicket(ticket);
@@ -65,15 +97,18 @@ export default function AprobacionGerencia() {
                 </div>
                 <div className="bg-blue-100 text-blue-800 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
                     <UserCheck className="w-4 h-4" />
-                    {pendingTickets.length} Pendientes
+                    {viewMode === "pending"
+                        ? `${displayedTickets.length} Pendientes`
+                        : "Historial de Aprobaciones"
+                    }
                 </div>
             </div>
 
-            {/* View Toggle */}
-            <div className="flex justify-center">
+            {/* View Toggle & Filter */}
+            <div className="flex flex-col xl:flex-row gap-4 items-start xl:items-center justify-between">
                 <div className="bg-gray-100 p-1 rounded-lg inline-flex">
                     <button
-                        onClick={() => setViewMode("pending")}
+                        onClick={() => { setViewMode("pending"); setShowHistory(false); }}
                         className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "pending"
                             ? "bg-white text-gray-900 shadow-sm"
                             : "text-gray-500 hover:text-gray-700"
@@ -91,30 +126,63 @@ export default function AprobacionGerencia() {
                         Historial
                     </button>
                 </div>
+
+                {viewMode === "history" && (
+                    <div className="flex flex-wrap items-center gap-2 animate-in fade-in slide-in-from-right-4">
+                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
+                            <span className="text-xs font-medium text-gray-500 px-2">DESDE</span>
+                            <input
+                                type="date"
+                                value={startDate}
+                                onChange={(e) => { setStartDate(e.target.value); setShowHistory(false); }}
+                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8"
+                            />
+                        </div>
+                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
+                            <span className="text-xs font-medium text-gray-500 px-2">HASTA</span>
+                            <input
+                                type="date"
+                                value={endDate}
+                                onChange={(e) => { setEndDate(e.target.value); setShowHistory(false); }}
+                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8"
+                            />
+                        </div>
+                        <button
+                            onClick={handleFilter}
+                            className="px-4 py-1.5 bg-gray-900 text-white text-sm font-medium rounded-lg hover:bg-gray-800 transition-colors"
+                        >
+                            Filtrar
+                        </button>
+                    </div>
+                )}
             </div>
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
-            {/* CARD VIEW (FULL WIDTH ROW STYLE) */}
+            {/* CARD VIEW */}
             <div className="flex flex-col gap-3">
-                {displayedTickets.length === 0 ? (
+                {(viewMode === "history" && !showHistory) ? (
+                    <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
+                        <p>Seleccione un rango de fechas y haga clic en "Filtrar" para ver el historial.</p>
+                    </div>
+                ) : displayedTickets.length === 0 ? (
                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
-                            <CheckCircleIcon className="w-12 h-12 text-blue-100 mb-2" />
-                            <p>No hay solicitudes {viewMode === "pending" ? "pendientes de aprobación" : "en el historial"}</p>
+                            <CheckCircleIcon className="w-12 h-12 text-gray-200 mb-2" />
+                            <p>No hay solicitudes {viewMode === "pending" ? "pendientes de aprobación" : "en este periodo"}</p>
                         </div>
                     </div>
                 ) : (
                     displayedTickets.map(t => (
                         <div
                             key={t.id}
-                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-all group"
+                            className="bg-white border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-colors"
                         >
                             <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
                                 {/* LEFT: Solicitante */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-gray-400 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
                                             {new Date(t.created_at).toLocaleDateString()}
                                         </span>
                                         <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
