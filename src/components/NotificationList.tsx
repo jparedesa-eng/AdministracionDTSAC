@@ -41,7 +41,7 @@ export default function NotificationList() {
                     try {
                         new Notification(latest.title, {
                             body: latest.message,
-                            icon: "/vite.svg" // Optional: placeholder or app icon
+                            icon: "/logo-rojo.svg" // Optional: placeholder or app icon
                         });
                     } catch (e) {
                         console.warn("Notification trigger failed", e);
