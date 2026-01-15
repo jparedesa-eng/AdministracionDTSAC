@@ -1,8 +1,9 @@
 import React from "react";
-import { Menu, LogOut, Bell } from "lucide-react";
+import { Menu, LogOut } from "lucide-react";
 import { useAuth } from "../auth/AuthContext";
 import { useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
+import NotificationList from "./NotificationList";
 
 interface HeaderProps {
     sidebarOpen: boolean;
@@ -34,13 +35,7 @@ export default function Header({ sidebarOpen, setSidebarOpen, isMobile }: Header
 
             <div className="flex items-center gap-2 sm:gap-4">
                 {/* Notification Bell */}
-                <button
-                    type="button"
-                    className="relative inline-flex h-10 w-10 items-center justify-center rounded-full text-gray-500 transition-colors hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus:ring-0 cursor-pointer"
-                >
-                    <Bell className="h-5 w-5" />
-                    <span className="absolute top-2.5 right-2.5 h-2 w-2 rounded-full bg-red-500 border border-white"></span>
-                </button>
+                <NotificationList />
 
                 {/* Separator */}
                 <div className="h-8 w-0 border-r border-gray-200 hidden sm:block select-none pointer-events-none" />
@@ -97,6 +92,6 @@ export default function Header({ sidebarOpen, setSidebarOpen, isMobile }: Header
                     </AnimatePresence>
                 </div>
             </div>
-        </header>
+        </header >
     );
 }

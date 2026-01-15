@@ -1,5 +1,5 @@
-// src/store/camionetasStore.ts
 import { supabase } from "../supabase/supabaseClient";
+import { notificationsStore } from "./notificationsStore";
 
 /* =========================
  * Tipos
@@ -354,6 +354,21 @@ export const camionetasStore = {
     }
 
     this.solicitudes = [inserted, ...this.solicitudes];
+
+    // Trigger Notification: New Request
+    // "quiere notificacion para el usuario JEFE Y DEL AREA ADMINISTRACION CADA VEZ QUE SE CREA UN REGISTRO"
+    try {
+      await notificationsStore.notifyUsersByRoleAndArea(
+        "jefe",
+        "ADMINISTRACION",
+        "Nueva Solicitud de Camioneta",
+        `El usuario ${inserted.nombre} ha generado una solicitud (origen: ${inserted.origen}, destino: ${inserted.destino}).`,
+        "info"
+      );
+    } catch (e) {
+      console.warn("Error enviando notificación automática:", e);
+    }
+
     return inserted;
   },
 
@@ -452,7 +467,23 @@ export const camionetasStore = {
     await this.borrarReservasDeSolicitud(id);
 
     const idx = this.solicitudes.findIndex((x) => x.id === id);
-    if (idx >= 0) this.solicitudes[idx] = sFromRow(data as SolicitudRow);
+    if (idx >= 0) {
+      const prev = this.solicitudes[idx];
+      this.solicitudes[idx] = sFromRow(data as SolicitudRow);
+
+      // Notify Cancel
+      try {
+        await notificationsStore.notifyUsersByRoleAndArea(
+          "jefe",
+          "ADMINISTRACION",
+          "Solicitud Cancelada",
+          `La solicitud de ${prev.nombre} (Placa: ${prev.vehiculo ?? "S/N"}) ha sido cancelada.`,
+          "warning"
+        );
+      } catch (e) {
+        console.warn("Error enviando notificacion cancel:", e);
+      }
+    }
   },
 
   /** Entrega: SOLO cambia la solicitud a "En uso". No toca vehiculos.estado */

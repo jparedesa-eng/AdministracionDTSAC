@@ -19,6 +19,8 @@ import { supabase } from "../../supabase/supabaseClient";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
+import { notificationsStore } from "../../store/notificationsStore";
+import { useAuth } from "../../auth/AuthContext";
 
 /* =========================
    Tipos y utilidades
@@ -27,6 +29,8 @@ import type { ToastState } from "../../components/ui/Toast";
 type EstadoVehiculoUI = "Disponible" | "Mantenimiento" | "Inactivo";
 // Estado que puede venir desde la BD (por compatibilidad si quedaron registros viejos)
 type EstadoVehiculoDB = EstadoVehiculoUI | "En uso";
+
+type FiltroTipo = EstadoVehiculoUI | "Todos" | "DocVencida";
 
 type VolanteTipo = "Si" | "No";
 
@@ -158,7 +162,7 @@ async function apiFetchVehiculos({
   pageSize,
 }: {
   q: string;
-  estado: EstadoVehiculoUI | "Todos";
+  estado: FiltroTipo;
   page: number;
   pageSize: number;
 }) {
@@ -177,7 +181,11 @@ async function apiFetchVehiculos({
       `placa.ilike.%${term}%,marca.ilike.%${term}%,modelo.ilike.%${term}%,responsable.ilike.%${term}%,dni_responsable.ilike.%${term}%,proveedor.ilike.%${term}%`
     );
   }
-  if (estado !== "Todos") {
+  if (estado === "DocVencida") {
+    const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    // Usar OR: (rev_tecnica < today) OR (soat < today)
+    query = query.or(`rev_tecnica.lt.${today},soat.lt.${today}`);
+  } else if (estado !== "Todos") {
     query = query.eq("estado", estado);
   }
 
@@ -254,19 +262,29 @@ async function apiFetchVehiculoStats() {
   // Pedimos solo la columna estado de TODOS los vehículos
   const { data, error } = await supabase
     .from("vehiculos")
-    .select("estado");
+    // Traemos estado, rev_tecnica y soat para calcular estadísticas
+    .select("estado, rev_tecnica, soat");
 
   if (error) {
     console.error("Error fetching stats:", error);
-    return { disponible: 0, mantenimiento: 0, inactivo: 0 };
+    return { disponible: 0, mantenimiento: 0, inactivo: 0, docVencida: 0 };
   }
 
   const rows = data || [];
+  const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+
   const disponible = rows.filter((r) => r.estado === "Disponible").length;
   const mantenimiento = rows.filter((r) => r.estado === "Mantenimiento").length;
   const inactivo = rows.filter((r) => r.estado === "Inactivo").length;
 
-  return { disponible, mantenimiento, inactivo };
+  // Contar registros con CUALQUIERA de los documentos vencidos
+  const docVencida = rows.filter((r) => {
+    const revVencida = r.rev_tecnica && r.rev_tecnica < today;
+    const soatVencido = r.soat && r.soat < today;
+    return revVencida || soatVencido;
+  }).length;
+
+  return { disponible, mantenimiento, inactivo, docVencida };
 }
 
 /* =========================
@@ -278,7 +296,7 @@ export default function Inventario() {
   // Filtros / control
   const [q, setQ] = React.useState("");
   const [estadoFiltro, setEstadoFiltro] =
-    React.useState<EstadoVehiculoUI | "Todos">("Todos");
+    React.useState<FiltroTipo>("Todos");
   const [page, setPage] = React.useState(1);
 
   // Datos de backend
@@ -332,6 +350,7 @@ export default function Inventario() {
     disponible: 0,
     mantenimiento: 0,
     inactivo: 0,
+    docVencida: 0,
   });
 
   // Toast global
@@ -382,6 +401,26 @@ export default function Inventario() {
     load();
     loadStats(); // Cargamos stats al inicio también
   }, [load, loadStats]);
+
+  // Trigger Notification: Expired Docs
+  const { user } = useAuth() as any; // Cast simple para evitar líos de tipos si AuthContext no exporta exacto
+  React.useEffect(() => {
+    if (kpiStats.docVencida > 0 && user?.id) {
+      // Throttle: Notify once per day per user using localStorage
+      const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+      const key = `notified_expired_${user.id}_${today}`;
+
+      if (!localStorage.getItem(key)) {
+        notificationsStore.createNotification(
+          user.id,
+          "Documentos Vencidos",
+          `Atención: Existen ${kpiStats.docVencida} vehículos con documentos vencidos o por vencer. Revisa el inventario.`,
+          "warning"
+        );
+        localStorage.setItem(key, "true");
+      }
+    }
+  }, [kpiStats.docVencida, user]);
 
   /* Acciones */
   const openEdit = (v: Vehiculo) => {
@@ -538,7 +577,7 @@ export default function Inventario() {
   };
 
   // KPI: usar kpiStats en lugar de rows.filter
-  const { disponible, mantenimiento, inactivo } = kpiStats;
+  const { disponible, mantenimiento, inactivo, docVencida } = kpiStats;
 
   return (
     <div className="space-y-5">
@@ -553,8 +592,9 @@ export default function Inventario() {
         </p>
       </div>
 
+
       {/* KPIs Simplificados */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {/* Disponibles */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
@@ -599,6 +639,19 @@ export default function Inventario() {
             </div>
           </div>
         </div>
+
+        {/* Doc Vencida */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Doc. Vencida</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{docVencida}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-red-50 text-red-600">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filtros / Acciones - Diseño Limpio */}
@@ -616,10 +669,7 @@ export default function Inventario() {
         <div className="flex flex-wrap items-center gap-3">
           <div className="flex rounded-lg border border-gray-200 bg-white p-1">
             {(
-              ["Todos", "Disponible", "Mantenimiento", "Inactivo"] as (
-                | EstadoVehiculoUI
-                | "Todos"
-              )[]
+              ["Todos", "Disponible", "Mantenimiento", "Inactivo", "DocVencida"] as FiltroTipo[]
             ).map((opt) => (
               <button
                 key={opt}
@@ -630,7 +680,7 @@ export default function Inventario() {
                   : "text-gray-500 hover:text-gray-700"
                   }`}
               >
-                {opt}
+                {opt === "DocVencida" ? "Doc. Vencida" : opt}
               </button>
             ))}
           </div>

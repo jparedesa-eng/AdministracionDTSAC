@@ -1,6 +1,7 @@
 // src/pages/Camionetas/Solicitar.tsx
 import React from "react";
 import { camionetasStore } from "../../store/camionetasStore";
+import { notificationsStore } from "../../store/notificationsStore";
 import {
   Calendar,
   CheckCircle2,
@@ -347,6 +348,19 @@ export default function Solicitar() {
 
       await camionetasStore.syncSolicitudes();
       setTickets([...camionetasStore.solicitudes]);
+
+      // Trigger Notification: New Request (Manual from Solicitar.tsx)
+      try {
+        await notificationsStore.notifyUsersByRoleAndArea(
+          "jefe",
+          "ADMINISTRACION",
+          "Nueva Solicitud de Camioneta",
+          `El usuario ${nombre.trim()} ha generado una solicitud (origen: ${origen}, destino: ${destino}).`,
+          "info"
+        );
+      } catch (e) {
+        console.warn("Error enviando notificación automática:", e);
+      }
 
       setMsg({
         type: "ok",
