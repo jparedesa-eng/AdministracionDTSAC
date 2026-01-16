@@ -38,9 +38,9 @@ function filtrarPlacasConVolante(placas: string[]): string[] {
   });
 }
 
-// Horario permitido: 08:00 a 20:00 del mismo día
+// Horario permitido: 08:00 a 16:00 del mismo día
 const HORARIO_MIN_MIN = 8 * 60; // 08:00
-const HORARIO_MAX_MIN = 20 * 60; // 20:00
+const HORARIO_MAX_MIN = 16 * 60; // 16:00
 
 function minutosDelDia(d: Date) {
   return d.getHours() * 60 + d.getMinutes();
@@ -80,7 +80,7 @@ export default function Solicitar() {
   );
 
   const [usoFinLocal, setUsoFinLocal] = React.useState<string>(() =>
-    defaultDateTimeLocal(20, 0) // 10:00
+    defaultDateTimeLocal(16, 0) // 16:00
   );
 
   // disponibilidad
@@ -178,7 +178,7 @@ export default function Solicitar() {
         setChecking(false);
         setMsg({
           type: "err",
-          text: "El horario permitido es de 08:00 a 20:00 horas del mismo día.",
+          text: "El horario permitido es de 08:00 a 16:00 horas del mismo día.",
         });
         return;
       }
@@ -285,7 +285,7 @@ export default function Solicitar() {
     if (!esHorarioPermitido(dInicio) || !esHorarioPermitido(dFin)) {
       setMsg({
         type: "err",
-        text: "El horario permitido es de 08:00 a 20:00 horas del mismo día.",
+        text: "El horario permitido es de 08:00 a 16:00 horas del mismo día.",
       });
       return;
     }
