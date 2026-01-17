@@ -49,7 +49,9 @@ export default function InventarioTelefonia() {
 
     // Action Form States
     const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
-    const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "" });
+    const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Usuario Final
+    const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
+    const [sameAsResponsable, setSameAsResponsable] = useState(true);
     const [bajaData, setBajaData] = useState({ motivo: "" });
 
     // Drafts
@@ -159,6 +161,8 @@ export default function InventarioTelefonia() {
     const handleOpenAsignacion = (eq: Equipo) => {
         setModalActionItem(eq);
         setAsignacionData({ dni: "", nombre: "", area: "", puesto: "" });
+        setResponsableData({ dni: "", nombre: "", area: "", puesto: "" });
+        setSameAsResponsable(true);
         setOpenAsignacion(true);
     };
 
@@ -166,7 +170,10 @@ export default function InventarioTelefonia() {
         e.preventDefault();
         if (!modalActionItem) return;
         try {
-            await telefoniaStore.asignarDirectamente(modalActionItem.id, asignacionData);
+            // If check is true, Usuario Final = Responsable
+            const usuarioFinal = sameAsResponsable ? responsableData : asignacionData;
+
+            await telefoniaStore.asignarDirectamente(modalActionItem.id, usuarioFinal, responsableData);
             setToast({ type: "success", message: "Equipo asignado correctamente" });
             setOpenAsignacion(false);
         } catch (error: any) {
@@ -989,55 +996,106 @@ export default function InventarioTelefonia() {
             <Modal
                 open={openAsignacion}
                 onClose={() => setOpenAsignacion(false)}
-                title="Asignación Manual (Sin Ticket)"
+                title="Asignación Directa de Equipo"
             >
-                <form onSubmit={submitAsignacion} className="space-y-4">
-                    <div className="bg-blue-50 p-3 rounded-md text-xs text-blue-800 mb-4">
-                        Esta acción creará un ticket interno para mantener el historial. Úsala para asignar equipos rápidamente.
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">DNI Beneficiario</label>
-                        <input
-                            required
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                            value={asignacionData.dni}
-                            onChange={(e) => setAsignacionData({ ...asignacionData, dni: e.target.value })}
-                            placeholder="DNI"
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Nombre Completo</label>
-                        <input
-                            required
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                            value={asignacionData.nombre}
-                            onChange={(e) => setAsignacionData({ ...asignacionData, nombre: e.target.value })}
-                            placeholder="Nombre Apellido"
-                        />
-                    </div>
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Área</label>
+                <form onSubmit={submitAsignacion} className="space-y-6">
+                    <p className="text-sm text-gray-600">
+                        Equipo: <strong>{modalActionItem?.marca} {modalActionItem?.modelo}</strong>
+                    </p>
+
+                    {/* RESPONSABLE */}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-3">
+                        <h4 className="text-sm font-semibold text-blue-900 border-b border-blue-200 pb-1">Datos del Responsable</h4>
+                        <div className="grid grid-cols-2 gap-3">
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                value={asignacionData.area}
-                                onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.dni}
+                                onChange={(e) => setResponsableData({ ...responsableData, dni: e.target.value })}
+                                placeholder="DNI Responsable"
+                            />
+                            <input
+                                required
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.nombre}
+                                onChange={(e) => setResponsableData({ ...responsableData, nombre: e.target.value })}
+                                placeholder="Nombre Responsable"
                             />
                         </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Puesto</label>
+                        <div className="grid grid-cols-2 gap-3">
                             <input
                                 required
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                value={asignacionData.puesto}
-                                onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.area}
+                                onChange={(e) => setResponsableData({ ...responsableData, area: e.target.value })}
+                                placeholder="Área"
+                            />
+                            <input
+                                required
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.puesto}
+                                onChange={(e) => setResponsableData({ ...responsableData, puesto: e.target.value })}
+                                placeholder="Puesto"
                             />
                         </div>
                     </div>
+
+                    {/* USUARIO FINAL CHECKBOX */}
+                    <div className="flex items-center gap-2">
+                        <input
+                            type="checkbox"
+                            id="sameUser"
+                            checked={sameAsResponsable}
+                            onChange={(e) => setSameAsResponsable(e.target.checked)}
+                            className="h-4 w-4 text-indigo-600 focus:ring-indigo-500 border-gray-300 rounded"
+                        />
+                        <label htmlFor="sameUser" className="block text-sm font-medium text-gray-900">
+                            El Responsable es el mismo Usuario Final
+                        </label>
+                    </div>
+
+                    {/* USUARIO FINAL (Conditional) */}
+                    {!sameAsResponsable && (
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Usuario Final</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input
+                                    required={!sameAsResponsable}
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    value={asignacionData.dni}
+                                    onChange={(e) => setAsignacionData({ ...asignacionData, dni: e.target.value })}
+                                    placeholder="DNI Usuario"
+                                />
+                                <input
+                                    required={!sameAsResponsable}
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    value={asignacionData.nombre}
+                                    onChange={(e) => setAsignacionData({ ...asignacionData, nombre: e.target.value })}
+                                    placeholder="Nombre Usuario"
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <input
+                                    required={!sameAsResponsable}
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    value={asignacionData.area}
+                                    onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
+                                    placeholder="Área"
+                                />
+                                <input
+                                    required={!sameAsResponsable}
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    value={asignacionData.puesto}
+                                    onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
+                                    placeholder="Puesto"
+                                />
+                            </div>
+                        </div>
+                    )}
+
                     <div className="flex justify-end pt-2">
                         <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium">
-                            Asignar Equipo
+                            Asignar y Entregar
                         </button>
                     </div>
                 </form>

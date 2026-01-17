@@ -67,6 +67,7 @@ import InventarioSensores from "./pages/Seguridad/InventarioSensores";
 import InventarioPantallas from "./pages/Seguridad/InventarioPantallas";
 import InventarioNVR from "./pages/Seguridad/InventarioNVR";
 import RegistroEventosMayores from "./pages/Seguridad/RegistroEventosMayores";
+import DashboardCCTV from "./pages/Seguridad/DashboardCCTV";
 
 
 
@@ -460,6 +461,14 @@ export default function App() {
                     Selecciona una opción del submenú.
                   </p>
                 </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguridad/dashboard"
+            element={
+              <ProtectedRoute path="/seguridad/dashboard">
+                <DashboardCCTV />
               </ProtectedRoute>
             }
           />

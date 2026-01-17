@@ -6,6 +6,7 @@ import {
     PencilLine,
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
+import { PaginationFooter } from "../../components/ui/PaginationFooter";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -85,7 +86,7 @@ function TabSensores({
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Sensor | null>(null);
     const [page, setPage] = useState(1);
-    const [pageSize] = useState(10);
+    const [pageSize, setPageSize] = useState(10);
 
     const [formData, setFormData] = useState({
         codigo: "",
@@ -240,45 +241,63 @@ function TabSensores({
                 </div>
             </div>
 
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
-                <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
-                        <tr>
-                            <th className="px-3 py-2 uppercase tracking-wider">Código</th>
-                            <th className="px-3 py-2 uppercase tracking-wider">Nombre</th>
-                            <th className="px-3 py-2 uppercase tracking-wider">Central</th>
-                            <th className="px-3 py-2 uppercase tracking-wider">Sede</th>
-                            <th className="px-3 py-2 uppercase tracking-wider">Tipo</th>
-                            <th className="px-3 py-2 uppercase tracking-wider">Marca</th>
-                            <th className="px-3 py-2 uppercase tracking-wider text-center">Estado</th>
-                            <th className="px-3 py-2 uppercase tracking-wider text-right">Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-100">
-                        {currentRows.map(c => {
-                            const central = centrales.find(ct => ct.id === c.central_id);
-                            const sede = sedes.find(s => s.id === c.sede_id);
-                            return (
-                                <tr key={c.id} className="hover:bg-gray-50">
-                                    <td className="px-3 py-1.5 font-mono text-xs">{c.codigo}</td>
-                                    <td className="px-3 py-1.5 font-medium">{c.nombre}</td>
-                                    <td className="px-3 py-1.5">{central?.nombre || "-"}</td>
-                                    <td className="px-3 py-1.5">{sede?.nombre || "-"}</td>
-                                    <td className="px-3 py-1.5">{c.tipo || "-"}</td>
-                                    <td className="px-3 py-1.5">{c.marca || "-"}</td>
-                                    <td className="px-3 py-1.5 text-center">
-                                        <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter ${c.estado === 'ACTIVO' ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
-                                            {c.estado}
-                                        </span>
-                                    </td>
-                                    <td className="px-3 py-1.5 text-right flex justify-end gap-1">
-                                        <button onClick={() => handleOpen(c)} className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100"><PencilLine className="h-3.5 w-3.5" /></button>
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-none">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left">
+                        <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
+                            <tr>
+                                <th className="px-3 py-2 uppercase tracking-wider">Código</th>
+                                <th className="px-3 py-2 uppercase tracking-wider">Nombre</th>
+                                <th className="px-3 py-2 uppercase tracking-wider">Central</th>
+                                <th className="px-3 py-2 uppercase tracking-wider">Sede</th>
+                                <th className="px-3 py-2 uppercase tracking-wider">Tipo</th>
+                                <th className="px-3 py-2 uppercase tracking-wider">Marca</th>
+                                <th className="px-3 py-2 uppercase tracking-wider text-center">Estado</th>
+                                <th className="px-3 py-2 uppercase tracking-wider text-right">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-gray-100">
+                            {currentRows.map(c => {
+                                const central = centrales.find(ct => ct.id === c.central_id);
+                                const sede = sedes.find(s => s.id === c.sede_id);
+                                return (
+                                    <tr key={c.id} className="hover:bg-gray-50">
+                                        <td className="px-3 py-1.5 font-mono text-xs">{c.codigo}</td>
+                                        <td className="px-3 py-1.5 font-medium">{c.nombre}</td>
+                                        <td className="px-3 py-1.5">{central?.nombre || "-"}</td>
+                                        <td className="px-3 py-1.5">{sede?.nombre || "-"}</td>
+                                        <td className="px-3 py-1.5">{c.tipo || "-"}</td>
+                                        <td className="px-3 py-1.5">{c.marca || "-"}</td>
+                                        <td className="px-3 py-1.5 text-center">
+                                            <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-tighter ${c.estado === 'ACTIVO' ? "bg-emerald-50 text-emerald-700" : "bg-rose-50 text-rose-700"}`}>
+                                                {c.estado}
+                                            </span>
+                                        </td>
+                                        <td className="px-3 py-1.5 text-right flex justify-end gap-1">
+                                            <button onClick={() => handleOpen(c)} className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100"><PencilLine className="h-3.5 w-3.5" /></button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                            {currentRows.length === 0 && (
+                                <tr>
+                                    <td colSpan={8} className="px-6 py-8 text-center text-gray-500 text-xs italic">
+                                        No se encontraron sensores.
                                     </td>
                                 </tr>
-                            );
-                        })}
-                    </tbody>
-                </table>
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                <PaginationFooter
+                    currentPage={page}
+                    totalPages={totalPages}
+                    itemsPerPage={pageSize}
+                    setItemsPerPage={(n) => { setPageSize(n); setPage(1); }}
+                    setCurrentPage={setPage}
+                    totalItems={filtered.length}
+                />
             </div>
 
             <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editItem ? "Editar Sensor" : "Nuevo Sensor"} size="lg">

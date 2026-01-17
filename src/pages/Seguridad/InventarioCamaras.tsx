@@ -11,6 +11,7 @@ import {
     Monitor
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
+import { PaginationFooter } from "../../components/ui/PaginationFooter";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -454,7 +455,7 @@ function TabCamaras({
             </div>
 
             {/* Table Section */}
-            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+            <div className="rounded-xl border border-gray-200 bg-white overflow-hidden shadow-none">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left">
                         <thead className="bg-gray-50 text-gray-500 font-bold border-b border-gray-200">
@@ -547,50 +548,15 @@ function TabCamaras({
                         </tbody>
                     </table>
                 </div>
-                {/* Pagination Footer */}
-                <div className="px-4 py-2 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
-                    <div className="flex items-center gap-4">
-                        <span className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">
-                            Mostrando {start + 1} a {Math.min(start + pageSize, filtered.length)} de {filtered.length}
-                        </span>
-                        <div className="flex items-center gap-2">
-                            <label className="text-[10px] font-medium text-gray-400 uppercase tracking-widest">Filas:</label>
-                            <select
-                                value={pageSize}
-                                onChange={e => { setPageSize(Number(e.target.value)); setPage(1); }}
-                                className="h-7 rounded border-gray-200 text-[10px] font-medium bg-white focus:ring-0"
-                            >
-                                <option value={10}>10</option>
-                                <option value={25}>25</option>
-                                <option value={50}>50</option>
-                                <option value={100}>100</option>
-                                <option value={-1}>Todas</option>
-                            </select>
-                        </div>
-                    </div>
 
-                    <div className="flex items-center gap-1">
-                        <button
-                            disabled={page <= 1}
-                            onClick={() => setPage(prev => prev - 1)}
-                            className="px-2 py-1 rounded border border-gray-200 bg-white text-[10px] font-medium hover:bg-gray-50 disabled:opacity-30"
-                        >
-                            Anterior
-                        </button>
-                        <div className="flex items-center gap-1 px-2">
-                            <span className="text-[10px] font-medium text-gray-900">{page}</span>
-                            <span className="text-[10px] font-medium text-gray-400">/</span>
-                            <span className="text-[10px] font-medium text-gray-400">{totalPages}</span>
-                        </div>
-                        <button
-                            disabled={page >= totalPages}
-                            onClick={() => setPage(prev => prev + 1)}
-                            className="px-2 py-1 rounded border border-gray-200 bg-white text-[10px] font-medium hover:bg-gray-50 disabled:opacity-30"
-                        >
-                            Siguiente
-                        </button>
-                    </div>
-                </div>
+                <PaginationFooter
+                    currentPage={page}
+                    totalPages={totalPages}
+                    itemsPerPage={pageSize}
+                    setItemsPerPage={(n) => { setPageSize(n); setPage(1); }}
+                    setCurrentPage={setPage}
+                    totalItems={filtered.length}
+                />
             </div>
 
             {/* Modal */}

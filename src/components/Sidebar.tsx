@@ -24,7 +24,8 @@ import {
   Route,
   SignalHigh,
   User,
-  Activity
+  Activity,
+  LayoutDashboard
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -211,6 +212,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 2. Checklist CCTV
     const checklistSubItems: NavItem[] = [];
+    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-dash', label: 'Dashboard', path: '/seguridad/dashboard', icon: LayoutDashboard });
     if (hasAccess("/seguridad/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos CCTV', path: '/seguridad/eventos', icon: Settings });
     if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
     if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/seguridad/inventario-camaras', icon: Wrench });

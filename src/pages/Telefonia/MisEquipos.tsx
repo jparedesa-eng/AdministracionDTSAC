@@ -15,7 +15,7 @@ interface AsignacionUI {
     usuario_final_nombre: string;
     usuario_final_area: string;
     fecha_entrega: string;
-    solicitud_id: string;
+    solicitud_id: string | null;
     fecha_entrega_final: string; // New field
     editMode: boolean;
     // Temp edit values
@@ -26,7 +26,7 @@ interface AsignacionUI {
 }
 
 export default function MisEquipos() {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
     const [assignments, setAssignments] = useState<AsignacionUI[]>([]);
@@ -36,17 +36,50 @@ export default function MisEquipos() {
         if (!user?.id) return;
         setLoading(true);
         try {
-            await telefoniaStore.fetchSolicitudes(); // Ensure we have tickets
-            // We need to fetch all assignments linked to tickets created by me
-            const myTickets = telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
-
             const allMyAssignments: AsignacionUI[] = [];
+            const processedIds = new Set<string>(); // Avoid duplicates if filters overlap
+
+            // 1. Fetch from Tickets (Created by me)
+            await telefoniaStore.fetchSolicitudes(); // Ensure we have tickets
+            const myTickets = telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
 
             myTickets.forEach(ticket => {
                 if (ticket.asignaciones && ticket.asignaciones.length > 0) {
                     ticket.asignaciones.forEach(asig => {
                         // Only active assignments (no return date)
                         if (!asig.fecha_devolucion && asig.estado === 'Entregado') {
+                            if (!processedIds.has(asig.id)) {
+                                allMyAssignments.push({
+                                    id: asig.id,
+                                    equipo_id: asig.equipo_id,
+                                    equipo_marca: asig.equipo?.marca || "Desconocido",
+                                    equipo_modelo: asig.equipo?.modelo || "",
+                                    equipo_imei: asig.equipo?.imei || "",
+                                    usuario_final_dni: asig.usuario_final_dni || "",
+                                    usuario_final_nombre: asig.usuario_final_nombre || "",
+                                    usuario_final_area: asig.usuario_final_area || "",
+                                    fecha_entrega: asig.fecha_entrega || "",
+                                    solicitud_id: asig.solicitud_id,
+                                    fecha_entrega_final: asig.fecha_entrega_final || "",
+                                    editMode: false,
+                                    temp_dni: asig.usuario_final_dni || "",
+                                    temp_nombre: asig.usuario_final_nombre || "",
+                                    temp_area: asig.usuario_final_area || "",
+                                    temp_fecha_entrega_final: asig.fecha_entrega_final || ""
+                                });
+                                processedIds.add(asig.id);
+                            }
+                        }
+                    });
+                }
+            });
+
+            // 2. Fetch from Direct Assignments (Where I am Responsable)
+            if (profile?.dni) {
+                const directAssignments = await telefoniaStore.fetchAsignacionesPorResponsable(profile.dni);
+                if (directAssignments) {
+                    directAssignments.forEach(asig => {
+                        if (!processedIds.has(asig.id)) {
                             allMyAssignments.push({
                                 id: asig.id,
                                 equipo_id: asig.equipo_id,
@@ -57,7 +90,7 @@ export default function MisEquipos() {
                                 usuario_final_nombre: asig.usuario_final_nombre || "",
                                 usuario_final_area: asig.usuario_final_area || "",
                                 fecha_entrega: asig.fecha_entrega || "",
-                                solicitud_id: asig.solicitud_id,
+                                solicitud_id: asig.solicitud_id, // Might be null
                                 fecha_entrega_final: asig.fecha_entrega_final || "",
                                 editMode: false,
                                 temp_dni: asig.usuario_final_dni || "",
@@ -65,10 +98,11 @@ export default function MisEquipos() {
                                 temp_area: asig.usuario_final_area || "",
                                 temp_fecha_entrega_final: asig.fecha_entrega_final || ""
                             });
+                            processedIds.add(asig.id);
                         }
                     });
                 }
-            });
+            }
 
             setAssignments(allMyAssignments);
 
