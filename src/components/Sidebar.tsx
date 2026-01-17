@@ -211,12 +211,12 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 2. Checklist CCTV
     const checklistSubItems: NavItem[] = [];
+    if (hasAccess("/seguridad/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos CCTV', path: '/seguridad/eventos', icon: Settings });
+    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
     if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/seguridad/inventario-camaras', icon: Wrench });
-    if (hasAccess("/seguridad/sensores")) checklistSubItems.push({ id: 'seg-sens', label: 'Inventario Sens.', path: '/seguridad/sensores', icon: Activity });
     if (hasAccess("/seguridad/pantallas")) checklistSubItems.push({ id: 'seg-pant', label: 'Inventario Pan.', path: '/seguridad/pantallas', icon: Monitor });
     if (hasAccess("/seguridad/nvr")) checklistSubItems.push({ id: 'seg-nvr', label: 'Inventario NVR', path: '/seguridad/nvr', icon: Building2 });
-    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
-    if (hasAccess("/seguridad/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos Mayores', path: '/seguridad/eventos', icon: Settings });
+    if (hasAccess("/seguridad/sensores")) checklistSubItems.push({ id: 'seg-sens', label: 'Inventario Sens.', path: '/seguridad/sensores', icon: Activity });
 
     if (checklistSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-camaras', label: 'Checklist CCTV', icon: ClipboardList, subItems: checklistSubItems });

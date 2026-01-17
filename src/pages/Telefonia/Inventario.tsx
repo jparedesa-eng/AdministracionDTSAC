@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { telefoniaStore } from "../../store/telefoniaStore";
 import type { Equipo, Chip, PlanTelefonico } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
+import { ConfirmationModal } from "../../components/ui/ConfirmationModal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import {
@@ -81,6 +82,25 @@ export default function InventarioTelefonia() {
     // eSIM / New Line flow
     const [includeEsim, setIncludeEsim] = useState(false);
     const [esimData, setEsimData] = useState({ numero: "", operador: "" });
+
+    // Confirmation Modal State
+    const [confirmation, setConfirmation] = useState<{
+        open: boolean;
+        title: string;
+        message: string;
+        onConfirm: () => Promise<void>;
+        variant?: 'danger' | 'warning' | 'info';
+        loading?: boolean;
+    }>({
+        open: false,
+        title: "",
+        message: "",
+        onConfirm: async () => { },
+        variant: 'danger',
+        loading: false
+    });
+
+    const closeConfirmation = () => setConfirmation(prev => ({ ...prev, open: false }));
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -172,14 +192,26 @@ export default function InventarioTelefonia() {
         }
     };
 
-    const handleProcesarBaja = async (eq: Equipo, accion: 'APROBAR' | 'REPARADO') => {
-        if (!confirm(accion === 'APROBAR' ? "¿Confirmar baja definitiva?" : "¿Confirmar que el equipo ha sido reparado?")) return;
-        try {
-            await telefoniaStore.procesarBaja(eq.id, accion);
-            setToast({ type: "success", message: "Estado actualizado" });
-        } catch (error: any) {
-            setToast({ type: "error", message: "Error al procesar baja" });
-        }
+    const handleProcesarBaja = (eq: Equipo, accion: 'APROBAR' | 'REPARADO') => {
+        setConfirmation({
+            open: true,
+            title: accion === 'APROBAR' ? "Confirmar Baja Definitiva" : "Confirmar Reparación",
+            message: accion === 'APROBAR'
+                ? "¿Estás seguro de dar de baja definitiva este equipo? Esta acción no se puede deshacer."
+                : "¿Confirmar que el equipo ha sido reparado y está listo para ser asignado nuevamente?",
+            variant: accion === 'APROBAR' ? "danger" : "info",
+            onConfirm: async () => {
+                setConfirmation(prev => ({ ...prev, loading: true }));
+                try {
+                    await telefoniaStore.procesarBaja(eq.id, accion);
+                    setToast({ type: "success", message: "Estado actualizado correctly" });
+                    closeConfirmation();
+                } catch (error: any) {
+                    setToast({ type: "error", message: "Error al procesar baja" });
+                    setConfirmation(prev => ({ ...prev, loading: false }));
+                }
+            }
+        });
     };
 
 
@@ -307,14 +339,24 @@ export default function InventarioTelefonia() {
         }
     };
 
-    const handleDeletePlan = async (id: string) => {
-        if (!confirm("¿Seguro que desea eliminar este plan?")) return;
-        try {
-            await telefoniaStore.deletePlan(id);
-            setToast({ type: "success", message: "Plan eliminado" });
-        } catch (error) {
-            setToast({ type: "error", message: "Error al eliminar plan" });
-        }
+    const handleDeletePlan = (id: string) => {
+        setConfirmation({
+            open: true,
+            title: "Eliminar Plan",
+            message: "¿Seguro que desea eliminar este plan? Esta acción no se puede deshacer.",
+            variant: "danger",
+            onConfirm: async () => {
+                setConfirmation(prev => ({ ...prev, loading: true }));
+                try {
+                    await telefoniaStore.deletePlan(id);
+                    setToast({ type: "success", message: "Plan eliminado" });
+                    closeConfirmation();
+                } catch (error) {
+                    setToast({ type: "error", message: "Error al eliminar plan" });
+                    setConfirmation(prev => ({ ...prev, loading: false }));
+                }
+            }
+        });
     };
 
     const handleViewHistory = async (equipoId: string) => {
@@ -338,20 +380,29 @@ export default function InventarioTelefonia() {
         setShowLinkModal(true);
     };
 
-    const handleUnlink = async (type: 'equipo' | 'chip', item: any) => {
-        if (!confirm("¿Seguro que deseas desvincular?")) return;
-        try {
-            if (type === 'equipo') {
-                await telefoniaStore.desvincular(item.id, item.chip_id);
-            } else {
-                await telefoniaStore.desvincular(item.equipo_id, item.id);
+    const handleUnlink = (type: 'equipo' | 'chip', item: any) => {
+        setConfirmation({
+            open: true,
+            title: type === 'equipo' ? "Desvincular Línea" : "Desvincular Equipo",
+            message: `¿Seguro que deseas desvincular ${type === 'equipo' ? 'la línea del equipo' : 'el equipo de la línea'}?`,
+            variant: "warning",
+            onConfirm: async () => {
+                setConfirmation(prev => ({ ...prev, loading: true }));
+                try {
+                    if (type === 'equipo') {
+                        await telefoniaStore.desvincular(item.id, item.chip_id);
+                    } else {
+                        await telefoniaStore.desvincular(item.equipo_id, item.id);
+                    }
+                    setToast({ type: "success", message: "Desvinculado correctamente" });
+                    loadData(true);
+                    closeConfirmation();
+                } catch (e: any) {
+                    setToast({ type: "error", message: "Error al desvincular" });
+                    setConfirmation(prev => ({ ...prev, loading: false }));
+                }
             }
-            setToast({ type: "success", message: "Desvinculado correctamente" });
-            setToast({ type: "success", message: "Desvinculado correctamente" });
-            loadData(true);
-        } catch (e: any) {
-            setToast({ type: "error", message: "Error al desvincular" });
-        }
+        });
     };
 
     const handleSaveLink = async () => {
@@ -1589,6 +1640,17 @@ export default function InventarioTelefonia() {
                     </div>
                 </form>
             </Modal>
+
+            <ConfirmationModal
+                open={confirmation.open}
+                onClose={closeConfirmation}
+                onConfirm={confirmation.onConfirm}
+                title={confirmation.title}
+                variant={confirmation.variant}
+                loading={confirmation.loading}
+            >
+                {confirmation.message}
+            </ConfirmationModal>
         </div>
     );
 }
