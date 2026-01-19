@@ -478,9 +478,15 @@ export default function InventarioTelefonia() {
 
     const filteredChips = telefoniaStore.chips.filter((c) => {
         const term = q.toLowerCase();
+        // Normalize for phone number search: remove spaces and hyphens
+        const cleanTerm = term.replace(/[\s-]/g, "");
+        const cleanNumero = c.numero_linea.toLowerCase().replace(/[\s-]/g, "");
+
         return (
-            c.numero_linea.toLowerCase().includes(term) ||
-            c.operador.toLowerCase().includes(term)
+            cleanNumero.includes(cleanTerm) ||
+            c.operador.toLowerCase().includes(term) ||
+            // Keep original check just in case user specifically types formatted string distinctively
+            c.numero_linea.toLowerCase().includes(term)
         );
     });
 

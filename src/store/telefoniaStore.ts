@@ -283,18 +283,38 @@ export const telefoniaStore = {
 
     // --- EQUIPOS ---
     async fetchEquipos() {
-        // 1. Fetch Equipos
-        const { data: equiposData, error: eqError } = await supabase
-            .from("telefonia_equipos")
-            .select(`
-                *,
-                chip:telefonia_chips!telefonia_equipos_chip_id_fkey(
+        // 1. Fetch Equipos (Recursive Chunking)
+        let allEquipos: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data: chunk, error: eqError } = await supabase
+                .from("telefonia_equipos")
+                .select(`
                     *,
-                    plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
-                )
-            `)
-            .order("created_at", { ascending: false });
-        if (eqError) throw eqError;
+                    chip:telefonia_chips!telefonia_equipos_chip_id_fkey(
+                        *,
+                        plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
+                    )
+                `)
+                .order("created_at", { ascending: false })
+                .range(from, to);
+
+            if (eqError) throw eqError;
+
+            if (chunk) {
+                allEquipos = [...allEquipos, ...chunk];
+                if (chunk.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+            page++;
+        }
 
         // 2. Fetch Active Assignments (Entregado status AND no return date)
         const { data: activeSols, error: solError } = await supabase
@@ -356,7 +376,7 @@ export const telefoniaStore = {
             console.warn("Could not fetch new assignments in fetchEquipos", e);
         }
 
-        this.equipos = (equiposData as Equipo[]).map(e => ({
+        this.equipos = (allEquipos as Equipo[]).map(e => ({
             ...e,
             asignacion_activa: activeMap.get(e.id) || null
         }));
@@ -391,16 +411,37 @@ export const telefoniaStore = {
 
     // --- CHIPS ---
     async fetchChips() {
-        const { data, error } = await supabase
-            .from("telefonia_chips")
-            .select(`
-                *,
-                equipo:telefonia_equipos!telefonia_chips_equipo_id_fkey(*),
-                plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
-            `)
-            .order("created_at", { ascending: false });
-        if (error) throw error;
-        this.chips = data as Chip[];
+        // Fetch Chips (Recursive Chunking)
+        let allChips: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data: chunk, error } = await supabase
+                .from("telefonia_chips")
+                .select(`
+                    *,
+                    equipo:telefonia_equipos!telefonia_chips_equipo_id_fkey(*),
+                    plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
+                `)
+                .order("created_at", { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+
+            if (chunk) {
+                allChips = [...allChips, ...chunk];
+                if (chunk.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+            page++;
+        }
+        this.chips = allChips as Chip[];
     },
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
@@ -432,12 +473,33 @@ export const telefoniaStore = {
 
     // --- PLANES ---
     async fetchPlanes() {
-        const { data, error } = await supabase
-            .from("telefonia_planes")
-            .select("*")
-            .order("created_at", { ascending: false });
-        if (error) throw error;
-        this.planes = data as PlanTelefonico[];
+        // Fetch Planes (Recursive Chunking)
+        let allPlanes: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data: chunk, error } = await supabase
+                .from("telefonia_planes")
+                .select("*")
+                .order("created_at", { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+
+            if (chunk) {
+                allPlanes = [...allPlanes, ...chunk];
+                if (chunk.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+            page++;
+        }
+        this.planes = allPlanes as PlanTelefonico[];
     },
 
     async createPlan(plan: Omit<PlanTelefonico, "id" | "created_at">) {
@@ -474,28 +536,51 @@ export const telefoniaStore = {
 
     // --- SOLICITUDES ---
     async fetchSolicitudes() {
-        // 1. Fetch Tickets
-        const { data: tickets, error } = await supabase
-            .from("telefonia_solicitudes")
-            .select(`
-                *,
-                equipo:telefonia_equipos!equipo_asignado_id(*),
-                chip:telefonia_chips!chip_asignado_id(*)
-            `)
-            .order("created_at", { ascending: false });
-        if (error) throw error;
+        // 1. Fetch Tickets (Recursive Chunking)
+        let allTickets: any[] = [];
+        let page = 0;
+        const pageSize = 1000;
+        let hasMore = true;
+
+        while (hasMore) {
+            const from = page * pageSize;
+            const to = from + pageSize - 1;
+
+            const { data: chunk, error } = await supabase
+                .from("telefonia_solicitudes")
+                .select(`
+                    *,
+                    equipo:telefonia_equipos!equipo_asignado_id(*),
+                    chip:telefonia_chips!chip_asignado_id(*)
+                `)
+                .order("created_at", { ascending: false })
+                .range(from, to);
+
+            if (error) throw error;
+
+            if (chunk) {
+                allTickets = [...allTickets, ...chunk];
+                if (chunk.length < pageSize) hasMore = false;
+            } else {
+                hasMore = false;
+            }
+            page++;
+        }
+
+        // ... (Assignments fetching logic remains same, assuming it's usually smaller or linked by ID) ...
 
         let assignmentsMap: Record<string, Asignacion[]> = {};
 
         // 2. Try Fetch Assignments (Graceful degradation if table missing)
         try {
+            // Ideally we should also paginate this if it grows huge, but for now we focus on main tables
             const { data: allAssignments, error: assignError } = await supabase
                 .from("telefonia_solicitud_asignaciones")
                 .select(`
                     *,
                     equipo:telefonia_equipos(*),
                     chip:telefonia_chips(*)
-                `);
+                `); // Potentially needs pagination too if > 1000 rows
 
             if (!assignError && allAssignments) {
                 // Group by solicitud_id
@@ -511,7 +596,7 @@ export const telefoniaStore = {
         }
 
         // 3. Merge
-        this.solicitudes = tickets.map((d: any) => ({
+        this.solicitudes = allTickets.map((d: any) => ({
             ...d,
             equipo: d.equipo,
             chip: d.chip,
