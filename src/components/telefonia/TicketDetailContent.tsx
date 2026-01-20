@@ -86,11 +86,11 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                     {/* REQUEST TYPE BADGE */}
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-sm ${ticket.beneficiario_n_linea_ref === "Reposición" ? "bg-orange-100 text-orange-800 border-orange-200" :
-                        ticket.beneficiario_n_linea_ref === "Renovación" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
+                    <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-sm ${ticket.tipo_solicitud === "Reposición" ? "bg-orange-100 text-orange-800 border-orange-200" :
+                        ticket.tipo_solicitud === "Renovación" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
                             "bg-blue-100 text-blue-800 border-blue-200"
                         }`}>
-                        {ticket.beneficiario_n_linea_ref || "Línea Nueva"}
+                        {ticket.tipo_solicitud || "Línea Nueva"}
                     </span>
 
                     <div className="flex items-center gap-2 mt-1">

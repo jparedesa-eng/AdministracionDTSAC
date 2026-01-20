@@ -31,8 +31,8 @@ export default function AprobacionIT() {
     }, []);
 
     // FILTER: Only show "Línea Nueva" for IT Approval, per user request.
-    const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente IT" && t.beneficiario_n_linea_ref === "Línea Nueva");
-    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente IT" && t.beneficiario_n_linea_ref === "Línea Nueva");
+    const pendingTickets = telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente IT" && t.tipo_solicitud === "Línea Nueva");
+    const historyTickets = telefoniaStore.solicitudes.filter(t => t.estado !== "Pendiente IT" && t.tipo_solicitud === "Línea Nueva");
 
     const displayedTickets = viewMode === "pending" ? pendingTickets : historyTickets;
 
@@ -184,7 +184,7 @@ export default function AprobacionIT() {
                             </h4>
                             <div className="grid grid-cols-2 gap-x-4 gap-y-2">
                                 <p><span className="text-gray-500">Puesto:</span> {selectedTicket.beneficiario_puesto}</p>
-                                <p><span className="text-gray-500">Línea Ref:</span> {selectedTicket.beneficiario_n_linea_ref || "N/A"}</p>
+                                <p><span className="text-gray-500">Línea Ref:</span> {selectedTicket.tipo_solicitud || "N/A"}</p>
                                 <p><span className="text-gray-500">Periodo:</span> {selectedTicket.periodo_uso}</p>
                                 <p><span className="text-gray-500">Fundo/Planta:</span> {selectedTicket.fundo_planta}</p>
                                 <p><span className="text-gray-500">Cultivo:</span> {selectedTicket.cultivo}</p>

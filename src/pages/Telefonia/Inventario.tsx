@@ -51,6 +51,7 @@ export default function InventarioTelefonia() {
     const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
     const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Usuario Final
     const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
+    const [asignacionTicketData, setAsignacionTicketData] = useState({ ceco: "", justificacion: "Asignación Directa de Inventario", tipo_servicio: "Línea Nueva" });
     const [sameAsResponsable, setSameAsResponsable] = useState(true);
     const [bajaData, setBajaData] = useState({ motivo: "" });
 
@@ -75,6 +76,7 @@ export default function InventarioTelefonia() {
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [linkTarget, setLinkTarget] = useState<{ type: 'equipo' | 'chip', item: any } | null>(null);
     const [selectedLinkOption, setSelectedLinkOption] = useState("");
+    const [linkSearchTerm, setLinkSearchTerm] = useState("");
 
     // Linking Plan View
     const [openLinkPlan, setOpenLinkPlan] = useState(false);
@@ -162,6 +164,7 @@ export default function InventarioTelefonia() {
         setModalActionItem(eq);
         setAsignacionData({ dni: "", nombre: "", area: "", puesto: "" });
         setResponsableData({ dni: "", nombre: "", area: "", puesto: "" });
+        setAsignacionTicketData({ ceco: "", justificacion: "Asignación Directa de Inventario", tipo_servicio: "Línea Nueva" });
         setSameAsResponsable(true);
         setOpenAsignacion(true);
     };
@@ -173,8 +176,17 @@ export default function InventarioTelefonia() {
             // If check is true, Usuario Final = Responsable
             const usuarioFinal = sameAsResponsable ? responsableData : asignacionData;
 
-            await telefoniaStore.asignarDirectamente(modalActionItem.id, usuarioFinal, responsableData);
-            setToast({ type: "success", message: "Equipo asignado correctamente" });
+            await telefoniaStore.asignarDirectamente(
+                modalActionItem.id,
+                usuarioFinal,
+                responsableData,
+                {
+                    ceco: asignacionTicketData.ceco,
+                    justificacion: asignacionTicketData.justificacion,
+                    tipo_servicio: asignacionTicketData.tipo_servicio
+                }
+            );
+            setToast({ type: "success", message: "Equipo asignado y ticket generado correctamente" });
             setOpenAsignacion(false);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al asignar equipo" });
@@ -384,6 +396,7 @@ export default function InventarioTelefonia() {
     const handleOpenLink = (type: 'equipo' | 'chip', item: any) => {
         setLinkTarget({ type, item });
         setSelectedLinkOption("");
+        setLinkSearchTerm("");
         setShowLinkModal(true);
     };
 
@@ -1099,6 +1112,47 @@ export default function InventarioTelefonia() {
                         </div>
                     )}
 
+                    {/* DATOS DEL TICKET (CECO, JUSTIFICACIÓN) */}
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 space-y-3">
+                        <h4 className="text-sm font-semibold text-indigo-900 border-b border-indigo-200 pb-1">Datos del Ticket / Costos</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">CECO</label>
+                                <input
+                                    required
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.ceco}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, ceco: e.target.value })}
+                                    placeholder="Centro de Costos"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Tipo Servicio</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.tipo_servicio}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, tipo_servicio: e.target.value })}
+                                >
+                                    <option value="Línea Nueva">Línea Nueva</option>
+                                    <option value="Renovación">Renovación</option>
+                                    <option value="Reposición">Reposición</option>
+                                    <option value="Línea de Segundo Uso">Línea de Segundo Uso</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-indigo-800 uppercase">Justificación</label>
+                            <textarea
+                                required
+                                rows={2}
+                                className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                value={asignacionTicketData.justificacion}
+                                onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, justificacion: e.target.value })}
+                                placeholder="Motivo de la asignación..."
+                            />
+                        </div>
+                    </div>
+
                     <div className="flex justify-end pt-2">
                         <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium">
                             Asignar y Entregar
@@ -1619,28 +1673,56 @@ export default function InventarioTelefonia() {
                         Solo se muestran los ítems disponibles (sin asignar).
                     </p>
 
+                    <div className="mb-2">
+                        <input
+                            type="text"
+                            placeholder={linkTarget?.type === 'equipo' ? "Buscar número o operador..." : "Buscar equipo..."}
+                            className="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={linkSearchTerm}
+                            onChange={(e) => setLinkSearchTerm(e.target.value)}
+                        />
+                    </div>
+
                     <select
                         className="block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                         value={selectedLinkOption}
                         onChange={(e) => setSelectedLinkOption(e.target.value)}
+                        size={5} // Show multiple items to make it easier to see results
                     >
-                        <option value="">Seleccione...</option>
-                        {linkTarget?.type === 'equipo'
-                            ? telefoniaStore.chips
-                                .filter(c => !c.equipo_id) // Only available chips
-                                .map(c => (
-                                    <option key={c.id} value={c.id}>
-                                        {c.numero_linea} - {c.operador}
-                                    </option>
-                                ))
-                            : telefoniaStore.equipos
-                                .filter(e => !e.chip_id) // Only available equipos
-                                .map(e => (
-                                    <option key={e.id} value={e.id}>
-                                        {e.marca} {e.modelo} (IMEI: {e.imei})
-                                    </option>
-                                ))
-                        }
+                        <option value="">
+                            {linkSearchTerm ? "-- Seleccione --" : "-- Escriba para buscar --"}
+                        </option>
+                        {linkSearchTerm && (
+                            linkTarget?.type === 'equipo'
+                                ? telefoniaStore.chips
+                                    .filter(c => !c.equipo_id) // Only available chips
+                                    .filter(c => {
+                                        const term = linkSearchTerm.toLowerCase().replace(/[\s-]/g, "");
+                                        const num = c.numero_linea.toLowerCase().replace(/[\s-]/g, "");
+                                        const op = c.operador.toLowerCase();
+                                        return num.includes(term) || op.includes(linkSearchTerm.toLowerCase());
+                                    })
+                                    .map(c => (
+                                        <option key={c.id} value={c.id}>
+                                            {c.numero_linea} - {c.operador}
+                                        </option>
+                                    ))
+                                : telefoniaStore.equipos
+                                    .filter(e => !e.chip_id) // Only available equipos
+                                    .filter(e => {
+                                        const term = linkSearchTerm.toLowerCase().replace(/[\s-]/g, "");
+                                        const modelo = e.modelo.toLowerCase().replace(/[\s-]/g, "");
+                                        const marca = e.marca.toLowerCase().replace(/[\s-]/g, "");
+                                        const imei = e.imei.toLowerCase().replace(/[\s-]/g, "");
+
+                                        return modelo.includes(term) || marca.includes(term) || imei.includes(term);
+                                    })
+                                    .map(e => (
+                                        <option key={e.id} value={e.id}>
+                                            {e.marca} {e.modelo} (IMEI: {e.imei})
+                                        </option>
+                                    ))
+                        )}
                     </select>
 
                     <div className="flex justify-end gap-2 pt-2">

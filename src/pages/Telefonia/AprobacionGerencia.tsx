@@ -209,7 +209,7 @@ export default function AprobacionGerencia() {
                                 <div className="md:w-2/5 md:border-l md:border-r border-gray-100 md:px-6 py-2 md:py-0">
                                     <div className="flex justify-between items-baseline mb-1">
                                         <span className="text-xs text-gray-500 uppercase tracking-wide">Solicitud</span>
-                                        <span className="text-sm font-bold text-blue-700">{t.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                                        <span className="text-sm font-bold text-blue-700">{t.tipo_solicitud || "Línea Nueva"}</span>
                                     </div>
                                     <div className="flex justify-between items-baseline mb-1">
                                         <span className="text-xs text-gray-500 uppercase tracking-wide">Servicio Solicitado</span>

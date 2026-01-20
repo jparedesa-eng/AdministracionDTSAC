@@ -52,7 +52,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
     doc.setTextColor(44, 62, 80); // Dark Slate Professional
 
     // MOTIVO
-    const motivo = ticket.beneficiario_n_linea_ref?.toUpperCase() || ticket.tipo_servicio?.toUpperCase() || "SOLICITUD";
+    const motivo = ticket.tipo_solicitud?.toUpperCase() || ticket.tipo_servicio?.toUpperCase() || "SOLICITUD";
     doc.text(`TICKET: ${motivo}`, pageWidth - 14, 15, { align: 'right' });
 
     doc.setFontSize(8);
@@ -151,7 +151,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
     });
 
     // 2.1 DETAILS FOR REPOSITION
-    const isReposicion = ticket.tipo_servicio === "REPOSICIÓN" || ticket.beneficiario_n_linea_ref === "Reposición";
+    const isReposicion = ticket.tipo_servicio === "REPOSICIÓN" || ticket.tipo_solicitud === "Reposición";
 
     if (isReposicion) {
         const detalle = ticket.detalle_reposicion || {};

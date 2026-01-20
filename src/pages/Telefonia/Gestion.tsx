@@ -97,7 +97,7 @@ export default function GestionTelefonia() {
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     // Multi-assignment state
-    const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string }[]>([]);
+    const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string; asignacionId?: string }[]>([]);
 
     // NEW: Unified Scanner State
     const [imeiInput, setImeiInput] = useState("");
@@ -210,11 +210,25 @@ export default function GestionTelefonia() {
 
             if (selectedTicket.estado === "Programar Entrega") {
                 // Initialize slots based on quantity (default 1 if null)
-                const qty = selectedTicket.cantidad_lineas || 1;
-                const initialSlots = Array.from({ length: qty }).map((_, i) => ({ index: i, equipoId: "" }));
+                // Initialize slots based on asignaciones (if exist) or quantity
+                let initialSlots: any[] = [];
 
-                // If legacy assignment exists, pre-fill slot 0
-                if (selectedTicket.equipo_asignado_id) {
+                if (selectedTicket.asignaciones && selectedTicket.asignaciones.length > 0) {
+                    // Use existing pending assignments
+                    initialSlots = selectedTicket.asignaciones.map((asig, i) => ({
+                        index: i,
+                        equipoId: asig.equipo_id || "",
+                        asignacionId: asig.id,
+                        // Optional: Pre-fill beneficiary info if we want to show who this slot is for (future improvement)
+                    }));
+                } else {
+                    // Fallback to quantity based (Legacy behavior or if asignaciones missing)
+                    const qty = selectedTicket.cantidad_lineas || 1;
+                    initialSlots = Array.from({ length: qty }).map((_, i) => ({ index: i, equipoId: "" }));
+                }
+
+                // If legacy assignment exists (single column), pre-fill slot 0 if still empty
+                if (selectedTicket.equipo_asignado_id && initialSlots.length > 0 && !initialSlots[0].equipoId) {
                     initialSlots[0].equipoId = selectedTicket.equipo_asignado_id;
                 }
                 setSelectedItems(initialSlots);
@@ -261,7 +275,8 @@ export default function GestionTelefonia() {
                 const eq = telefoniaStore.equipos.find(e => e.id === i.equipoId);
                 return {
                     equipoId: i.equipoId,
-                    chipId: eq?.chip_id || null
+                    chipId: eq?.chip_id || null,
+                    asignacionId: i.asignacionId // Pass ID to update
                 };
             });
 
@@ -335,7 +350,7 @@ export default function GestionTelefonia() {
             <div className="bg-gray-50 rounded p-2 text-xs border border-gray-100 mb-2 space-y-1">
                 <div className="flex justify-between">
                     <span className="text-gray-500">Solicitud:</span>
-                    <span className="font-medium text-blue-700">{ticket.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                    <span className="font-medium text-blue-700">{ticket.tipo_solicitud || "Línea Nueva"}</span>
                 </div>
                 <div className="flex justify-between">
                     <span className="text-gray-500">Servicio:</span>
@@ -689,7 +704,7 @@ export default function GestionTelefonia() {
                                         </div>
 
                                         {/* 2. COST ASSIGNMENT (Only for Reposicion) */}
-                                        {((selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.beneficiario_n_linea_ref === "Reposición")) && (
+                                        {((selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.tipo_solicitud === "Reposición")) && (
                                             <div className="bg-white p-3 rounded-lg border border-purple-200 mt-2">
                                                 <h4 className="text-sm font-bold text-gray-800 mb-2 flex items-center gap-2">
                                                     💰 Asignación de Costos (Reposición)
@@ -739,7 +754,7 @@ export default function GestionTelefonia() {
                                         <button
                                             onClick={async () => {
                                                 // Validate Cost if Reposition
-                                                const isReposicion = (selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.beneficiario_n_linea_ref === "Reposición");
+                                                const isReposicion = (selectedTicket.detalle_reposicion) || (selectedTicket.tipo_servicio === "REPOSICIÓN") || (selectedTicket.tipo_solicitud === "Reposición");
                                                 if (isReposicion && (!entregaData.costoEquipo || entregaData.costoEquipo <= 0)) {
                                                     alert("Por favor ingrese el Costo del Equipo para continuar.");
                                                     return;

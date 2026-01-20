@@ -224,7 +224,7 @@ export default function AprobacionAdmin() {
                                 <div className="md:w-1/3 md:border-l md:border-r border-gray-100 md:px-6 grid grid-cols-2 gap-2 text-sm bg-gray-50 p-3 rounded-lg">
                                     <div className="col-span-2 pb-1 border-b border-gray-200 mb-1">
                                         <span className="text-xs text-gray-400 block">Tipo Solicitud</span>
-                                        <span className="font-bold text-blue-700">{t.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                                        <span className="font-bold text-blue-700">{t.tipo_solicitud || "Línea Nueva"}</span>
                                     </div>
                                     <div>
                                         <span className="text-xs text-gray-400 block">Servicio</span>

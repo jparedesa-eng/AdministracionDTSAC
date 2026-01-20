@@ -75,7 +75,7 @@ export interface Chip {
 export interface Asignacion {
     id: string;
     solicitud_id: string;
-    equipo_id: string;
+    equipo_id?: string | null;
     chip_id?: string | null;
     fecha_entrega?: string | null;
     fecha_entrega_final?: string | null;
@@ -104,7 +104,7 @@ export interface Solicitud {
     beneficiario_nombre?: string | null;
     beneficiario_area?: string | null;
     beneficiario_puesto?: string | null;
-    beneficiario_n_linea_ref?: string;
+    tipo_solicitud?: string;
     tipo_servicio?: string | null;
     periodo_uso?: string | null;
     fecha_inicio_uso?: string | null;
@@ -156,6 +156,13 @@ export interface Solicitud {
 
     // NEW: Multi-assignment
     asignaciones?: Asignacion[];
+}
+
+export interface BeneficiarioInput {
+    dni: string;
+    nombre: string;
+    area: string;
+    puesto: string;
 }
 
 export interface Modelo {
@@ -604,7 +611,7 @@ export const telefoniaStore = {
         })) as Solicitud[];
     },
 
-    async createSolicitud(sol: Partial<Solicitud>) {
+    async createSolicitud(sol: Partial<Solicitud>, beneficiariosList: BeneficiarioInput[] = []) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { equipo, chip, id, created_at, usuario, ...rest } = sol;
         const payload: any = { ...rest };
@@ -617,6 +624,34 @@ export const telefoniaStore = {
         if (error) throw error;
 
         const newSol = data as Solicitud;
+
+        // Insert Beneficiaries if any
+        if (beneficiariosList.length > 0) {
+            const assignsPayload = beneficiariosList.map(b => ({
+                solicitud_id: newSol.id,
+                estado: "Pendiente", // Waiting for assignment
+                // Usuario Final (Beneficiary)
+                usuario_final_dni: b.dni,
+                usuario_final_nombre: b.nombre,
+                usuario_final_area: b.area,
+                usuario_final_puesto: b.puesto,
+                // Responsable (Creator of ticket)
+                responsable_dni: newSol.beneficiario_dni, // In new model creator is "beneficiario_*" column
+                responsable_nombre: newSol.beneficiario_nombre,
+                responsable_area: newSol.beneficiario_area,
+                responsable_puesto: newSol.beneficiario_puesto
+            }));
+
+            const { error: assignError } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .insert(assignsPayload);
+
+            if (assignError) {
+                console.error("Error creating beneficiaries assignments", assignError);
+                // Non-blocking but warning
+            }
+        }
+
         this.solicitudes = [newSol, ...this.solicitudes];
         return newSol;
     },
@@ -877,19 +912,40 @@ export const telefoniaStore = {
         await this.fetchEquipos();
     },
 
-    async asignarDirectamente(equipoId: string, datosUsuarioFinal: any, datosResponsable: any) {
-        // Insert directly into History (telefonia_solicitud_asignaciones)
-        // SKIPS Ticket creation (Solicitud) as requested.
-
+    async asignarDirectamente(equipoId: string, datosUsuarioFinal: any, datosResponsable: any, ticketData?: { ceco?: string, justificacion?: string, tipo_servicio?: string }) {
         const fechaEntrega = new Date().toISOString();
         const equipo = this.equipos.find(e => e.id === equipoId);
 
-        const payload = {
-            equipo_id: equipoId,
-            chip_id: equipo?.chip_id || null, // Link chip if exists
+        // 1. Create Ticket (Solicitud) - Status Entregado
+        const ticketPayload = {
+            tipo_solicitud: "ASIGNACION_DIRECTA", // Or "Inventario"
+            tipo_servicio: ticketData?.tipo_servicio || "ASIGNACION_DIRECTA",
+            justificacion: ticketData?.justificacion || "Asignación desde Inventario",
+            ceco: ticketData?.ceco || "",
             estado: "Entregado",
             fecha_entrega: fechaEntrega,
-            solicitud_id: null, // No ticket linked
+            beneficiario_dni: datosResponsable.dni,
+            beneficiario_nombre: datosResponsable.nombre,
+            beneficiario_area: datosResponsable.area,
+            beneficiario_puesto: datosResponsable.puesto,
+            created_by: null // Or current user if we had context, but usually responsible.
+        };
+
+        const { data: ticket, error: ticketError } = await supabase
+            .from("telefonia_solicitudes")
+            .insert([ticketPayload])
+            .select()
+            .single();
+
+        if (ticketError) throw ticketError;
+
+        // 2. Create Assignment associated with Ticket
+        const payload = {
+            equipo_id: equipoId,
+            chip_id: equipo?.chip_id || null,
+            estado: "Entregado",
+            fecha_entrega: fechaEntrega,
+            solicitud_id: ticket.id,
 
             // Usuario Final
             usuario_final_dni: datosUsuarioFinal.dni,
@@ -897,7 +953,7 @@ export const telefoniaStore = {
             usuario_final_area: datosUsuarioFinal.area,
             usuario_final_puesto: datosUsuarioFinal.puesto,
 
-            // Responsable (Who requests/approves/picks up)
+            // Responsable 
             responsable_dni: datosResponsable.dni,
             responsable_nombre: datosResponsable.nombre,
             responsable_area: datosResponsable.area,
@@ -910,7 +966,7 @@ export const telefoniaStore = {
 
         if (error) throw error;
 
-        // Update status
+        // 3. Update Equipment Status
         await supabase
             .from("telefonia_equipos")
             .update({ estado: "Asignado" })
@@ -924,6 +980,7 @@ export const telefoniaStore = {
         }
 
         await this.fetchEquipos();
+        await this.fetchSolicitudes(); // Refresh tickets too
     },
 
     async solicitarBajaDirecta(equipoId: string, motivo: string, usuarioId?: string) {
@@ -998,20 +1055,50 @@ export const telefoniaStore = {
     },
 
     async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string) {
-        // 1. Insert Assignments
-        const assignmentsPayload = items.map(item => ({
-            solicitud_id: solicitudId,
-            equipo_id: item.equipoId,
-            chip_id: item.chipId || null,
-            fecha_entrega: new Date().toISOString(),
-            estado: 'Entregado'
-        }));
+        // 1. Process Assignments (Update existing or Insert new)
+        const newAssignments = [];
+        const updatePromises = [];
 
-        const { error: assignError } = await supabase
-            .from("telefonia_solicitud_asignaciones")
-            .insert(assignmentsPayload);
+        for (const item of items) {
+            if ((item as any).asignacionId) {
+                // UPDATE existing assignment
+                updatePromises.push(
+                    supabase
+                        .from("telefonia_solicitud_asignaciones")
+                        .update({
+                            equipo_id: item.equipoId,
+                            chip_id: item.chipId || null,
+                            fecha_entrega: new Date().toISOString(),
+                            estado: 'Entregado'
+                        })
+                        .eq("id", (item as any).asignacionId)
+                );
+            } else {
+                // INSERT new assignment (Legacy fallback)
+                newAssignments.push({
+                    solicitud_id: solicitudId,
+                    equipo_id: item.equipoId,
+                    chip_id: item.chipId || null,
+                    fecha_entrega: new Date().toISOString(),
+                    estado: 'Entregado'
+                });
+            }
+        }
 
-        if (assignError) throw assignError;
+        // Execute updates
+        if (updatePromises.length > 0) {
+            await Promise.all(updatePromises);
+        }
+
+        // Execute inserts
+        if (newAssignments.length > 0) {
+            const { error: assignError } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .insert(newAssignments);
+            if (assignError) throw assignError;
+        }
+
+
 
         // 2. Update Equipment Status
         const equipoIds = items.map(i => i.equipoId);

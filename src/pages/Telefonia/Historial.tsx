@@ -123,7 +123,7 @@ export default function HistorialTelefonia() {
             "Nombre Beneficiario": t.beneficiario_nombre || "",
             "Área": t.beneficiario_area || "",
             "Puesto": t.beneficiario_puesto || "",
-            "Motivo Solicitud": t.beneficiario_n_linea_ref || "Línea Nueva",
+            "Motivo Solicitud": t.tipo_solicitud || "Línea Nueva",
             "Tipo Servicio": t.tipo_servicio || "",
             "Justificación": t.justificacion || "",
             "Fundo/Planta": t.fundo_planta || "",
@@ -267,7 +267,7 @@ export default function HistorialTelefonia() {
                                         </td>
                                         <td className="px-4 py-3 text-gray-600">
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-blue-600">{t.beneficiario_n_linea_ref || "Línea Nueva"}</span>
+                                                <span className="font-medium text-blue-600">{t.tipo_solicitud || "Línea Nueva"}</span>
                                                 <span className="text-xs">{t.tipo_servicio}</span>
                                             </div>
                                         </td>
