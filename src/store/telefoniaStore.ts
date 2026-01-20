@@ -121,6 +121,7 @@ export interface Solicitud {
     estado: EstadoSolicitud;
     ceco?: string | null;
     categoria?: string | null;
+    descripcion_categoria?: string | null;
 
     // New fields for Reposition
     detalle_reposicion?: any; // JSONB

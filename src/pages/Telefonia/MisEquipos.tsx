@@ -51,7 +51,7 @@ export default function MisEquipos() {
                             if (!processedIds.has(asig.id)) {
                                 allMyAssignments.push({
                                     id: asig.id,
-                                    equipo_id: asig.equipo_id,
+                                    equipo_id: asig.equipo_id || "",
                                     equipo_marca: asig.equipo?.marca || "Desconocido",
                                     equipo_modelo: asig.equipo?.modelo || "",
                                     equipo_imei: asig.equipo?.imei || "",
@@ -82,7 +82,7 @@ export default function MisEquipos() {
                         if (!processedIds.has(asig.id)) {
                             allMyAssignments.push({
                                 id: asig.id,
-                                equipo_id: asig.equipo_id,
+                                equipo_id: asig.equipo_id || "",
                                 equipo_marca: asig.equipo?.marca || "Desconocido",
                                 equipo_modelo: asig.equipo?.modelo || "",
                                 equipo_imei: asig.equipo?.imei || "",
