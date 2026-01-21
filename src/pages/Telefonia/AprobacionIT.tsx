@@ -13,7 +13,7 @@ export default function AprobacionIT() {
     // Action Form Data
     const [actionData, setActionData] = useState({
         alternativa: "",
-        equipoId: "",
+
     });
 
     const loadData = async () => {
@@ -40,7 +40,7 @@ export default function AprobacionIT() {
         setSelectedTicket(ticket);
         setActionData({
             alternativa: ticket.alternativa_modelo || "",
-            equipoId: ticket.equipo_asignado_id || "",
+
         });
     };
 
