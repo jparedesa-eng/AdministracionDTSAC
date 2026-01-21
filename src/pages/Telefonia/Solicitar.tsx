@@ -99,7 +99,7 @@ export default function SolicitarTelefonia() {
         cuotas: 3,
         ceco: "", // NEW
         categoria: "", // NEW
-        descripcion_categoria: "", // NEW FIELD
+        proyecto: "", // NEW FIELD (Renamed from descripcion_categoria)
         perfil_puesto: "", // NEW - ID of selected Puesto Catalog
         alternativa_modelo: null as string | null, // NEW - Auto-registered suggested equipment
         condicion_equipo: "", // "Nuevo" | "Segundo Uso"
@@ -131,6 +131,7 @@ export default function SolicitarTelefonia() {
                 telefoniaStore.fetchPuestos(), // New
                 telefoniaStore.fetchPlanes(),  // Ensure planes are loaded
                 telefoniaStore.fetchModelos(),  // New
+                telefoniaStore.fetchProyectos(), // New
                 telefoniaStore.fetchEquipos()   // Ensure inventory is loaded for validation
             ]);
         } catch (error) {
@@ -371,8 +372,8 @@ export default function SolicitarTelefonia() {
             if (!formData.ceco) return "Ingrese el CECO (Centro de Costo).";
             if (!formData.categoria) return "Seleccione la Categoría (Proyecto/Telefonia).";
 
-            if (formData.descripcion_categoria && formData.descripcion_categoria.length > 200) {
-                return "La descripción de categoría no debe exceder los 200 caracteres.";
+            if (formData.categoria === "PROYECTO" && !formData.proyecto) {
+                return "Seleccione el Proyecto.";
             }
 
             // REPOSICIÓN SPECIFIC (Kept in Step 1 or moved? Let's keep specific motive/evidence in Step 1 or 2? 
@@ -541,7 +542,7 @@ export default function SolicitarTelefonia() {
             cultivo: ticket.cultivo || "",
             ceco: ticket.ceco || "",
             categoria: ticket.categoria || "",
-            descripcion_categoria: ticket.descripcion_categoria || "",
+            proyecto: ticket.proyecto || "",
 
             cantidad_lineas: ticket.cantidad_lineas || 1,
             paquete_asignado: ticket.paquete_asignado || "",
@@ -667,7 +668,7 @@ export default function SolicitarTelefonia() {
                 created_by: user?.id,
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
-                descripcion_categoria: formData.descripcion_categoria, // NEW
+                proyecto: formData.proyecto, // NEW (Renamed from descripcion_categoria)
                 alternativa_modelo: formData.alternativa_modelo, // NEW: Auto-registered suggested equipment
             };
 
@@ -688,7 +689,7 @@ export default function SolicitarTelefonia() {
                 tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
-                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", descripcion_categoria: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: ""
+                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", proyecto: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: ""
             });
             setBeneficiaries([]);
             setSelectedApps([]);
@@ -794,20 +795,30 @@ export default function SolicitarTelefonia() {
                                 <option value="TELEFONIA">TELEFONIA</option>
                             </select>
                         </div>
-                        {/* Descripción Categoría */}
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Descripción Categoría
-                            </label>
-                            <input
-                                type="text"
-                                maxLength={200}
-                                className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
-                                value={formData.descripcion_categoria || ""}
-                                onChange={(e) => handleChange("descripcion_categoria", e.target.value)}
-                                placeholder="Detalle adicional (max. 200 caracteres)"
-                            />
-                        </div>
+                        {/* Proyecto (Dropdown) */}
+                        {formData.categoria === "PROYECTO" && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                    Proyecto <span className="text-red-500">*</span>
+                                </label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.proyecto || ""}
+                                    onChange={(e) => handleChange("proyecto", e.target.value)}
+                                >
+                                    <option value="">Seleccione Proyecto...</option>
+                                    {telefoniaStore.proyectos
+                                        .filter(p => p.active)
+                                        .map(p => (
+                                            <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                        ))}
+                                    {/* If editing and has a value not in list (legacy), show it? */}
+                                    {formData.proyecto && !telefoniaStore.proyectos.find(p => p.nombre === formData.proyecto) && (
+                                        <option value={formData.proyecto}>{formData.proyecto} (Archivado)</option>
+                                    )}
+                                </select>
+                            </div>
+                        )}
                     </div>
                 </div>
             </div>

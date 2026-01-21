@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
+import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore";
 import { useAuth } from "../../auth/AuthContext";
 
 export default function InventarioTelefonia() {
@@ -75,6 +76,15 @@ export default function InventarioTelefonia() {
         return () => unsub();
     }, []);
 
+    // Gerencias
+    const [, setGerenciasVersion] = useState(0);
+    const { gerencias } = getGerenciasState();
+
+    useEffect(() => {
+        const unsub = subscribeGerencias(() => setGerenciasVersion(prev => prev + 1));
+        return () => unsub();
+    }, []);
+
     // Modals CRUD
     const [openEquipo, setOpenEquipo] = useState(false);
     const [openChip, setOpenChip] = useState(false);
@@ -96,7 +106,8 @@ export default function InventarioTelefonia() {
         tipo_servicio: "", // Operador
         fundo_planta: "",
         categoria: "",
-        descripcion_categoria: "",
+        proyecto: "",
+        gr: "",
         perfil_puesto: "",
         periodo: "PERMANENTE",
         fecha_inicio: new Date().toISOString().slice(0, 10),
@@ -175,6 +186,8 @@ export default function InventarioTelefonia() {
                 telefoniaStore.fetchChips(),
                 telefoniaStore.fetchPlanes(),
                 telefoniaStore.fetchModelos(),
+                telefoniaStore.fetchPuestos(),
+                telefoniaStore.fetchProyectos(),
             ]);
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error cargando datos" });
@@ -219,16 +232,17 @@ export default function InventarioTelefonia() {
         setAsignacionTicketData({
             ceco: "",
             justificacion: "Asignación Directa de Inventario",
-            tipo_servicio: "", // Operador
+            tipo_servicio: eq.chip?.operador || "", // Auto-fill Operator
             fundo_planta: "",
             categoria: "",
-            descripcion_categoria: "",
+            proyecto: "",
+            gr: "",
             perfil_puesto: "",
             periodo: "PERMANENTE",
             fecha_inicio: new Date().toISOString().slice(0, 10),
             fecha_fin: "",
             cultivo: "",
-            paquete_asignado: ""
+            paquete_asignado: eq.chip?.plan?.nombre || "" // Auto-fill Plan
         });
         setSameAsResponsable(true);
         setOpenAsignacion(true);
@@ -258,7 +272,8 @@ export default function InventarioTelefonia() {
                     tipo_servicio: asignacionTicketData.tipo_servicio, // Operador
                     fundo_planta: asignacionTicketData.fundo_planta,
                     categoria: asignacionTicketData.categoria,
-                    descripcion_categoria: asignacionTicketData.descripcion_categoria,
+                    proyecto: asignacionTicketData.proyecto,
+                    gr: asignacionTicketData.gr,
                     beneficiario_puesto_nombre: puestoNombre, // Send Name
                     periodo: asignacionTicketData.periodo,
                     fecha_inicio: asignacionTicketData.fecha_inicio,
@@ -601,6 +616,7 @@ export default function InventarioTelefonia() {
     const uniqueChipEstados = Array.from(new Set(telefoniaStore.chips.map(c => c.estado))).sort();
     const uniqueChipOperadores = Array.from(new Set(telefoniaStore.chips.map(c => c.operador))).sort();
     const uniqueChipPlanes = Array.from(new Set(telefoniaStore.chips.map(c => c.plan?.nombre || "Sin Plan"))).sort();
+    const uniquePlanOperadores = Array.from(new Set(telefoniaStore.planes.map(p => p.operador))).sort();
 
     const filteredChips = telefoniaStore.chips.filter((c) => {
         const term = q.toLowerCase();
@@ -1282,13 +1298,21 @@ export default function InventarioTelefonia() {
                             />
                         </div>
                         <div className="grid grid-cols-1 gap-3">
-                            <input
+                            <select
                                 required
                                 className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
                                 value={responsableData.area}
-                                onChange={(e) => setResponsableData({ ...responsableData, area: e.target.value })}
-                                placeholder="Área"
-                            />
+                                onChange={(e) => {
+                                    setResponsableData({ ...responsableData, area: e.target.value });
+                                    // Auto-complete Usuario Final Area and Lock it implicitly by UI state
+                                    setAsignacionData(prev => ({ ...prev, area: e.target.value }));
+                                }}
+                            >
+                                <option value="">Seleccione Gerencia...</option>
+                                {gerencias.map(g => (
+                                    <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                                ))}
+                            </select>
                         </div>
                     </div>
 
@@ -1327,20 +1351,30 @@ export default function InventarioTelefonia() {
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <input
+                                <select
                                     required={!sameAsResponsable}
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
+                                    disabled={!!responsableData.area} // Lock if Responsable Area is set
                                     value={asignacionData.area}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
-                                    placeholder="Área"
-                                />
-                                <input
+                                >
+                                    <option value="">Seleccione Gerencia...</option>
+                                    {gerencias.map(g => (
+                                        <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                                    ))}
+                                </select>
+                                <select
                                     required={!sameAsResponsable}
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
+                                    disabled={!!asignacionTicketData.perfil_puesto} // Lock if Ticket Profile is set
                                     value={asignacionData.puesto}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
-                                    placeholder="Puesto"
-                                />
+                                >
+                                    <option value="">Seleccione Puesto...</option>
+                                    {telefoniaStore.puestos.map(p => (
+                                        <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                    ))}
+                                </select>
                             </div>
                         </div>
                     )}
@@ -1395,17 +1429,28 @@ export default function InventarioTelefonia() {
                                     <option value="">Seleccione...</option>
                                     <option value="PROYECTO">PROYECTO</option>
                                     <option value="TELEFONIA">TELEFONIA</option>
-                                    <option value="PERSONAL">PERSONAL</option>
                                 </select>
                             </div>
                             <div>
-                                <label className="block text-xs font-medium text-indigo-800 uppercase">Desc. Categoría</label>
-                                <input
-                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
-                                    value={asignacionTicketData.descripcion_categoria}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, descripcion_categoria: e.target.value })}
-                                    placeholder="Jefatura, etc."
-                                />
+                                {asignacionTicketData.categoria === "PROYECTO" ? (
+                                    <>
+                                        <label className="block text-xs font-medium text-indigo-800 uppercase">Proyecto</label>
+                                        <select
+                                            className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                            value={asignacionTicketData.proyecto}
+                                            onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, proyecto: e.target.value })}
+                                        >
+                                            <option value="">Seleccione Proyecto...</option>
+                                            {telefoniaStore.proyectos
+                                                .filter(p => p.active)
+                                                .map(p => (
+                                                    <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                                ))}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <div className="h-full"></div> // Spacer
+                                )}
                             </div>
                         </div>
 
@@ -1416,7 +1461,14 @@ export default function InventarioTelefonia() {
                                 <select
                                     className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
                                     value={asignacionTicketData.perfil_puesto}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, perfil_puesto: e.target.value })}
+                                    onChange={(e) => {
+                                        const pid = e.target.value;
+                                        setAsignacionTicketData({ ...asignacionTicketData, perfil_puesto: pid });
+
+                                        // Sync to End User Puesto
+                                        const pName = telefoniaStore.puestos.find(p => p.id === pid)?.nombre || "";
+                                        setAsignacionData(prev => ({ ...prev, puesto: pName }));
+                                    }}
                                 >
                                     <option value="">Seleccione Perfil...</option>
                                     {telefoniaStore.puestos.map(p => (
@@ -1460,42 +1512,44 @@ export default function InventarioTelefonia() {
                             </div>
                         </div>
 
-                        {/* Operator / Plan */}
-                        <div className="grid grid-cols-2 gap-3">
-                            <div>
-                                <label className="block text-xs font-medium text-indigo-800 uppercase">Operador</label>
-                                <select
-                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
-                                    value={asignacionTicketData.tipo_servicio}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, tipo_servicio: e.target.value, paquete_asignado: "" })}
-                                >
-                                    <option value="">Seleccione...</option>
-                                    <option value="CLARO">CLARO</option>
-                                    <option value="ENTEL">ENTEL</option>
-                                    <option value="MOVISTAR">MOVISTAR</option>
-                                    <option value="Línea Nueva">Línea Nueva (Generico)</option>
-                                </select>
-                            </div>
-
-                            {["CLARO", "ENTEL", "MOVISTAR"].includes(asignacionTicketData.tipo_servicio) && (
+                        {/* Operator / Plan - Only if Chip exists */}
+                        {modalActionItem?.chip && (
+                            <div className="grid grid-cols-2 gap-3">
                                 <div>
-                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Plan / Paquete</label>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Operador</label>
                                     <select
                                         className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
-                                        value={asignacionTicketData.paquete_asignado}
-                                        onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, paquete_asignado: e.target.value })}
+                                        value={asignacionTicketData.tipo_servicio}
+                                        onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, tipo_servicio: e.target.value, paquete_asignado: "" })}
                                     >
-                                        <option value="">Seleccione Plan...</option>
-                                        {telefoniaStore.planes
-                                            .filter(p => p.operador === asignacionTicketData.tipo_servicio && p.active)
-                                            .map(p => (
-                                                <option key={p.id} value={p.nombre}>{p.nombre} ({p.gigas})</option>
-                                            ))
-                                        }
+                                        <option value="">Seleccione...</option>
+                                        <option value="Línea Nueva">Línea Nueva (Generico)</option>
+                                        {uniquePlanOperadores.map(op => (
+                                            op && <option key={op} value={op}>{op}</option>
+                                        ))}
                                     </select>
                                 </div>
-                            )}
-                        </div>
+
+                                {["CLARO", "ENTEL", "MOVISTAR"].includes(asignacionTicketData.tipo_servicio) && (
+                                    <div>
+                                        <label className="block text-xs font-medium text-indigo-800 uppercase">Plan / Paquete</label>
+                                        <select
+                                            className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                            value={asignacionTicketData.paquete_asignado}
+                                            onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, paquete_asignado: e.target.value })}
+                                        >
+                                            <option value="">Seleccione Plan...</option>
+                                            {telefoniaStore.planes
+                                                .filter(p => p.operador === asignacionTicketData.tipo_servicio && p.active)
+                                                .map(p => (
+                                                    <option key={p.id} value={p.nombre}>{p.nombre} ({p.gigas})</option>
+                                                ))
+                                            }
+                                        </select>
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
                         <div className="grid grid-cols-1 gap-3">
                             <div>
@@ -1508,6 +1562,15 @@ export default function InventarioTelefonia() {
                                     placeholder="Centro de Costos"
                                 />
                             </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-indigo-800 uppercase">GR</label>
+                            <input
+                                className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                value={asignacionTicketData.gr}
+                                onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, gr: e.target.value })}
+                                placeholder="GR..."
+                            />
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-indigo-800 uppercase">Justificación</label>

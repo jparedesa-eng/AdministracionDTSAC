@@ -25,7 +25,8 @@ import {
   SignalHigh,
   User,
   Activity,
-  LayoutDashboard
+  LayoutDashboard,
+  Folder
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -188,6 +189,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     if (canSeeTel_AprobAdmin) {
       telefoniaSubItems.push({ id: 'tel-modelos', label: 'Catálogo Modelos', path: '/telefonia/modelos', icon: Smartphone });
       telefoniaSubItems.push({ id: 'tel-puestos', label: 'Catálogo Puestos', path: '/telefonia/puestos', icon: Briefcase });
+      telefoniaSubItems.push({ id: 'tel-proyectos', label: 'Catálogo Proyectos', path: '/telefonia/proyectos', icon: Folder });
     }
 
     if (telefoniaSubItems.length > 0) {

@@ -121,7 +121,8 @@ export interface Solicitud {
     estado: EstadoSolicitud;
     ceco?: string | null;
     categoria?: string | null;
-    descripcion_categoria?: string | null;
+    proyecto?: string | null; // Renamed from descripcion_categoria
+    gr?: string | null;
 
     // New fields for Reposition
     detalle_reposicion?: any; // JSONB
@@ -187,6 +188,14 @@ export interface Puesto {
     plan?: PlanTelefonico | null;
 }
 
+export interface Proyecto {
+    id: string;
+    nombre: string;
+    codigo?: string | null;
+    active: boolean;
+    created_at?: string;
+}
+
 /* =========================
  * Store
  * ========================= */
@@ -196,8 +205,51 @@ export const telefoniaStore = {
     planes: [] as PlanTelefonico[],
     modelos: [] as Modelo[],
     puestos: [] as Puesto[],
+    proyectos: [] as Proyecto[],
     solicitudes: [] as Solicitud[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
+
+    // --- PROYECTOS ---
+    async fetchProyectos() {
+        const { data, error } = await supabase
+            .from("telefonia_proyectos")
+            .select("*")
+            .order("nombre", { ascending: true });
+        if (error) throw error;
+        this.proyectos = data as Proyecto[];
+    },
+
+    async createProyecto(proyecto: Omit<Proyecto, "id" | "created_at">) {
+        const { data, error } = await supabase
+            .from("telefonia_proyectos")
+            .insert([proyecto])
+            .select()
+            .single();
+        if (error) throw error;
+        this.proyectos = [...this.proyectos, data as Proyecto];
+        return data as Proyecto;
+    },
+
+    async updateProyecto(id: string, updates: Partial<Proyecto>) {
+        const { data, error } = await supabase
+            .from("telefonia_proyectos")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        this.proyectos = this.proyectos.map((p) => (p.id === id ? (data as Proyecto) : p));
+        return data as Proyecto;
+    },
+
+    async deleteProyecto(id: string) {
+        const { error } = await supabase
+            .from("telefonia_proyectos")
+            .delete()
+            .eq("id", id);
+        if (error) throw error;
+        this.proyectos = this.proyectos.filter((p) => p.id !== id);
+    },
 
     // --- MODELOS ---
     async fetchModelos() {
@@ -922,7 +974,7 @@ export const telefoniaStore = {
         tipo_servicio?: string;
         fundo_planta?: string;
         categoria?: string;
-        descripcion_categoria?: string;
+        proyecto?: string;
         beneficiario_puesto_nombre?: string;
         periodo?: string;
         fecha_inicio?: string;
@@ -933,6 +985,7 @@ export const telefoniaStore = {
         plan_costo?: number;
         plan_datos?: string;
         usuario_creador_id?: string;
+        gr?: string;
     }) {
         const fechaEntrega = new Date().toISOString();
         const equipo = this.equipos.find(e => e.id === equipoId);
@@ -940,14 +993,15 @@ export const telefoniaStore = {
         // 1. Create Ticket (Solicitud) - Status Entregado
         const ticketPayload = {
             tipo_solicitud: "ASIGNACION_DIRECTA", // Or "Inventario"
-            tipo_servicio: ticketData?.tipo_servicio || "ASIGNACION_DIRECTA",
+            tipo_servicio: ticketData?.tipo_servicio ?? "",
             justificacion: ticketData?.justificacion || "Asignación desde Inventario",
             ceco: ticketData?.ceco || "",
 
             // New Fields
             fundo_planta: ticketData?.fundo_planta || "",
             categoria: ticketData?.categoria || "",
-            descripcion_categoria: ticketData?.descripcion_categoria || "",
+            proyecto: ticketData?.proyecto || "", // Renamed from descripcion_categoria
+            gr: ticketData?.gr || "",
             beneficiario_puesto: ticketData?.beneficiario_puesto_nombre || datosResponsable.puesto, // Perfil de Puesto override
             periodo_uso: ticketData?.periodo || "",
             fecha_inicio_uso: ticketData?.fecha_inicio || null,

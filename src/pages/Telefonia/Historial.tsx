@@ -103,7 +103,7 @@ export default function HistorialTelefonia() {
             "ID", "Fecha Creación", "Estado",
             "DNI Beneficiario", "Nombre Beneficiario", "Área", "Puesto",
             "Motivo Solicitud", "Tipo Servicio", "Justificación",
-            "Fundo/Planta", "Cultivo", "Centro Costo", "Categoría",
+            "Fundo/Planta", "Cultivo", "Centro Costo", "Categoría", "Proyecto",
             "Paquete Asignado", "Costo Plan", "Datos Plan",
             "Modelo Alternativo", "Apps Solicitadas",
             "Aprobado Gerencia", "Fecha Aprob. Gerencia", "Gerente Aprobador",
@@ -130,6 +130,7 @@ export default function HistorialTelefonia() {
             "Cultivo": t.cultivo || "",
             "Centro Costo": t.ceco || "",
             "Categoría": t.categoria || "",
+            "Proyecto": t.proyecto || "", // New
             "Paquete Asignado": t.paquete_asignado || "",
             "Costo Plan": t.plan_costo || "",
             "Datos Plan": t.plan_datos || "",
