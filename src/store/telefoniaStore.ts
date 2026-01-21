@@ -55,6 +55,10 @@ export interface Equipo {
     ram?: string | null;
     almacenamiento?: string | null;
     pantalla?: string | null;
+    // New Fields
+    categoria?: 'TELEFONIA' | 'PROYECTO' | string;
+    ubicacion?: string;
+    estado_actual?: string; // Estado físico actual (Bueno, Dañado, Robado)
     // Helpers (Populated by store)
     asignacion_activa?: Solicitud | null;
 }
@@ -84,6 +88,7 @@ export interface Asignacion {
     usuario_final_dni?: string | null;
     usuario_final_nombre?: string | null;
     usuario_final_area?: string | null;
+    usuario_final_sede?: string | null;
     usuario_final_puesto?: string | null;
     responsable_dni?: string | null;
     responsable_nombre?: string | null;
@@ -448,9 +453,16 @@ export const telefoniaStore = {
     async createEquipo(eq: Omit<Equipo, "id" | "created_at">) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { chip, asignacion_activa, ...payload } = eq;
+
+        // Default estado_actual to the initial condition ('Nuevo' or 'Segundo Uso')
+        const finalPayload = {
+            ...payload,
+            estado_actual: payload.estado_actual || payload.condicion
+        };
+
         const { data, error } = await supabase
             .from("telefonia_equipos")
-            .insert([payload])
+            .insert([finalPayload])
             .select()
             .single();
         if (error) throw error;
@@ -961,7 +973,8 @@ export const telefoniaStore = {
             .from("telefonia_equipos")
             .update({
                 estado: nuevoEstadoEquipo,
-                condicion: "Segundo Uso"
+                condicion: "Segundo Uso",
+                estado_actual: estadoRetorno // Persist physical condition
             })
             .eq("id", equipoId);
 
@@ -1000,7 +1013,7 @@ export const telefoniaStore = {
             // New Fields
             fundo_planta: ticketData?.fundo_planta || "",
             categoria: ticketData?.categoria || "",
-            proyecto: ticketData?.proyecto || "", // Renamed from descripcion_categoria
+            proyecto: ticketData?.proyecto || "",
             gr: ticketData?.gr || "",
             beneficiario_puesto: ticketData?.beneficiario_puesto_nombre || datosResponsable.puesto, // Perfil de Puesto override
             periodo_uso: ticketData?.periodo || "",
@@ -1044,6 +1057,7 @@ export const telefoniaStore = {
             usuario_final_nombre: datosUsuarioFinal.nombre,
             usuario_final_area: datosUsuarioFinal.area,
             usuario_final_puesto: datosUsuarioFinal.puesto,
+            usuario_final_sede: datosUsuarioFinal.sede, // New field
 
             // Responsable 
             responsable_dni: datosResponsable.dni,
@@ -1058,10 +1072,15 @@ export const telefoniaStore = {
 
         if (error) throw error;
 
-        // 3. Update Equipment Status
+        // 3. Update Equipment Status and Location
+        const ubicacionFinal = datosResponsable.fundo_planta || (ticketData && ticketData.fundo_planta) || "BASE";
+
         await supabase
             .from("telefonia_equipos")
-            .update({ estado: "Asignado" })
+            .update({
+                estado: "Asignado",
+                ubicacion: ubicacionFinal
+            })
             .eq("id", equipoId);
 
         if (equipo && equipo.chip_id) {
@@ -1193,10 +1212,21 @@ export const telefoniaStore = {
 
 
         // 2. Update Equipment Status
+        // We need to know the target location (fundo_planta) from the Ticket
+        // Assuming all items go to the same location as the ticket's "fundo_planta"
+        let targetLocation = "BASE";
+        const { data: ticketData } = await supabase.from("telefonia_solicitudes").select("fundo_planta").eq("id", solicitudId).single();
+        if (ticketData && ticketData.fundo_planta) {
+            targetLocation = ticketData.fundo_planta;
+        }
+
         const equipoIds = items.map(i => i.equipoId);
         const { error: eqError } = await supabase
             .from("telefonia_equipos")
-            .update({ estado: "Asignado" })
+            .update({
+                estado: "Asignado",
+                ubicacion: targetLocation
+            })
             .in("id", equipoIds);
 
         if (eqError) throw eqError;
@@ -1223,19 +1253,23 @@ export const telefoniaStore = {
         await this.fetchEquipos();
     },
 
-    async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; fecha_entrega_final?: string }) {
+    async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; sede?: string; fecha_entrega_final?: string }) {
         const { error } = await supabase
             .from("telefonia_solicitud_asignaciones")
             .update({
                 usuario_final_dni: datos.dni,
                 usuario_final_nombre: datos.nombre,
                 usuario_final_area: datos.area,
+                usuario_final_sede: datos.sede,
                 fecha_entrega_final: datos.fecha_entrega_final
             })
             .eq("id", asignacionId);
 
         if (error) throw error;
         await this.fetchSolicitudes();
+        // Also fetch direct assignments to refresh the view
+        // We aren't calling it here explicitly but MisEquipos calls it on mount. 
+        // Ideally we should retain local state update in MisEquipos to avoid full refetch or refetch if needed.
     },
 
     async registrarDevolucionItem(asignacionId: string, estadoRetorno: string, _observaciones: string) {

@@ -25,6 +25,7 @@ import {
     ChevronsRight,
 
     ArrowLeftRight,
+    MapPin,
     UserPlus,
     AlertTriangle,
     Building2,
@@ -98,7 +99,7 @@ export default function InventarioTelefonia() {
 
     // Action Form States
     const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
-    const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Usuario Final
+    const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "", sede: "" }); // Usuario Final
     const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
     const [asignacionTicketData, setAsignacionTicketData] = useState({
         ceco: "",
@@ -119,7 +120,7 @@ export default function InventarioTelefonia() {
     const [bajaData, setBajaData] = useState({ motivo: "" });
 
     // Drafts
-    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "" });
+    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE" });
     const [draftChip, setDraftChip] = useState<Partial<Chip>>({ estado: "Disponible" });
     const [draftPlan, setDraftPlan] = useState<Partial<PlanTelefonico>>({
         operador: "CLARO",
@@ -227,7 +228,7 @@ export default function InventarioTelefonia() {
 
     const handleOpenAsignacion = (eq: Equipo) => {
         setModalActionItem(eq);
-        setAsignacionData({ dni: "", nombre: "", area: "", puesto: "" });
+        setAsignacionData({ dni: "", nombre: "", area: "", puesto: "", sede: "" });
         setResponsableData({ dni: "", nombre: "", area: "", puesto: "" });
         setAsignacionTicketData({
             ceco: "",
@@ -259,8 +260,10 @@ export default function InventarioTelefonia() {
             // Find Plan Details
             const planObj = telefoniaStore.planes.find(p => p.nombre === asignacionTicketData.paquete_asignado);
 
-            // If check is true, Usuario Final = Responsable
-            const usuarioFinal = sameAsResponsable ? responsableData : asignacionData;
+            // If check is true, Usuario Final = Responsable (with Ticket Location as Sede)
+            const usuarioFinal = sameAsResponsable
+                ? { ...responsableData, sede: asignacionTicketData.fundo_planta }
+                : asignacionData;
 
             await telefoniaStore.asignarDirectamente(
                 modalActionItem.id,
@@ -341,7 +344,7 @@ export default function InventarioTelefonia() {
     };
 
     const handleNewEquipo = () => {
-        setDraftEquipo({ estado: "Disponible", marca: "", modelo: "", imei: "", color: "", condicion: "Nuevo", fecha_compra: "" });
+        setDraftEquipo({ estado: "Disponible", marca: "", modelo: "", imei: "", color: "", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE" });
         setIncludeEsim(false);
         setEsimData({ numero: "", operador: "" });
         setOpenEquipo(true);
@@ -876,7 +879,7 @@ export default function InventarioTelefonia() {
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fundo / Planta</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fundo / Planta / Ubicación</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
@@ -917,6 +920,11 @@ export default function InventarioTelefonia() {
                                                     {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
                                                 </div>
                                             )}
+                                            <div className="mt-1">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                                    {item.categoria || "TELEFONIA"}
+                                                </span>
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             <div className="text-sm text-gray-600">
@@ -932,7 +940,18 @@ export default function InventarioTelefonia() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-600">
-                                            {item.asignacion_activa?.fundo_planta || "-"}
+                                            <div className="flex flex-col">
+                                                <span>{item.asignacion_activa?.fundo_planta || "-"}</span>
+                                                {item.ubicacion && item.ubicacion !== "BASE" && (
+                                                    <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5" title="Ubicación Física">
+                                                        <MapPin className="w-3 h-3" />
+                                                        {item.ubicacion}
+                                                    </span>
+                                                )}
+                                                {(!item.asignacion_activa?.fundo_planta && item.ubicacion === "BASE") && (
+                                                    <span className="text-xs text-gray-400">BASE</span>
+                                                )}
+                                            </div>
                                         </td>
                                         <td className="px-6 py-4">
                                             {item.chip ? (
@@ -1049,6 +1068,8 @@ export default function InventarioTelefonia() {
                                                         <Unlink className="h-4 w-4" />
                                                     </button>
                                                 )}
+
+
                                             </div>
                                         </td>
                                     </tr>
@@ -1304,8 +1325,6 @@ export default function InventarioTelefonia() {
                                 value={responsableData.area}
                                 onChange={(e) => {
                                     setResponsableData({ ...responsableData, area: e.target.value });
-                                    // Auto-complete Usuario Final Area and Lock it implicitly by UI state
-                                    setAsignacionData(prev => ({ ...prev, area: e.target.value }));
                                 }}
                             >
                                 <option value="">Seleccione Gerencia...</option>
@@ -1351,18 +1370,13 @@ export default function InventarioTelefonia() {
                                 />
                             </div>
                             <div className="grid grid-cols-2 gap-3">
-                                <select
+                                <input
                                     required={!sameAsResponsable}
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
-                                    disabled={!!responsableData.area} // Lock if Responsable Area is set
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    placeholder="Ingrese el Área..."
                                     value={asignacionData.area}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
-                                >
-                                    <option value="">Seleccione Gerencia...</option>
-                                    {gerencias.map(g => (
-                                        <option key={g.id} value={g.nombre}>{g.nombre}</option>
-                                    ))}
-                                </select>
+                                />
                                 <select
                                     required={!sameAsResponsable}
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
@@ -1373,6 +1387,21 @@ export default function InventarioTelefonia() {
                                     <option value="">Seleccione Puesto...</option>
                                     {telefoniaStore.puestos.map(p => (
                                         <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                <label className="block text-sm font-medium text-gray-700">Sede del Usuario</label>
+                                <select
+                                    required={!sameAsResponsable}
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    value={asignacionData.sede}
+                                    onChange={(e) => setAsignacionData({ ...asignacionData, sede: e.target.value })}
+                                >
+                                    <option value="">Seleccione Sede...</option>
+                                    <option value="BASE">BASE</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
                                     ))}
                                 </select>
                             </div>
@@ -1393,6 +1422,7 @@ export default function InventarioTelefonia() {
                                     onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value })}
                                 >
                                     <option value="">Seleccione Fundo/Planta...</option>
+                                    <option value="BASE">BASE</option>
                                     {sedes.map(sede => (
                                         <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
                                     ))}
@@ -1780,6 +1810,29 @@ export default function InventarioTelefonia() {
                             <option value="Mantenimiento">Mantenimiento</option>
                             <option value="Baja">Baja</option>
                         </select>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Categoría</label>
+                            <select
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.categoria || "TELEFONIA"}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, categoria: e.target.value })}
+                            >
+                                <option value="TELEFONIA">TELEFONIA</option>
+                                <option value="PROYECTO">PROYECTO</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Ubicación Inicial</label>
+                            <input
+                                readOnly
+                                className="mt-1 block w-full rounded-md border-gray-300 bg-gray-100 sm:text-sm border p-2 cursor-not-allowed"
+                                value={draftEquipo.ubicacion || "BASE"}
+                            />
+                            <p className="text-[10px] text-gray-400 mt-0.5">Siempre 'BASE' al registro inicial.</p>
+                        </div>
                     </div>
 
                     {!draftEquipo.id && (
@@ -2229,6 +2282,6 @@ export default function InventarioTelefonia() {
             >
                 {confirmation.message}
             </ConfirmationModal>
-        </div>
+        </div >
     );
 }

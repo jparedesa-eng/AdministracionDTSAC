@@ -3,7 +3,8 @@ import { telefoniaStore } from "../../store/telefoniaStore";
 import { useAuth } from "../../auth/AuthContext";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { Loader2, Search, Smartphone, User, MapPin, Edit2, Check } from "lucide-react";
+import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check } from "lucide-react";
+import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 
 interface AsignacionUI {
     id: string; // asignacion id
@@ -11,9 +12,12 @@ interface AsignacionUI {
     equipo_marca: string;
     equipo_modelo: string;
     equipo_imei: string;
+    equipo_categoria: string; // New
+    equipo_ubicacion: string; // New
     usuario_final_dni: string;
     usuario_final_nombre: string;
     usuario_final_area: string;
+    usuario_final_sede: string; // New field
     fecha_entrega: string;
     solicitud_id: string | null;
     fecha_entrega_final: string; // New field
@@ -22,6 +26,7 @@ interface AsignacionUI {
     temp_dni: string;
     temp_nombre: string;
     temp_area: string;
+    temp_sede: string;
     temp_fecha_entrega_final: string;
 }
 
@@ -31,6 +36,7 @@ export default function MisEquipos() {
     const [toast, setToast] = useState<ToastState>(null);
     const [assignments, setAssignments] = useState<AsignacionUI[]>([]);
     const [q, setQ] = useState("");
+    const { sedes } = getSedesState();
 
     const loadMisEquipos = async () => {
         if (!user?.id) return;
@@ -55,9 +61,12 @@ export default function MisEquipos() {
                                     equipo_marca: asig.equipo?.marca || "Desconocido",
                                     equipo_modelo: asig.equipo?.modelo || "",
                                     equipo_imei: asig.equipo?.imei || "",
+                                    equipo_categoria: asig.equipo?.categoria || "TELEFONIA",
+                                    equipo_ubicacion: asig.equipo?.ubicacion || "BASE",
                                     usuario_final_dni: asig.usuario_final_dni || "",
                                     usuario_final_nombre: asig.usuario_final_nombre || "",
                                     usuario_final_area: asig.usuario_final_area || "",
+                                    usuario_final_sede: asig.usuario_final_sede || "",
                                     fecha_entrega: asig.fecha_entrega || "",
                                     solicitud_id: asig.solicitud_id,
                                     fecha_entrega_final: asig.fecha_entrega_final || "",
@@ -65,6 +74,7 @@ export default function MisEquipos() {
                                     temp_dni: asig.usuario_final_dni || "",
                                     temp_nombre: asig.usuario_final_nombre || "",
                                     temp_area: asig.usuario_final_area || "",
+                                    temp_sede: asig.usuario_final_sede || "",
                                     temp_fecha_entrega_final: asig.fecha_entrega_final || ""
                                 });
                                 processedIds.add(asig.id);
@@ -86,9 +96,12 @@ export default function MisEquipos() {
                                 equipo_marca: asig.equipo?.marca || "Desconocido",
                                 equipo_modelo: asig.equipo?.modelo || "",
                                 equipo_imei: asig.equipo?.imei || "",
+                                equipo_categoria: asig.equipo?.categoria || "TELEFONIA",
+                                equipo_ubicacion: asig.equipo?.ubicacion || "BASE",
                                 usuario_final_dni: asig.usuario_final_dni || "",
                                 usuario_final_nombre: asig.usuario_final_nombre || "",
                                 usuario_final_area: asig.usuario_final_area || "",
+                                usuario_final_sede: asig.usuario_final_sede || "",
                                 fecha_entrega: asig.fecha_entrega || "",
                                 solicitud_id: asig.solicitud_id, // Might be null
                                 fecha_entrega_final: asig.fecha_entrega_final || "",
@@ -96,6 +109,7 @@ export default function MisEquipos() {
                                 temp_dni: asig.usuario_final_dni || "",
                                 temp_nombre: asig.usuario_final_nombre || "",
                                 temp_area: asig.usuario_final_area || "",
+                                temp_sede: asig.usuario_final_sede || "",
                                 temp_fecha_entrega_final: asig.fecha_entrega_final || ""
                             });
                             processedIds.add(asig.id);
@@ -118,6 +132,13 @@ export default function MisEquipos() {
         loadMisEquipos();
     }, [user?.id]);
 
+    // Subscribe to Sedes
+    const [, setSedesVersion] = useState(0);
+    useEffect(() => {
+        const unsub = subscribeSedes(() => setSedesVersion(prev => prev + 1));
+        return () => unsub();
+    }, []);
+
     const toggleEdit = (id: string) => {
         setAssignments(prev => prev.map(a => {
             if (a.id === id) {
@@ -128,6 +149,7 @@ export default function MisEquipos() {
                     temp_dni: !a.editMode ? a.usuario_final_dni : a.temp_dni,
                     temp_nombre: !a.editMode ? a.usuario_final_nombre : a.temp_nombre,
                     temp_area: !a.editMode ? a.usuario_final_area : a.temp_area,
+                    temp_sede: !a.editMode ? a.usuario_final_sede : a.temp_sede,
                     temp_fecha_entrega_final: !a.editMode
                         ? (a.fecha_entrega_final ? a.fecha_entrega_final.split('T')[0] : new Date().toISOString().split('T')[0])
                         : a.temp_fecha_entrega_final
@@ -140,6 +162,11 @@ export default function MisEquipos() {
     const handleSave = async (item: AsignacionUI) => {
         try {
             // Validation
+            if (!item.temp_dni || !item.temp_nombre || !item.temp_area || !item.temp_sede) {
+                setToast({ type: "error", message: "Todos los campos son obligatorios (DNI, Nombre, Área, Sede)" });
+                return;
+            }
+
             if (item.temp_fecha_entrega_final) {
                 // Parse date string 'YYYY-MM-DD' manually to avoid UTC offset issues
                 const [y, m, d] = item.temp_fecha_entrega_final.split('-').map(Number);
@@ -165,6 +192,7 @@ export default function MisEquipos() {
                 dni: item.temp_dni,
                 nombre: item.temp_nombre,
                 area: item.temp_area,
+                sede: item.temp_sede,
                 fecha_entrega_final: item.temp_fecha_entrega_final
             });
 
@@ -175,6 +203,7 @@ export default function MisEquipos() {
                         usuario_final_dni: item.temp_dni,
                         usuario_final_nombre: item.temp_nombre,
                         usuario_final_area: item.temp_area,
+                        usuario_final_sede: item.temp_sede,
                         fecha_entrega_final: item.temp_fecha_entrega_final,
                         editMode: false
                     };
@@ -189,7 +218,7 @@ export default function MisEquipos() {
         }
     };
 
-    const handleChange = (id: string, field: 'temp_dni' | 'temp_nombre' | 'temp_area' | 'temp_fecha_entrega_final', value: string) => {
+    const handleChange = (id: string, field: 'temp_dni' | 'temp_nombre' | 'temp_area' | 'temp_sede' | 'temp_fecha_entrega_final', value: string) => {
         setAssignments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
     };
 
@@ -252,7 +281,16 @@ export default function MisEquipos() {
                                         </div>
                                         <div>
                                             <h3 className="font-semibold text-gray-900">{item.equipo_marca} {item.equipo_modelo}</h3>
-                                            <p className="text-xs text-gray-500 font-mono">{item.equipo_imei}</p>
+                                            <p className="text-xs text-gray-500 font-mono mb-1">{item.equipo_imei}</p>
+                                            <div className="flex gap-2">
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                                                    {item.equipo_categoria}
+                                                </span>
+                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
+                                                    <MapPin className="w-3 h-3 mr-1" />
+                                                    {item.equipo_ubicacion}
+                                                </span>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -286,13 +324,27 @@ export default function MisEquipos() {
                                                     />
                                                 </div>
                                                 <div>
-                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Área / Cargo</label>
+                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Área</label>
                                                     <input
                                                         className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
-                                                        placeholder="Área o Cargo"
+                                                        placeholder="Ingresa el Área"
                                                         value={item.temp_area}
                                                         onChange={e => handleChange(item.id, 'temp_area', e.target.value)}
                                                     />
+                                                </div>
+                                                <div>
+                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Sede</label>
+                                                    <select
+                                                        className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                        value={item.temp_sede}
+                                                        onChange={e => handleChange(item.id, 'temp_sede', e.target.value)}
+                                                    >
+                                                        <option value="">Seleccione Sede...</option>
+                                                        <option value="BASE">BASE</option>
+                                                        {sedes.map(s => (
+                                                            <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                                        ))}
+                                                    </select>
                                                 </div>
                                                 <div>
                                                     <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Fecha Entrega Final</label>
@@ -311,7 +363,7 @@ export default function MisEquipos() {
                                                 {item.usuario_final_nombre ? (
                                                     <>
                                                         <div className="font-medium text-gray-900 text-sm">{item.usuario_final_nombre}</div>
-                                                        <div className="text-xs text-gray-500">{item.usuario_final_area}</div>
+                                                        <div className="text-xs text-gray-500">{item.usuario_final_area} {item.usuario_final_sede ? `- ${item.usuario_final_sede}` : ''}</div>
                                                         <div className="text-[10px] text-gray-400">DNI: {item.usuario_final_dni}</div>
                                                     </>
                                                 ) : (
@@ -353,14 +405,18 @@ export default function MisEquipos() {
                                             Guardar
                                         </button>
                                     </div>
-                                ) : (
+                                ) : !item.usuario_final_nombre ? (
                                     <button
                                         onClick={() => toggleEdit(item.id)}
                                         className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
                                     >
-                                        <Edit2 className="h-4 w-4" />
+                                        <UserPlus className="h-4 w-4" />
                                         Asignar Responsable
                                     </button>
+                                ) : (
+                                    <div className="py-2.5 text-center text-sm text-gray-400 font-medium bg-gray-50 rounded-lg border border-gray-100">
+                                        Asignado
+                                    </div>
                                 )}
                             </div>
                         </div>
