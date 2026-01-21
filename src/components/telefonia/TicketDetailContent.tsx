@@ -8,7 +8,6 @@ import {
     XCircle,
     MapPin,
     Briefcase,
-    Hash
 } from "lucide-react";
 import type { Solicitud } from "../../store/telefoniaStore";
 
@@ -75,27 +74,27 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                         <h3 className="text-base font-bold text-gray-900">{ticket.beneficiario_nombre}</h3>
                         <div className="flex items-center gap-2 text-sm text-gray-500">
                             <Briefcase className="w-3 h-3" />
-                            <span>{ticket.beneficiario_puesto || "Puesto no especificado"}</span>
                             <span className="text-gray-300">|</span>
-                            <span>{ticket.beneficiario_area}</span>
+                            <span>{ticket.beneficiario_area} </span>
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
-                            <Hash className="w-3 h-3" /> DNI: {ticket.beneficiario_dni}
+                            DNI: {ticket.beneficiario_dni}
+                            <span className="text-grau-600"> | RESPONSABLE DE LOS EQUIPOS</span>
                         </div>
                     </div>
                 </div>
                 <div className="flex flex-col items-end gap-1.5">
                     {/* REQUEST TYPE BADGE */}
-                    <span className={`px-3 py-1 rounded-full text-xs font-bold border shadow-sm ${ticket.tipo_solicitud === "Reposición" ? "bg-orange-100 text-orange-800 border-orange-200" :
-                        ticket.tipo_solicitud === "Renovación" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
-                            "bg-blue-100 text-blue-800 border-blue-200"
+                    <span className={`px-3 py-1 rounded-lg text-xs font-bold border  
+                        ${ticket.tipo_solicitud === "Reposición" ? "bg-orange-100 text-orange-800 border-orange-200" :
+                            ticket.tipo_solicitud === "Renovación" ? "bg-emerald-100 text-emerald-800 border-emerald-200" :
+                                "bg-blue-100 text-blue-800 border-blue-200"
                         }`}>
                         {ticket.tipo_solicitud || "Línea Nueva"}
                     </span>
 
                     <div className="flex items-center gap-2 mt-1">
                         <StatusBadge estado={ticket.estado} />
-                        <span className="text-[10px] text-gray-400">ID: {ticket.id.slice(0, 8)}</span>
                     </div>
                 </div>
             </div>
@@ -114,7 +113,7 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
             {/* APPROVAL STATUS SECTION (Requested explicitly) */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <ApprovalStatus
-                    title="Aprobación Gerencia"
+                    title="Aprobación Usuario"
                     approved={ticket.aprobacion_gerencia}
                     date={ticket.fecha_aprobacion_gerencia}
                 />

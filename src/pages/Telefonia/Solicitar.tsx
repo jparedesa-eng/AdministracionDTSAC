@@ -19,6 +19,8 @@ import {
     Search,
     Smartphone,
     X,
+    Edit2,
+    Trash2,
 } from "lucide-react";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 import { RedistributionModal } from "../../components/telefonia/RedistributionModal";
@@ -63,6 +65,7 @@ export default function SolicitarTelefonia() {
 
     // New State for Beneficiaries
     const [beneficiaries, setBeneficiaries] = useState<{ dni: string, nombre: string, area: string, puesto: string }[]>([]);
+    const [skipBeneficiaries, setSkipBeneficiaries] = useState(false);
     const [verifyingNumber, setVerifyingNumber] = useState(false);
     const [renewalCalculated, setRenewalCalculated] = useState<{
         valid: boolean;
@@ -72,6 +75,8 @@ export default function SolicitarTelefonia() {
     }>({ valid: false, message: "", lastDate: "", equipo: "" });
 
     // Form State
+    const [editingId, setEditingId] = useState<string | null>(null);
+
     const [formData, setFormData] = useState({
         dni: "",
         nombre: "",
@@ -97,6 +102,7 @@ export default function SolicitarTelefonia() {
         descripcion_categoria: "", // NEW FIELD
         perfil_puesto: "", // NEW - ID of selected Puesto Catalog
         alternativa_modelo: null as string | null, // NEW - Auto-registered suggested equipment
+        condicion_equipo: "", // "Nuevo" | "Segundo Uso"
     });
 
     const [suggestedModel, setSuggestedModel] = useState<string>("");
@@ -124,7 +130,8 @@ export default function SolicitarTelefonia() {
                 telefoniaStore.fetchSolicitudes(),
                 telefoniaStore.fetchPuestos(), // New
                 telefoniaStore.fetchPlanes(),  // Ensure planes are loaded
-                telefoniaStore.fetchModelos()  // New
+                telefoniaStore.fetchModelos(),  // New
+                telefoniaStore.fetchEquipos()   // Ensure inventory is loaded for validation
             ]);
         } catch (error) {
             console.error("Error loading history:", error);
@@ -140,6 +147,32 @@ export default function SolicitarTelefonia() {
             unsubSedes();
         };
     }, []);
+
+    // Update beneficiaries when count changes
+    useEffect(() => {
+        const count = Number(formData.cantidad_lineas) || 0;
+        setBeneficiaries(prev => {
+            if (prev.length === count) return prev;
+            if (count > prev.length) {
+                const newItems = Array(count - prev.length).fill(null).map(() => ({ dni: "", nombre: "", area: "", puesto: "" }));
+                return [...prev, ...newItems];
+            }
+            return prev.slice(0, count);
+        });
+
+        // Auto-skip logic if > 5
+        if (count > 5) {
+            setSkipBeneficiaries(true);
+        } else {
+            // Optional: Auto-unskip if lowered? Or keep valid?
+            // User requirement: "si son mas de 5 equipos debe saltarse marcarte por defecto"
+            // If user manually unchecked it, we shouldn't force it again unless they change number again?
+            // Implementation: Simple check here is fine.
+            // If it drops to <= 5, we can revert to false to encourage filling it out, unless they manually set it?
+            // Simpler: Just set to true if > 5. If <= 5, set to false (reset).
+            setSkipBeneficiaries(false);
+        }
+    }, [formData.cantidad_lineas]);
 
     // Auto-fill user data from profile
     useEffect(() => {
@@ -203,6 +236,11 @@ export default function SolicitarTelefonia() {
             // Reset fecha_fin if switching to PERMANENTE
             if (field === "periodo_uso" && value === "PERMANENTE") {
                 newState.fecha_fin = "";
+            }
+
+            // Reset condicion_equipo if n_linea changes
+            if (field === "n_linea") {
+                newState.condicion_equipo = "";
             }
 
             return newState;
@@ -331,7 +369,7 @@ export default function SolicitarTelefonia() {
             if (!formData.fundo_planta) return "Seleccione Fundo / Planta.";
             if (!formData.cultivo) return "Seleccione Cultivo.";
             if (!formData.ceco) return "Ingrese el CECO (Centro de Costo).";
-            if (!formData.categoria) return "Seleccione la Categoría (Proyecto/Telefonia/Personal).";
+            if (!formData.categoria) return "Seleccione la Categoría (Proyecto/Telefonia).";
 
             if (formData.descripcion_categoria && formData.descripcion_categoria.length > 200) {
                 return "La descripción de categoría no debe exceder los 200 caracteres.";
@@ -355,6 +393,12 @@ export default function SolicitarTelefonia() {
                 }
             } else {
                 // BRANCH: STANDARD SERVICES
+
+                // NEW: Validate Condicion Equipo if "Solicitar Equipo"
+                if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
+                    return "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
+                }
+
                 if (!formData.perfil_puesto) return "Seleccione el Perfil del Puesto";
 
                 if (formData.tipo_servicio !== "PAQUETE ASIGNADO" && !formData.tipo_servicio) return "Seleccione el Operador";
@@ -372,6 +416,9 @@ export default function SolicitarTelefonia() {
 
         if (step === 3) {
             // STEP 3: BENEFICIARIES
+            // If skipped, validation passes
+            if (skipBeneficiaries) return null;
+
             if (formData.cantidad_lineas > 0) {
                 const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre);
                 if (invalid) return "Complete todos los datos de los beneficiarios (DNI 8 dígitos y Nombre).";
@@ -439,6 +486,118 @@ export default function SolicitarTelefonia() {
         setCurrentStep(prev => prev - 1);
     };
 
+    const [cancelTicketId, setCancelTicketId] = useState<string | null>(null);
+
+    const handleCancelClick = (ticket: Solicitud) => {
+        setCancelTicketId(ticket.id);
+    };
+
+    const confirmCancelTicket = async () => {
+        if (!cancelTicketId) return;
+        try {
+            await telefoniaStore.updateSolicitud(cancelTicketId, { estado: "Cancelada" });
+            setToast({ type: "success", message: "Solicitud cancelada correctamente." });
+            loadHistory();
+        } catch (error) {
+            console.error(error);
+            setToast({ type: "error", message: "Error al cancelar la solicitud." });
+        } finally {
+            setCancelTicketId(null);
+        }
+    };
+
+    const handleEditTicket = (ticket: Solicitud) => {
+        // Map back Solicitud to FormData
+        setEditingId(ticket.id);
+
+        // Reverse Logic for Tipo Solicitud
+        let linea = ticket.tipo_solicitud || "";
+        let condicion = "";
+        if (linea === "Equipo Nuevo") {
+            linea = "Solicitar Equipo";
+            condicion = "Nuevo";
+        } else if (linea === "Equipo de Segundo Uso") {
+            linea = "Solicitar Equipo";
+            condicion = "Segundo Uso";
+        }
+
+        setFormData({
+            dni: ticket.beneficiario_dni || "",
+            nombre: ticket.beneficiario_nombre || "",
+            area: ticket.beneficiario_area || "",
+            puesto: ticket.beneficiario_puesto || "",
+            n_linea: linea,
+            condicion_equipo: condicion,
+            numero_telefono: ticket.detalle_reposicion?.numero_afectado || "", // Best effort
+            motivo_reposicion: ticket.detalle_reposicion?.motivo || "",
+            tiene_evidencia: ticket.detalle_reposicion?.tiene_evidencia || false,
+
+            tipo_servicio: ticket.tipo_servicio || "",
+            periodo_uso: ticket.periodo_uso || "PERMANENTE",
+            fecha_inicio: ticket.fecha_inicio_uso || new Date().toISOString().slice(0, 10),
+            fecha_fin: ticket.fecha_fin_uso || "",
+
+            fundo_planta: ticket.fundo_planta || "",
+            cultivo: ticket.cultivo || "",
+            ceco: ticket.ceco || "",
+            categoria: ticket.categoria || "",
+            descripcion_categoria: ticket.descripcion_categoria || "",
+
+            cantidad_lineas: ticket.cantidad_lineas || 1,
+            paquete_asignado: ticket.paquete_asignado || "",
+            justificacion: ticket.justificacion || "",
+
+            // Reposicion details
+            asume_costo: ticket.detalle_reposicion?.asume || "",
+            cuotas: ticket.detalle_reposicion?.cuotas || 3,
+
+            // Internal logic
+            perfil_puesto: "", // We might not have this ID stored in Solicitud, so user must re-select or we try to find by name? 
+            // Ideally we should store puestos_id in solicitud but we don't. 
+            // For now, leave empty and user re-selects "Ubicación" if needed, 
+            // OR we try to match by role? 
+            // It's safer to ask user to review the fields.
+            alternativa_modelo: ticket.alternativa_modelo || null,
+        });
+
+        // Set beneficiaries if any
+        if (ticket.asignaciones && ticket.asignaciones.length > 0) {
+            setBeneficiaries(ticket.asignaciones.map(a => ({
+                dni: a.usuario_final_dni || "",
+                nombre: a.usuario_final_nombre || "",
+                area: a.usuario_final_area || "",
+                puesto: a.usuario_final_puesto || ""
+            })));
+        } else {
+            setBeneficiaries([]);
+        }
+
+        // Apps
+        setSelectedApps(ticket.aplicativos || []);
+
+        // Pre-validate if editing existing valid ticket
+        if (linea === "Renovación") {
+            setValidationResult({
+                valid: true,
+                message: "Validado previamente",
+                lastDate: "",
+                equipo: ticket.equipo?.modelo || "" // Approximate
+            });
+        }
+        if (linea === "Reposición") {
+            setPreviousDevice(ticket.detalle_reposicion?.equipoAnterior || "");
+            setRenewalCalculated({
+                valid: true,
+                message: "Validado previamente",
+                lastDate: "",
+                equipo: ticket.detalle_reposicion?.equipoAnterior || ""
+            });
+        }
+
+        setCurrentStep(1);
+        setIsWizardOpen(true);
+    };
+
     // ... (rest of file, ensuring borders are gray-200 instead of 300 where appropriate)
     // I will do a bulk replace for the borders in a separate/subsequent call effectively by just targeting the blocks with styles.
     // For now I'm just fixing the logic block. I'll use multi_replace for styles.
@@ -453,16 +612,19 @@ export default function SolicitarTelefonia() {
 
         setSubmitting(true);
         try {
-            await telefoniaStore.createSolicitud({
+            const payload: any = {
                 usuario_creador_id: user?.id,
                 beneficiario_dni: formData.dni,
                 beneficiario_nombre: formData.nombre,
                 beneficiario_area: formData.area,
                 beneficiario_puesto: formData.puesto,
-                tipo_solicitud: formData.n_linea,
+                tipo_solicitud: formData.n_linea === "Solicitar Equipo"
+                    ? (formData.condicion_equipo === "Nuevo" ? "Equipo Nuevo" : "Equipo de Segundo Uso")
+                    : formData.n_linea,
                 tipo_servicio: formData.n_linea === "Reposición"
                     ? (formData.tipo_servicio && formData.tipo_servicio !== "PAQUETE ASIGNADO" ? formData.tipo_servicio : "REPOSICIÓN")
                     : formData.tipo_servicio,
+                periodo_uso: formData.periodo_uso,
                 paquete_asignado: (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) || formData.n_linea === "Reposición")
                     ? formData.paquete_asignado
                     : null,
@@ -497,23 +659,36 @@ export default function SolicitarTelefonia() {
                 } : null,
                 justificacion: formData.justificacion,
                 aplicativos: selectedApps,
-                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Equipo Nuevo" || formData.n_linea === "Equipo de Segundo Uso" || formData.n_linea === "Línea Nueva" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
+                // Only reset state if creating, else keep current or use logic. 
+                // For editing, we usually don't reset approval flow unless major change? 
+                // Requirement: "modificar su ticket". Usually implies re-submission -> Reset to initial state? 
+                // Let's reset to "Revisión Admin" / "Pendiente Gerencia" to be safe.
+                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
                 created_by: user?.id,
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
                 descripcion_categoria: formData.descripcion_categoria, // NEW
                 alternativa_modelo: formData.alternativa_modelo, // NEW: Auto-registered suggested equipment
-            }, beneficiaries); // Pass beneficiaries list
+            };
 
-            setToast({ type: "success", message: "Solicitud creada correctamente" });
+            if (editingId) {
+                // UPDATE
+                await telefoniaStore.updateSolicitud(editingId, payload);
+                setToast({ type: "success", message: "Solicitud actualizada correctamente" });
+            } else {
+                // CREATE
+                await telefoniaStore.createSolicitud(payload, beneficiaries);
+                setToast({ type: "success", message: "Solicitud creada correctamente" });
+            }
             // Reset form
+            setEditingId(null);
             setFormData({
                 dni: "", nombre: "", area: "", puesto: "", n_linea: "",
                 numero_telefono: "", motivo_reposicion: "", tiene_evidencia: false,
                 tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
-                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", descripcion_categoria: "", perfil_puesto: "", alternativa_modelo: null
+                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", descripcion_categoria: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: ""
             });
             setBeneficiaries([]);
             setSelectedApps([]);
@@ -617,7 +792,6 @@ export default function SolicitarTelefonia() {
                                 <option value="">Seleccione...</option>
                                 <option value="PROYECTO">PROYECTO</option>
                                 <option value="TELEFONIA">TELEFONIA</option>
-                                <option value="PERSONAL">PERSONAL</option>
                             </select>
                         </div>
                         {/* Descripción Categoría */}
@@ -784,7 +958,7 @@ export default function SolicitarTelefonia() {
                             Configuración de Línea / Equipo
                         </h3>
 
-                        {/* PUESTO DROPDOWN (NEW) */}
+                        {/* PUESTO DROPDOWN (NEW) - MOVED TO TOP */}
                         <div>
                             <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                 Perfil del Puesto <span className="text-gray-400 font-normal normal-case float-right">(Sugerido)</span>
@@ -812,6 +986,83 @@ export default function SolicitarTelefonia() {
                                         <p className="text-xs text-gray-500 font-bold uppercase">Equipo Recomendado</p>
                                         <p className="text-sm font-bold text-gray-900">{suggestedModel}</p>
                                     </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* CONDICION EQUIPO SELECTION (Solicitar Equipo ONLY) - MOVED BELOW PUESTO AND CONDITIONAL */}
+                        {formData.n_linea === "Solicitar Equipo" && formData.perfil_puesto && (
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 animate-in fade-in slide-in-from-top-2">
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+                                    Seleccione Condición del Equipo
+                                </label>
+                                <div className="flex gap-4">
+                                    {/* SEGUNDO USO */}
+                                    {(() => {
+                                        // Smart Check: Filter by Model if Puesto has a recommended model
+                                        const puesto = telefoniaStore.puestos.find(p => p.id === formData.perfil_puesto);
+                                        const recommendedModelName = puesto?.modelo?.nombre;
+
+                                        const secondUseCount = telefoniaStore.equipos.filter(e => {
+                                            const isAvailable = e.estado === "Disponible" && e.condicion === "Segundo Uso";
+                                            if (!isAvailable) return false;
+                                            // If we have a recommended model, strictly check it? Or loosen it?
+                                            // User likely wants the specific model if defined.
+                                            if (recommendedModelName) {
+                                                return e.modelo === recommendedModelName;
+                                            }
+                                            return true;
+                                        }).length;
+
+                                        const isAvailable = secondUseCount > 0;
+
+                                        return (
+                                            <button
+                                                type="button"
+                                                disabled={!isAvailable}
+                                                onClick={() => setFormData({ ...formData, condicion_equipo: "Segundo Uso" })}
+                                                className={`flex-1 p-3 rounded-md border text-left transition-all relative ${formData.condicion_equipo === "Segundo Uso"
+                                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                                                    : isAvailable
+                                                        ? "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                                                        : "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                                                    }`}
+                                            >
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <span className={`block text-sm font-bold ${formData.condicion_equipo === "Segundo Uso" ? "text-white" : "text-gray-900"}`}>Segundo Uso</span>
+                                                        <span className={`text-xs block mt-0.5 ${formData.condicion_equipo === "Segundo Uso"
+                                                            ? "text-indigo-100"
+                                                            : isAvailable ? "text-green-600 font-medium" : "text-gray-500"}`}>
+                                                            {isAvailable
+                                                                ? `(Disponible${recommendedModelName ? `: ${recommendedModelName}` : ''})`
+                                                                : `(Sin Stock${recommendedModelName ? `: ${recommendedModelName}` : ''})`
+                                                            }
+                                                        </span>
+                                                    </div>
+                                                    {formData.condicion_equipo === "Segundo Uso" && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                                </div>
+                                            </button>
+                                        );
+                                    })()}
+
+                                    {/* NUEVO */}
+                                    <button
+                                        type="button"
+                                        onClick={() => setFormData({ ...formData, condicion_equipo: "Nuevo" })}
+                                        className={`flex-1 p-3 rounded-md border text-left transition-all ${formData.condicion_equipo === "Nuevo"
+                                            ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                                            : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                                            }`}
+                                    >
+                                        <div className="flex justify-between items-start">
+                                            <div>
+                                                <span className={`block text-sm font-bold ${formData.condicion_equipo === "Nuevo" ? "text-white" : "text-gray-900"}`}>Nuevo</span>
+                                                <span className={`text-xs block mt-0.5 ${formData.condicion_equipo === "Nuevo" ? "text-indigo-100" : "text-amber-600 font-medium"}`}>(Requiere Autorización)</span>
+                                            </div>
+                                            {formData.condicion_equipo === "Nuevo" && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                        </div>
+                                    </button>
                                 </div>
                             </div>
                         )}
@@ -894,8 +1145,9 @@ export default function SolicitarTelefonia() {
                                     <input
                                         type="number"
                                         min={1}
-                                        className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
-                                        value={formData.cantidad_lineas}
+                                        disabled={formData.n_linea === "Renovación" || formData.n_linea === "Reposición"}
+                                        className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:text-gray-500"
+                                        value={(formData.n_linea === "Renovación" || formData.n_linea === "Reposición") ? 1 : formData.cantidad_lineas}
                                         onChange={(e) => handleChange("cantidad_lineas", Number(e.target.value))}
                                     />
                                 </div>
@@ -947,8 +1199,7 @@ export default function SolicitarTelefonia() {
                                     onChange={(e) => handleChange("n_linea", e.target.value)}
                                 >
                                     <option value="">Seleccione...</option>
-                                    <option value="Equipo Nuevo">Solicitar Equipo Nuevo</option>
-                                    <option value="Equipo de Segundo Uso">Solicitar Equipo de Segundo Uso</option>
+                                    <option value="Solicitar Equipo">Solicitar Equipo</option>
                                     <option value="Línea Nueva">Solicitar Línea Nueva (Solo Chip)</option>
                                     <option value="Renovación">Renovación de Equipo</option>
                                     <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
@@ -1048,115 +1299,143 @@ export default function SolicitarTelefonia() {
                 return (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
                         <div className="flex items-center justify-between border-b border-gray-100 pb-2">
-                            <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
-                                Lista de Beneficiarios
-                            </h3>
+                            <div className="flex items-center gap-3">
+                                <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                                    <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
+                                    Lista de Beneficiarios
+                                </h3>
+                                <button
+                                    type="button"
+                                    onClick={() => setSkipBeneficiaries(!skipBeneficiaries)}
+                                    className={`
+                                        text-[10px] font-bold px-3 py-1 rounded transition-colors uppercase tracking-wider select-none
+                                        ${skipBeneficiaries
+                                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                            : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+                                        }
+                                    `}
+                                >
+                                    {skipBeneficiaries ? "Detalle Omitido" : "Omitir Detalle"}
+                                </button>
+                            </div>
                             <div className="text-xs text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded border border-gray-200">
                                 Total: {formData.cantidad_lineas}
                             </div>
                         </div>
 
-                        <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
-                            {beneficiaries.map((b, index) => (
-                                <div key={index} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm group hover:border-indigo-200 transition-colors">
-                                    <div className="flex items-center justify-between mb-3">
-                                        <span className="bg-gray-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
-                                            BENEFICIARIO #{index + 1}
-                                        </span>
-                                        {index === 0 && (
-                                            <button
-                                                type="button"
-                                                onClick={() => {
-                                                    const newArr = [...beneficiaries];
-                                                    const currentPuesto = newArr[0].puesto; // Preserve Puesto if it was auto-filled
-                                                    newArr[0] = {
-                                                        dni: formData.dni,
-                                                        nombre: formData.nombre,
-                                                        area: formData.area,
-                                                        puesto: currentPuesto // Keep the checked Puesto
-                                                    };
-                                                    // However, if the user manually typed something else we might want to overwrite.
-                                                    // But effectively "Copiar datos" copies form data. Form data has "puesto" string.
-                                                    // If profile is selected, Puesto is fixed.
-                                                    // Let's just copy fields.
-                                                    newArr[0].dni = formData.dni;
-                                                    newArr[0].nombre = formData.nombre;
-                                                    newArr[0].area = formData.area;
-                                                    // Only overwrite puesto if not locked by profile
-                                                    if (!formData.perfil_puesto) {
-                                                        newArr[0].puesto = formData.puesto;
-                                                    }
-                                                    setBeneficiaries(newArr);
-                                                }}
-                                                className="text-[10px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
-                                            >
-                                                Copiar mis datos
-                                            </button>
-                                        )}
+                        {skipBeneficiaries ? (
+                            <div className="p-8 text-center bg-gray-50 border border-gray-200 rounded-lg border-dashed">
+                                <p className="text-sm text-gray-500">Se ha omitido el registro detallado de beneficiarios.</p>
+                                <p className="text-xs text-gray-400 mt-1">Podrá continuar al siguiente paso sin ingresar esta información pero deberas ingresarlo en la vista de Mis Equipos.</p>
+                                <button
+                                    onClick={() => setSkipBeneficiaries(false)}
+                                    className="mt-3 text-xs text-indigo-600 hover:text-indigo-800 font-medium underline"
+                                >
+                                    Ingresar beneficiarios manualmente
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                {beneficiaries.map((b, index) => (
+                                    <div key={index} className="p-4 bg-white border border-gray-200 rounded-lg shadow-sm group hover:border-indigo-200 transition-colors">
+                                        <div className="flex items-center justify-between mb-3">
+                                            <span className="bg-gray-900 text-white text-[10px] font-bold px-2 py-0.5 rounded-full">
+                                                BENEFICIARIO #{index + 1}
+                                            </span>
+                                            {index === 0 && (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => {
+                                                        const newArr = [...beneficiaries];
+                                                        const currentPuesto = newArr[0].puesto; // Preserve Puesto if it was auto-filled
+                                                        newArr[0] = {
+                                                            dni: formData.dni,
+                                                            nombre: formData.nombre,
+                                                            area: formData.area,
+                                                            puesto: currentPuesto // Keep the checked Puesto
+                                                        };
+                                                        // However, if the user manually typed something else we might want to overwrite.
+                                                        // But effectively "Copiar datos" copies form data. Form data has "puesto" string.
+                                                        // If profile is selected, Puesto is fixed.
+                                                        // Let's just copy fields.
+                                                        newArr[0].dni = formData.dni;
+                                                        newArr[0].nombre = formData.nombre;
+                                                        newArr[0].area = formData.area;
+                                                        // Only overwrite puesto if not locked by profile
+                                                        if (!formData.perfil_puesto) {
+                                                            newArr[0].puesto = formData.puesto;
+                                                        }
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                    className="text-[10px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
+                                                >
+                                                    Copiar mis datos
+                                                </button>
+                                            )}
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">DNI <span className="text-red-500">*</span></label>
+                                                <input
+                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300"
+                                                    placeholder="00000000"
+                                                    maxLength={8}
+                                                    value={b.dni}
+                                                    onChange={e => {
+                                                        const newArr = [...beneficiaries];
+                                                        newArr[index].dni = e.target.value.replace(/\D/g, '');
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo <span className="text-red-500">*</span></label>
+                                                <input
+                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper"
+                                                    placeholder="Apellidos y Nombres"
+                                                    value={b.nombre}
+                                                    onChange={e => {
+                                                        const newArr = [...beneficiaries];
+                                                        newArr[index].nombre = e.target.value;
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Área / Gerencia</label>
+                                                <input
+                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300"
+                                                    placeholder="Ej. Comercial"
+                                                    value={b.area}
+                                                    onChange={e => {
+                                                        const newArr = [...beneficiaries];
+                                                        newArr[index].area = e.target.value;
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                                                    Perfil de Puesto
+                                                    {!!formData.perfil_puesto && <span className="text-[9px] bg-gray-100 text-gray-500 px-1 rounded border border-gray-200">AUTO</span>}
+                                                </label>
+                                                <input
+                                                    disabled={!!formData.perfil_puesto}
+                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 disabled:bg-gray-50 disabled:text-gray-500"
+                                                    placeholder="Ej. Analista"
+                                                    value={b.puesto}
+                                                    onChange={e => {
+                                                        const newArr = [...beneficiaries];
+                                                        newArr[index].puesto = e.target.value;
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">DNI <span className="text-red-500">*</span></label>
-                                            <input
-                                                className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300"
-                                                placeholder="00000000"
-                                                maxLength={8}
-                                                value={b.dni}
-                                                onChange={e => {
-                                                    const newArr = [...beneficiaries];
-                                                    newArr[index].dni = e.target.value.replace(/\D/g, '');
-                                                    setBeneficiaries(newArr);
-                                                }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo <span className="text-red-500">*</span></label>
-                                            <input
-                                                className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper"
-                                                placeholder="Apellidos y Nombres"
-                                                value={b.nombre}
-                                                onChange={e => {
-                                                    const newArr = [...beneficiaries];
-                                                    newArr[index].nombre = e.target.value;
-                                                    setBeneficiaries(newArr);
-                                                }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Área / Gerencia</label>
-                                            <input
-                                                className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300"
-                                                placeholder="Ej. Comercial"
-                                                value={b.area}
-                                                onChange={e => {
-                                                    const newArr = [...beneficiaries];
-                                                    newArr[index].area = e.target.value;
-                                                    setBeneficiaries(newArr);
-                                                }}
-                                            />
-                                        </div>
-                                        <div>
-                                            <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
-                                                Puesto / Cargo
-                                                {!!formData.perfil_puesto && <span className="text-[9px] bg-gray-100 text-gray-500 px-1 rounded border border-gray-200">AUTO</span>}
-                                            </label>
-                                            <input
-                                                disabled={!!formData.perfil_puesto}
-                                                className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 disabled:bg-gray-50 disabled:text-gray-500"
-                                                placeholder="Ej. Analista"
-                                                value={b.puesto}
-                                                onChange={e => {
-                                                    const newArr = [...beneficiaries];
-                                                    newArr[index].puesto = e.target.value;
-                                                    setBeneficiaries(newArr);
-                                                }}
-                                            />
-                                        </div>
-                                    </div>
-                                </div>
-                            ))}
-                        </div>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 );
 
@@ -1429,17 +1708,21 @@ export default function SolicitarTelefonia() {
                             <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
                                 {/* LEFT: Main Info */}
                                 <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-3 mb-6">
+                                        <StatusBadge estado={t.estado} />
+                                    </div>
                                     <div className="flex items-center gap-3 mb-1">
+                                        <span className="text-sm text-gray-500">Fecha de Solicitud:</span>
                                         <span className="text-xs text-gray-400 font-medium border border-gray-100 px-2 py-0.5 rounded-md bg-gray-50 flex items-center gap-1">
                                             <Calendar className="w-3 h-3" />
                                             {new Date(t.created_at).toLocaleDateString()}
                                         </span>
-                                        <StatusBadge estado={t.estado} />
+
                                     </div>
                                     <h3 className="text-base font-bold text-gray-900 truncate" title={t.beneficiario_nombre || ""}>
                                         {t.beneficiario_nombre}
                                     </h3>
-                                    <p className="text-sm text-gray-500">{t.beneficiario_puesto}</p>
+                                    <p className="text-sm text-gray-500">{t.beneficiario_puesto}{t.beneficiario_dni} | Responsable de Ticket</p>
                                 </div>
 
                                 {/* MIDDLE: Technial Details */}
@@ -1462,13 +1745,31 @@ export default function SolicitarTelefonia() {
                                         <span className="font-medium text-gray-700">{t.cantidad_lineas} Línea(s)</span>
                                     </div>
                                     <div className="col-span-2">
-                                        <span className="text-gray-400 text-xs block">Ubicación</span>
+                                        <span className="text-gray-400 text-xs block">Planta/Fundo</span>
                                         <span className="font-medium text-gray-700 truncate">{t.fundo_planta}</span>
                                     </div>
                                 </div>
 
                                 {/* RIGHT: Action */}
-                                <div className="w-full md:w-auto flex items-center justify-end">
+                                <div className="w-full md:w-auto flex items-center justify-end gap-2">
+                                    {(["Pendiente Gerencia", "Revisión Admin", "Pendiente IT"].includes(t.estado)) && (
+                                        <>
+                                            <button
+                                                onClick={() => handleEditTicket(t)}
+                                                className="p-2 text-gray-400 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors border border-transparent hover:border-indigo-100"
+                                                title="Editar Solicitud"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleCancelClick(t)}
+                                                className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                title="Cancelar Solicitud"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </>
+                                    )}
                                     <button
                                         onClick={() => handleOpenDetail(t)}
                                         className="px-4 py-2 bg-gray-50 text-blue-600 font-medium text-sm rounded-lg border border-blue-100 hover:bg-blue-50 hover:border-blue-300 transition-all flex items-center gap-2"
@@ -1529,6 +1830,43 @@ export default function SolicitarTelefonia() {
                     />
                 )
             }
-        </div >
+
+            {/* CANCEL CONFIRMATION MODAL */}
+            <Modal
+                open={!!cancelTicketId}
+                onClose={() => setCancelTicketId(null)}
+                title="Confirmar Cancelación"
+                size="sm"
+            >
+                <div className="space-y-4">
+                    <div className="flex items-start gap-4 p-2">
+                        <div className="p-2 bg-red-100 rounded-full">
+                            <Trash2 className="w-6 h-6 text-red-600" />
+                        </div>
+                        <div>
+                            <h4 className="text-sm font-bold text-gray-900">¿Cancelar Solicitud?</h4>
+                            <p className="text-sm text-gray-600 mt-1">
+                                Esta acción Cancelará la solicitud y no podrá revertirse.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                        <button
+                            onClick={() => setCancelTicketId(null)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 rounded-lg transition-colors border border-gray-200"
+                        >
+                            No, mantener
+                        </button>
+                        <button
+                            onClick={confirmCancelTicket}
+                            className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors"
+                        >
+                            Sí, cancelar solicitud
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </div>
     );
 }

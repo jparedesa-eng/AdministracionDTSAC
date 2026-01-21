@@ -23,18 +23,57 @@ import {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
+
     ArrowLeftRight,
     UserPlus,
-    AlertTriangle
+    AlertTriangle,
+    Building2,
+    ChevronDown,
+    Activity,
+    Signal
 } from "lucide-react";
 
+import { getSedesState, subscribeSedes } from "../../store/sedesStore";
+import { useAuth } from "../../auth/AuthContext";
+
 export default function InventarioTelefonia() {
+    const { user } = useAuth();
     const [activeTab, setActiveTab] = useState<"equipos" | "chips" | "planes">("equipos");
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
 
     // Search
     const [q, setQ] = useState("");
+
+    // Filters Equipos
+    const [filterEstado, setFilterEstado] = useState("");
+    const [filterFundo, setFilterFundo] = useState("");
+    const [filterAnio, setFilterAnio] = useState("");
+
+    // Filters Chips
+    const [filterChipEstado, setFilterChipEstado] = useState("");
+    const [filterChipOperador, setFilterChipOperador] = useState("");
+    const [filterChipPlan, setFilterChipPlan] = useState("");
+
+    // Reset filters on tab change
+    useEffect(() => {
+        setFilterEstado("");
+        setFilterFundo("");
+        setFilterAnio("");
+        setFilterChipEstado("");
+        setFilterChipOperador("");
+        setFilterChipPlan("");
+        setQ("");
+    }, [activeTab]);
+
+    // Sedes
+    const [, setSedesVersion] = useState(0);
+    const { sedes } = getSedesState();
+
+    useEffect(() => {
+        const unsub = subscribeSedes(() => setSedesVersion(prev => prev + 1));
+        return () => unsub();
+    }, []);
 
     // Modals CRUD
     const [openEquipo, setOpenEquipo] = useState(false);
@@ -51,7 +90,20 @@ export default function InventarioTelefonia() {
     const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
     const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Usuario Final
     const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
-    const [asignacionTicketData, setAsignacionTicketData] = useState({ ceco: "", justificacion: "Asignación Directa de Inventario", tipo_servicio: "Línea Nueva" });
+    const [asignacionTicketData, setAsignacionTicketData] = useState({
+        ceco: "",
+        justificacion: "Asignación Directa de Inventario",
+        tipo_servicio: "", // Operador
+        fundo_planta: "",
+        categoria: "",
+        descripcion_categoria: "",
+        perfil_puesto: "",
+        periodo: "PERMANENTE",
+        fecha_inicio: new Date().toISOString().slice(0, 10),
+        fecha_fin: "",
+        cultivo: "",
+        paquete_asignado: ""
+    });
     const [sameAsResponsable, setSameAsResponsable] = useState(true);
     const [bajaData, setBajaData] = useState({ motivo: "" });
 
@@ -164,7 +216,20 @@ export default function InventarioTelefonia() {
         setModalActionItem(eq);
         setAsignacionData({ dni: "", nombre: "", area: "", puesto: "" });
         setResponsableData({ dni: "", nombre: "", area: "", puesto: "" });
-        setAsignacionTicketData({ ceco: "", justificacion: "Asignación Directa de Inventario", tipo_servicio: "Línea Nueva" });
+        setAsignacionTicketData({
+            ceco: "",
+            justificacion: "Asignación Directa de Inventario",
+            tipo_servicio: "", // Operador
+            fundo_planta: "",
+            categoria: "",
+            descripcion_categoria: "",
+            perfil_puesto: "",
+            periodo: "PERMANENTE",
+            fecha_inicio: new Date().toISOString().slice(0, 10),
+            fecha_fin: "",
+            cultivo: "",
+            paquete_asignado: ""
+        });
         setSameAsResponsable(true);
         setOpenAsignacion(true);
     };
@@ -173,6 +238,13 @@ export default function InventarioTelefonia() {
         e.preventDefault();
         if (!modalActionItem) return;
         try {
+            // Find Puesto Name
+            const puestoObj = telefoniaStore.puestos.find(p => p.id === asignacionTicketData.perfil_puesto);
+            const puestoNombre = puestoObj ? puestoObj.nombre : "";
+
+            // Find Plan Details
+            const planObj = telefoniaStore.planes.find(p => p.nombre === asignacionTicketData.paquete_asignado);
+
             // If check is true, Usuario Final = Responsable
             const usuarioFinal = sameAsResponsable ? responsableData : asignacionData;
 
@@ -183,7 +255,20 @@ export default function InventarioTelefonia() {
                 {
                     ceco: asignacionTicketData.ceco,
                     justificacion: asignacionTicketData.justificacion,
-                    tipo_servicio: asignacionTicketData.tipo_servicio
+                    tipo_servicio: asignacionTicketData.tipo_servicio, // Operador
+                    fundo_planta: asignacionTicketData.fundo_planta,
+                    categoria: asignacionTicketData.categoria,
+                    descripcion_categoria: asignacionTicketData.descripcion_categoria,
+                    beneficiario_puesto_nombre: puestoNombre, // Send Name
+                    periodo: asignacionTicketData.periodo,
+                    fecha_inicio: asignacionTicketData.fecha_inicio,
+                    fecha_fin: asignacionTicketData.fecha_fin,
+                    cultivo: asignacionTicketData.cultivo,
+                    cantidad_lineas: 1,
+                    paquete_asignado: asignacionTicketData.paquete_asignado,
+                    plan_costo: planObj?.costo || 0,
+                    plan_datos: planObj?.gigas || "",
+                    usuario_creador_id: user?.id
                 }
             );
             setToast({ type: "success", message: "Equipo asignado y ticket generado correctamente" });
@@ -481,13 +566,41 @@ export default function InventarioTelefonia() {
 
     const filteredEquipos = telefoniaStore.equipos.filter((e) => {
         const term = q.toLowerCase();
-        return (
+        const matchesTerm = (
             e.marca.toLowerCase().includes(term) ||
             e.modelo.toLowerCase().includes(term) ||
             e.imei.toLowerCase().includes(term) ||
-            (e.asignacion_activa?.beneficiario_nombre?.toLowerCase() || "").includes(term)
+            (e.asignacion_activa?.beneficiario_nombre?.toLowerCase() || "").includes(term) ||
+            (e.chip?.numero_linea?.toLowerCase() || "").includes(term)
         );
+
+        if (!matchesTerm) return false;
+
+        // Apply Filters
+        if (filterEstado && e.estado !== filterEstado) return false;
+
+        if (filterFundo) {
+            const fundo = e.asignacion_activa?.fundo_planta || "Sin Asignar";
+            if (fundo !== filterFundo) return false;
+        }
+
+        if (filterAnio) {
+            const anio = e.fecha_compra ? new Date(e.fecha_compra).getFullYear().toString() : "Sin fecha";
+            if (anio !== filterAnio) return false;
+        }
+
+        return true;
     });
+
+    // Unique Values for Filters
+    const uniqueFundos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.fundo_planta || "Sin Asignar"))).sort();
+    const uniqueAnios = Array.from(new Set(telefoniaStore.equipos.map(e => e.fecha_compra ? new Date(e.fecha_compra).getFullYear().toString() : "Sin fecha"))).sort((a, b) => b.localeCompare(a));
+    const uniqueEstados = Array.from(new Set(telefoniaStore.equipos.map(e => e.estado))).sort();
+
+    // Unique Values for Chips Filters
+    const uniqueChipEstados = Array.from(new Set(telefoniaStore.chips.map(c => c.estado))).sort();
+    const uniqueChipOperadores = Array.from(new Set(telefoniaStore.chips.map(c => c.operador))).sort();
+    const uniqueChipPlanes = Array.from(new Set(telefoniaStore.chips.map(c => c.plan?.nombre || "Sin Plan"))).sort();
 
     const filteredChips = telefoniaStore.chips.filter((c) => {
         const term = q.toLowerCase();
@@ -496,10 +609,13 @@ export default function InventarioTelefonia() {
         const cleanNumero = c.numero_linea.toLowerCase().replace(/[\s-]/g, "");
 
         return (
-            cleanNumero.includes(cleanTerm) ||
-            c.operador.toLowerCase().includes(term) ||
-            // Keep original check just in case user specifically types formatted string distinctively
-            c.numero_linea.toLowerCase().includes(term)
+            (cleanNumero.includes(cleanTerm) ||
+                c.operador.toLowerCase().includes(term) ||
+                c.numero_linea.toLowerCase().includes(term)) &&
+            // Filters
+            (!filterChipEstado || c.estado === filterChipEstado) &&
+            (!filterChipOperador || c.operador === filterChipOperador) &&
+            (!filterChipPlan || (filterChipPlan === "Sin Plan" ? !c.plan : c.plan?.nombre === filterChipPlan))
         );
     });
 
@@ -578,28 +694,148 @@ export default function InventarioTelefonia() {
             </div>
 
             {/* TOOLBAR */}
+            {/* TOOLBAR */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="relative w-full max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                    <input
-                        type="text"
-                        className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                        placeholder={
-                            activeTab === "equipos" ? "Buscar por marca, IMEI, responsable..." :
-                                activeTab === "chips" ? "Buscar por número, operador..." :
-                                    "Buscar por nombre, operador..."
-                        }
-                        value={q}
-                        onChange={(e) => setQ(e.target.value)}
-                    />
+                <div className="flex flex-1 items-center gap-2 w-full overflow-x-auto sm:overflow-visible pb-2 sm:pb-0">
+                    <div className="relative w-full sm:max-w-xs shrink-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                        <input
+                            type="text"
+                            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            placeholder={
+                                activeTab === "equipos" ? "Buscar..." :
+                                    activeTab === "chips" ? "Buscar..." :
+                                        "Buscar..."
+                            }
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                        />
+                    </div>
+
+                    {/* FILTERS IN TOOLBAR */}
+                    {activeTab === "equipos" && (
+                        <>
+                            <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
+
+                            {/* Filter: Estado */}
+                            <div className="relative group min-w-[160px]">
+                                <Activity className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterEstado}
+                                    onChange={(e) => setFilterEstado(e.target.value)}
+                                >
+                                    <option value="">Todos los Estados</option>
+                                    {uniqueEstados.map(e => (e && <option key={e} value={e}>{e}</option>))}
+                                </select>
+                            </div>
+
+                            {/* Filter: Fundo/Planta */}
+                            <div className="relative group min-w-[180px]">
+                                <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterFundo}
+                                    onChange={(e) => setFilterFundo(e.target.value)}
+                                >
+                                    <option value="">Todas las Sedes</option>
+                                    {uniqueFundos.map(f => (f && <option key={f} value={f}>{f}</option>))}
+                                </select>
+                            </div>
+
+                            {/* Filter: Año */}
+                            <div className="relative group min-w-[140px]">
+                                <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterAnio}
+                                    onChange={(e) => setFilterAnio(e.target.value)}
+                                >
+                                    <option value="">Todos los Años</option>
+                                    {uniqueAnios.map(a => (a && <option key={a} value={a}>{a}</option>))}
+                                </select>
+                            </div>
+
+                            {(filterEstado || filterFundo || filterAnio) && (
+                                <button
+                                    onClick={() => { setFilterEstado(""); setFilterFundo(""); setFilterAnio(""); }}
+                                    className="h-10 px-4 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors whitespace-nowrap"
+                                >
+                                    Limpiar
+                                </button>
+                            )}
+                        </>
+                    )}
+
+                    {/* FILTERS IN TOOLBAR (CHIPS) */}
+                    {activeTab === "chips" && (
+                        <>
+                            <div className="h-6 w-px bg-gray-300 mx-1 hidden sm:block"></div>
+
+                            {/* Filter: Estado */}
+                            <div className="relative group min-w-[160px]">
+                                <Activity className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterChipEstado}
+                                    onChange={(e) => setFilterChipEstado(e.target.value)}
+                                >
+                                    <option value="">Todos los Estados</option>
+                                    {uniqueChipEstados.map(e => (e && <option key={e} value={e}>{e}</option>))}
+                                </select>
+                            </div>
+
+                            {/* Filter: Operador */}
+                            <div className="relative group min-w-[140px]">
+                                <Signal className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterChipOperador}
+                                    onChange={(e) => setFilterChipOperador(e.target.value)}
+                                >
+                                    <option value="">Operador</option>
+                                    {uniqueChipOperadores.map(op => (op && <option key={op} value={op}>{op}</option>))}
+                                </select>
+                            </div>
+
+                            {/* Filter: Plan */}
+                            <div className="relative group min-w-[160px]">
+                                <Wifi className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterChipPlan}
+                                    onChange={(e) => setFilterChipPlan(e.target.value)}
+                                >
+                                    <option value="">Plan</option>
+                                    {uniqueChipPlanes.map(p => (p && <option key={p} value={p}>{p}</option>))}
+                                </select>
+                            </div>
+
+                            {(filterChipEstado || filterChipOperador || filterChipPlan) && (
+                                <button
+                                    onClick={() => { setFilterChipEstado(""); setFilterChipOperador(""); setFilterChipPlan(""); }}
+                                    className="h-10 px-4 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors whitespace-nowrap"
+                                >
+                                    Limpiar
+                                </button>
+                            )}
+                        </>
+                    )}
                 </div>
+
                 <button
                     onClick={
                         activeTab === "equipos" ? handleNewEquipo :
                             activeTab === "chips" ? handleNewChip :
                                 handleNewPlan
                     }
-                    className="inline-flex items-center gap-2 rounded-lg bg-gray-900 px-4 py-2 text-sm font-medium text-white hover:bg-gray-800 transition-colors"
+                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo {
@@ -624,6 +860,7 @@ export default function InventarioTelefonia() {
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fundo / Planta</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
@@ -677,6 +914,9 @@ export default function InventarioTelefonia() {
                                                     {item.condicion || "Nuevo"}
                                                 </span>
                                             </div>
+                                        </td>
+                                        <td className="px-6 py-4 text-sm text-gray-600">
+                                            {item.asignacion_activa?.fundo_planta || "-"}
                                         </td>
                                         <td className="px-6 py-4">
                                             {item.chip ? (
@@ -1041,20 +1281,13 @@ export default function InventarioTelefonia() {
                                 placeholder="Nombre Responsable"
                             />
                         </div>
-                        <div className="grid grid-cols-2 gap-3">
+                        <div className="grid grid-cols-1 gap-3">
                             <input
                                 required
                                 className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
                                 value={responsableData.area}
                                 onChange={(e) => setResponsableData({ ...responsableData, area: e.target.value })}
                                 placeholder="Área"
-                            />
-                            <input
-                                required
-                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
-                                value={responsableData.puesto}
-                                onChange={(e) => setResponsableData({ ...responsableData, puesto: e.target.value })}
-                                placeholder="Puesto"
                             />
                         </div>
                     </div>
@@ -1112,10 +1345,159 @@ export default function InventarioTelefonia() {
                         </div>
                     )}
 
-                    {/* DATOS DEL TICKET (CECO, JUSTIFICACIÓN) */}
+                    {/* DATOS DEL TICKET (CECO, JUSTIFICACIÓN, ETC) */}
                     <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 space-y-3">
                         <h4 className="text-sm font-semibold text-indigo-900 border-b border-indigo-200 pb-1">Datos del Ticket / Costos</h4>
+
+                        {/* Fundo / Planta & Cultivo */}
                         <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Fundo / Planta</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.fundo_planta}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value })}
+                                >
+                                    <option value="">Seleccione Fundo/Planta...</option>
+                                    {sedes.map(sede => (
+                                        <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Cultivo</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.cultivo}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, cultivo: e.target.value })}
+                                >
+                                    <option value="">Seleccione Cultivo...</option>
+                                    <option value="ARANDANO">ARANDANO</option>
+                                    <option value="PALTA">PALTA</option>
+                                    <option value="ESPARRAGO">ESPARRAGO</option>
+                                    <option value="UVA">UVA</option>
+                                    <option value="MANGO">MANGO</option>
+                                    <option value="PIMIENTO">PIMIENTO</option>
+                                    <option value="OTROS">OTROS</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Categoria / Descripcion */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Categoría</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.categoria}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, categoria: e.target.value })}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="PROYECTO">PROYECTO</option>
+                                    <option value="TELEFONIA">TELEFONIA</option>
+                                    <option value="PERSONAL">PERSONAL</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Desc. Categoría</label>
+                                <input
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.descripcion_categoria}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, descripcion_categoria: e.target.value })}
+                                    placeholder="Jefatura, etc."
+                                />
+                            </div>
+                        </div>
+
+                        {/* Perfil Puesto / Periodo */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Perfil de Puesto</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.perfil_puesto}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, perfil_puesto: e.target.value })}
+                                >
+                                    <option value="">Seleccione Perfil...</option>
+                                    {telefoniaStore.puestos.map(p => (
+                                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Periodo</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.periodo}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, periodo: e.target.value })}
+                                >
+                                    <option value="PERMANENTE">PERMANENTE</option>
+                                    <option value="CAMPAÑA">CAMPAÑA</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Fechas */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Fecha Inicio</label>
+                                <input
+                                    type="date"
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.fecha_inicio}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fecha_inicio: e.target.value })}
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Fecha Fin</label>
+                                <input
+                                    type="date"
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    disabled={asignacionTicketData.periodo !== "CAMPAÑA"}
+                                    value={asignacionTicketData.fecha_fin}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fecha_fin: e.target.value })}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Operator / Plan */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Operador</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.tipo_servicio}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, tipo_servicio: e.target.value, paquete_asignado: "" })}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="CLARO">CLARO</option>
+                                    <option value="ENTEL">ENTEL</option>
+                                    <option value="MOVISTAR">MOVISTAR</option>
+                                    <option value="Línea Nueva">Línea Nueva (Generico)</option>
+                                </select>
+                            </div>
+
+                            {["CLARO", "ENTEL", "MOVISTAR"].includes(asignacionTicketData.tipo_servicio) && (
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Plan / Paquete</label>
+                                    <select
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={asignacionTicketData.paquete_asignado}
+                                        onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, paquete_asignado: e.target.value })}
+                                    >
+                                        <option value="">Seleccione Plan...</option>
+                                        {telefoniaStore.planes
+                                            .filter(p => p.operador === asignacionTicketData.tipo_servicio && p.active)
+                                            .map(p => (
+                                                <option key={p.id} value={p.nombre}>{p.nombre} ({p.gigas})</option>
+                                            ))
+                                        }
+                                    </select>
+                                </div>
+                            )}
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
                             <div>
                                 <label className="block text-xs font-medium text-indigo-800 uppercase">CECO</label>
                                 <input
@@ -1125,19 +1507,6 @@ export default function InventarioTelefonia() {
                                     onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, ceco: e.target.value })}
                                     placeholder="Centro de Costos"
                                 />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium text-indigo-800 uppercase">Tipo Servicio</label>
-                                <select
-                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
-                                    value={asignacionTicketData.tipo_servicio}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, tipo_servicio: e.target.value })}
-                                >
-                                    <option value="Línea Nueva">Línea Nueva</option>
-                                    <option value="Renovación">Renovación</option>
-                                    <option value="Reposición">Reposición</option>
-                                    <option value="Línea de Segundo Uso">Línea de Segundo Uso</option>
-                                </select>
                             </div>
                         </div>
                         <div>

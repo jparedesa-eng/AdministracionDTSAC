@@ -107,8 +107,8 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
         columnStyles: { 0: { fontStyle: 'bold', textColor: [80, 80, 80] } }
     };
 
-    // 1. INFO BENEFICIARIO
-    currentY = addSectionTitle("Información del Beneficiario", currentY);
+    // 1. INFO RESPONSABLE
+    currentY = addSectionTitle("Información del Responsable", currentY);
 
     autoTable(doc, {
         startY: currentY,
@@ -228,7 +228,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
 
     // 3. APLICATIVOS
     currentY = (doc as any).lastAutoTable.finalY + 10;
-    currentY = addSectionTitle("Aplicativos Autorizados", currentY);
+    currentY = addSectionTitle("Aplicativos a Instalar", currentY);
 
     const apps = ticket.aplicativos || [];
     const appBody = [];
@@ -255,7 +255,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
 
     // 4. EQUIPAMIENTO
     currentY = (doc as any).lastAutoTable.finalY + 10;
-    currentY = addSectionTitle("Equipamiento Entregado", currentY);
+    currentY = addSectionTitle("Equipo Entregado", currentY);
 
     const asignaciones = ticket.asignaciones || [];
     const equipamientoBody = [];
@@ -267,7 +267,8 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
                 `${a.equipo?.marca || ""} ${a.equipo?.modelo || "Equipo"}`,
                 `IMEI: ${a.equipo?.imei || "-"}`,
                 a.equipo?.condicion || "-",
-                a.chip?.numero_linea || "-"
+                a.chip?.numero_linea || "-",
+                a.usuario_final_nombre || "-"
             ]);
         });
     } else if (ticket.equipo) {
@@ -276,16 +277,17 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
             `${ticket.equipo.marca} ${ticket.equipo.modelo}`,
             `IMEI: ${ticket.equipo.imei}`,
             ticket.equipo.condicion || "-",
-            ticket.chip?.numero_linea || "-"
+            ticket.chip?.numero_linea || "-",
+            ticket.beneficiario_nombre || "-"
         ]);
     } else {
-        equipamientoBody.push(["-", "Pendiente de Asignación", "-", "-", "-"]);
+        equipamientoBody.push(["-", "Pendiente de Asignación", "-", "-", "-", "-"]);
     }
 
     autoTable(doc, {
         startY: currentY,
         ...tableStyles,
-        head: [['#', 'Modelo', 'Detalle', 'Condición', 'Línea']],
+        head: [['#', 'Modelo', 'Detalle', 'Condición', 'Línea', 'Beneficiario']],
         body: equipamientoBody,
         headStyles: { fillColor: [44, 62, 80], textColor: 255 }
     });
@@ -352,7 +354,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
     doc.setTextColor(50);
     doc.text("RECIBIDO CONFORME", 105, finalY + 4, { align: 'center' });
     doc.setFont("helvetica", "bold");
-    doc.text(ticket.beneficiario_nombre || "Beneficiario", 105, finalY + 9, { align: 'center' });
+    doc.text(ticket.beneficiario_nombre || "Responsable", 105, finalY + 9, { align: 'center' });
     doc.setFont("helvetica", "normal");
     doc.text(`DNI: ${ticket.beneficiario_dni || ""}`, 105, finalY + 13, { align: 'center' });
 

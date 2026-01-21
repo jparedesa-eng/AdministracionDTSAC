@@ -327,7 +327,7 @@ export const telefoniaStore = {
         // 2. Fetch Active Assignments (Entregado status AND no return date)
         const { data: activeSols, error: solError } = await supabase
             .from("telefonia_solicitudes")
-            .select("id, equipo_asignado_id, beneficiario_nombre, beneficiario_area, fecha_entrega, tipo_servicio")
+            .select("id, equipo_asignado_id, beneficiario_nombre, beneficiario_area, fecha_entrega, tipo_servicio, fundo_planta")
             .eq("estado", "Entregado")
             .not("equipo_asignado_id", "is", null)
             .is("fecha_devolucion", null);
@@ -357,7 +357,8 @@ export const telefoniaStore = {
                     solicitud_id,
                     solicitud:telefonia_solicitudes (
                         beneficiario_nombre,
-                        beneficiario_area
+                        beneficiario_area,
+                        fundo_planta
                     )
                 `)
                 .eq("estado", "Entregado")
@@ -369,13 +370,15 @@ export const telefoniaStore = {
                         // Priority: Ticket Info > Assignment Info
                         const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "Usuario Asignado";
                         const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "Área asignada";
+                        const fundo = a.solicitud?.fundo_planta || "";
 
                         activeMap.set(a.equipo_id, {
                             id: a.solicitud_id,
                             beneficiario_nombre: nombre,
                             beneficiario_area: area,
                             fecha_entrega: a.fecha_entrega,
-                            tipo_servicio: "Asignación Múltiple"
+                            tipo_servicio: "Asignación Múltiple",
+                            fundo_planta: fundo
                         });
                     }
                 });
@@ -913,7 +916,24 @@ export const telefoniaStore = {
         await this.fetchEquipos();
     },
 
-    async asignarDirectamente(equipoId: string, datosUsuarioFinal: any, datosResponsable: any, ticketData?: { ceco?: string, justificacion?: string, tipo_servicio?: string }) {
+    async asignarDirectamente(equipoId: string, datosUsuarioFinal: any, datosResponsable: any, ticketData?: {
+        ceco?: string;
+        justificacion?: string;
+        tipo_servicio?: string;
+        fundo_planta?: string;
+        categoria?: string;
+        descripcion_categoria?: string;
+        beneficiario_puesto_nombre?: string;
+        periodo?: string;
+        fecha_inicio?: string;
+        fecha_fin?: string;
+        cultivo?: string;
+        cantidad_lineas?: number;
+        paquete_asignado?: string;
+        plan_costo?: number;
+        plan_datos?: string;
+        usuario_creador_id?: string;
+    }) {
         const fechaEntrega = new Date().toISOString();
         const equipo = this.equipos.find(e => e.id === equipoId);
 
@@ -923,13 +943,30 @@ export const telefoniaStore = {
             tipo_servicio: ticketData?.tipo_servicio || "ASIGNACION_DIRECTA",
             justificacion: ticketData?.justificacion || "Asignación desde Inventario",
             ceco: ticketData?.ceco || "",
+
+            // New Fields
+            fundo_planta: ticketData?.fundo_planta || "",
+            categoria: ticketData?.categoria || "",
+            descripcion_categoria: ticketData?.descripcion_categoria || "",
+            beneficiario_puesto: ticketData?.beneficiario_puesto_nombre || datosResponsable.puesto, // Perfil de Puesto override
+            periodo_uso: ticketData?.periodo || "",
+            fecha_inicio_uso: ticketData?.fecha_inicio || null,
+            fecha_fin_uso: ticketData?.fecha_fin || null,
+            cultivo: ticketData?.cultivo || "",
+            cantidad_lineas: 1, // Always 1
+
+            // Plan Details
+            paquete_asignado: ticketData?.paquete_asignado || null,
+            plan_costo: ticketData?.plan_costo || 0,
+            plan_datos: ticketData?.plan_datos || null,
+
             estado: "Entregado",
             fecha_entrega: fechaEntrega,
             beneficiario_dni: datosResponsable.dni,
             beneficiario_nombre: datosResponsable.nombre,
             beneficiario_area: datosResponsable.area,
-            beneficiario_puesto: datosResponsable.puesto,
-            created_by: null // Or current user if we had context, but usually responsible.
+            // beneficiario_puesto is set above from ticketData
+            created_by: ticketData?.usuario_creador_id || null
         };
 
         const { data: ticket, error: ticketError } = await supabase
