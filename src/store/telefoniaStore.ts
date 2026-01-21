@@ -98,6 +98,10 @@ export interface Asignacion {
     // Relations
     equipo?: Equipo | null;
     chip?: Chip | null;
+
+    // New Fields for Chip Only Request
+    tipo_equipo_destino?: string | null;
+    codigo_equipo_destino?: string | null;
 }
 
 export interface Solicitud {
@@ -137,8 +141,9 @@ export interface Solicitud {
     alternativa_modelo?: string | null;
 
     // DEPRECATED COLUMNS (Legacy Data)
-    equipo_asignado_id?: string | null;
-    chip_asignado_id?: string | null;
+    // DEPRECATED / REMOVED COLUMNS
+    // equipo_asignado_id?: string | null;
+    // chip_asignado_id?: string | null;
     fecha_entrega?: string | null; // Keeps global delivery date
     recibido_por?: string | null; // Global signature
     fecha_devolucion?: string | null;
@@ -163,6 +168,10 @@ export interface Solicitud {
 
     // NEW: Multi-assignment
     asignaciones?: Asignacion[];
+
+    // New Fields for Chip Only Request
+    tipo_equipo_destino?: string | null;
+    codigo_equipo_destino?: string | null;
 }
 
 export interface BeneficiarioInput {
@@ -381,25 +390,10 @@ export const telefoniaStore = {
             page++;
         }
 
-        // 2. Fetch Active Assignments (Entregado status AND no return date)
-        const { data: activeSols, error: solError } = await supabase
-            .from("telefonia_solicitudes")
-            .select("id, equipo_asignado_id, beneficiario_nombre, beneficiario_area, fecha_entrega, tipo_servicio, fundo_planta")
-            .eq("estado", "Entregado")
-            .not("equipo_asignado_id", "is", null)
-            .is("fecha_devolucion", null);
-
-        if (solError) throw solError;
-
-        // 3. Map assignments
+        // 2. Fetch Active Assignments (ONLY from telefonia_solicitud_asignaciones now)
         const activeMap = new Map();
-        if (activeSols) {
-            activeSols.forEach((s) => {
-                if (s.equipo_asignado_id) {
-                    activeMap.set(s.equipo_asignado_id, s);
-                }
-            });
-        }
+        // Legacy activeSols block removed as columns deleted
+
 
         // New Assignments (Graceful fetch)
         try {
@@ -409,7 +403,8 @@ export const telefoniaStore = {
                     id, 
                     equipo_id, 
                     usuario_final_nombre, 
-                    usuario_final_area, 
+                    usuario_final_area,
+                    usuario_final_sede,
                     fecha_entrega, 
                     solicitud_id,
                     solicitud:telefonia_solicitudes (
@@ -427,7 +422,9 @@ export const telefoniaStore = {
                         // Priority: Ticket Info > Assignment Info
                         const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "Usuario Asignado";
                         const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "Área asignada";
-                        const fundo = a.solicitud?.fundo_planta || "";
+
+                        // Priority for Fundo/Planta display: Sede (Usuario Final) -> Fundo/Planta (Ticket)
+                        const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta || "";
 
                         activeMap.set(a.equipo_id, {
                             id: a.solicitud_id,
@@ -624,9 +621,7 @@ export const telefoniaStore = {
             const { data: chunk, error } = await supabase
                 .from("telefonia_solicitudes")
                 .select(`
-                    *,
-                    equipo:telefonia_equipos!equipo_asignado_id(*),
-                    chip:telefonia_chips!chip_asignado_id(*)
+                    *
                 `)
                 .order("created_at", { ascending: false })
                 .range(from, to);
@@ -731,11 +726,7 @@ export const telefoniaStore = {
             .from("telefonia_solicitudes")
             .update(payload)
             .eq("id", id)
-            .select(`
-                        *,
-                        equipo: telefonia_equipos(*),
-                            chip: telefonia_chips(*)
-                                `)
+            .select('*')
             .single();
         if (error) throw error;
 
@@ -913,7 +904,21 @@ export const telefoniaStore = {
             .order("created_at", { ascending: false });
 
         if (error) throw error;
-        return data as any[];
+        return data || [];
+    },
+
+    async fetchHistorialChip(chipId: string) {
+        const { data, error } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                *,
+                solicitud:telefonia_solicitudes(*)
+            `)
+            .eq("chip_id", chipId)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        return data || [];
     },
 
     // --- ACCIONES AVANZADAS ---
@@ -974,7 +979,8 @@ export const telefoniaStore = {
             .update({
                 estado: nuevoEstadoEquipo,
                 condicion: "Segundo Uso",
-                estado_actual: estadoRetorno // Persist physical condition
+                estado_actual: estadoRetorno,
+                ubicacion: "BASE" // Return to BASE upon return
             })
             .eq("id", equipoId);
 
@@ -1073,7 +1079,8 @@ export const telefoniaStore = {
         if (error) throw error;
 
         // 3. Update Equipment Status and Location
-        const ubicacionFinal = datosResponsable.fundo_planta || (ticketData && ticketData.fundo_planta) || "BASE";
+        // Priority: Sede (User Final) > Fundo/Planta (Ticket) > BASE
+        const ubicacionFinal = datosUsuarioFinal.sede || datosResponsable.fundo_planta || (ticketData && ticketData.fundo_planta) || "BASE";
 
         await supabase
             .from("telefonia_equipos")
@@ -1098,15 +1105,27 @@ export const telefoniaStore = {
         const payload: Partial<Solicitud> = {
             tipo_servicio: "BAJA_INTERNA",
             justificacion: motivo,
-            equipo_asignado_id: equipoId,
             estado: "Pendiente Admin",
             beneficiario_nombre: "INTERNAL_SYSTEM",
             created_by: usuarioId
         };
 
-        const { error } = await supabase
+        const { data: ticket, error } = await supabase
             .from("telefonia_solicitudes")
-            .insert([payload]);
+            .insert([payload])
+            .select()
+            .single();
+
+        if (error) throw error;
+
+        // Link equipment via assignments table
+        if (ticket) {
+            await supabase.from("telefonia_solicitud_asignaciones").insert([{
+                solicitud_id: ticket.id,
+                equipo_id: equipoId,
+                estado: "Pendiente"
+            }]);
+        }
         if (error) throw error;
 
         await supabase
@@ -1166,32 +1185,44 @@ export const telefoniaStore = {
     },
 
     async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string) {
+        // 0. Fetch Ticket Data to propagate fields (e.g. tipo_equipo_destino) and location
+        const { data: ticketData } = await supabase
+            .from("telefonia_solicitudes")
+            .select("fundo_planta, tipo_equipo_destino, codigo_equipo_destino")
+            .eq("id", solicitudId)
+            .single();
+
+        let targetLocation = ticketData?.fundo_planta || "BASE";
+
         // 1. Process Assignments (Update existing or Insert new)
         const newAssignments = [];
         const updatePromises = [];
 
         for (const item of items) {
+            const assignmentPayload = {
+                equipo_id: item.equipoId || null, // Handle empty string as null
+                chip_id: item.chipId || null,
+                fecha_entrega: new Date().toISOString(),
+                estado: 'Entregado',
+                // Propagate fields from Ticket if present
+                tipo_equipo_destino: ticketData?.tipo_equipo_destino || null,
+                codigo_equipo_destino: ticketData?.codigo_equipo_destino || null,
+                usuario_final_sede: ticketData?.fundo_planta || null
+            };
+
             if ((item as any).asignacionId) {
                 // UPDATE existing assignment
                 updatePromises.push(
                     supabase
                         .from("telefonia_solicitud_asignaciones")
-                        .update({
-                            equipo_id: item.equipoId,
-                            chip_id: item.chipId || null,
-                            fecha_entrega: new Date().toISOString(),
-                            estado: 'Entregado'
-                        })
+                        .update(assignmentPayload)
                         .eq("id", (item as any).asignacionId)
                 );
             } else {
                 // INSERT new assignment (Legacy fallback)
                 newAssignments.push({
                     solicitud_id: solicitudId,
-                    equipo_id: item.equipoId,
-                    chip_id: item.chipId || null,
-                    fecha_entrega: new Date().toISOString(),
-                    estado: 'Entregado'
+                    ...assignmentPayload
                 });
             }
         }
@@ -1209,27 +1240,19 @@ export const telefoniaStore = {
             if (assignError) throw assignError;
         }
 
-
-
         // 2. Update Equipment Status
-        // We need to know the target location (fundo_planta) from the Ticket
-        // Assuming all items go to the same location as the ticket's "fundo_planta"
-        let targetLocation = "BASE";
-        const { data: ticketData } = await supabase.from("telefonia_solicitudes").select("fundo_planta").eq("id", solicitudId).single();
-        if (ticketData && ticketData.fundo_planta) {
-            targetLocation = ticketData.fundo_planta;
+        const equipoIds = items.map(i => i.equipoId).filter(id => id); // Filter empty if any
+        if (equipoIds.length > 0) {
+            const { error: eqError } = await supabase
+                .from("telefonia_equipos")
+                .update({
+                    estado: "Asignado",
+                    ubicacion: targetLocation
+                })
+                .in("id", equipoIds);
+
+            if (eqError) throw eqError;
         }
-
-        const equipoIds = items.map(i => i.equipoId);
-        const { error: eqError } = await supabase
-            .from("telefonia_equipos")
-            .update({
-                estado: "Asignado",
-                ubicacion: targetLocation
-            })
-            .in("id", equipoIds);
-
-        if (eqError) throw eqError;
 
         // 3. Update Chips Status (if any)
         const chipIds = items.map(i => i.chipId).filter(id => id);
@@ -1241,8 +1264,6 @@ export const telefoniaStore = {
         }
 
         // 4. Update Solicitud Status (Entregado) and Main Signature
-        // NOTE: We persist the MAIN signature in the ticket for record of "Bulk Delivery".
-        // Recipient is the "Responsable del Bloque".
         await this.updateSolicitud(solicitudId, {
             estado: "Entregado",
             fecha_entrega: new Date().toISOString(),

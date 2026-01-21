@@ -147,6 +147,11 @@ export default function InventarioTelefonia() {
     const [selectedChipLink, setSelectedChipLink] = useState<Chip | null>(null);
     const [selectedPlanId, setSelectedPlanId] = useState<string>("");
 
+    // Chip History View
+    const [showChipHistory, setShowChipHistory] = useState(false);
+    const [chipHistoryData, setChipHistoryData] = useState<any[]>([]);
+    const [chipHistoryLoading, setChipHistoryLoading] = useState(false);
+
     // eSIM / New Line flow
     const [includeEsim, setIncludeEsim] = useState(false);
     const [esimData, setEsimData] = useState({ numero: "", operador: "" });
@@ -495,6 +500,20 @@ export default function InventarioTelefonia() {
         }
     };
 
+    const handleViewChipHistory = async (chipId: string) => {
+        setChipHistoryLoading(true);
+        setShowChipHistory(true);
+        setChipHistoryData([]);
+        try {
+            const data = await telefoniaStore.fetchHistorialChip(chipId);
+            setChipHistoryData(data);
+        } catch (e) {
+            setToast({ type: "error", message: "Error cargando historial del chip" });
+        } finally {
+            setChipHistoryLoading(false);
+        }
+    };
+
     // --- LINKING HANDLERS ---
     const handleOpenLink = (type: 'equipo' | 'chip', item: any) => {
         setLinkTarget({ type, item });
@@ -713,7 +732,6 @@ export default function InventarioTelefonia() {
             </div>
 
             {/* TOOLBAR */}
-            {/* TOOLBAR */}
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
                 <div className="flex flex-1 items-center gap-2 w-full overflow-x-auto sm:overflow-visible pb-2 sm:pb-0">
                     <div className="relative w-full sm:max-w-xs shrink-0">
@@ -879,7 +897,7 @@ export default function InventarioTelefonia() {
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fundo / Planta / Ubicación</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
@@ -906,15 +924,16 @@ export default function InventarioTelefonia() {
                                     </tr>
                                 )}
                             </thead>
+                            {/* CUERPO */}
                             <tbody className="divide-y divide-gray-200 bg-white">
                                 {activeTab === "equipos" ? (currentData as Equipo[]).map((item) => (
                                     <tr key={item.id} className="hover:bg-gray-50">
                                         <td className="px-6 py-4">
                                             <div className="font-medium text-gray-900">{item.marca} {item.modelo}</div>
                                             <div className="text-gray-500 font-mono text-xs mt-0.5">IMEI: {item.imei}</div>
-                                            <div className="text-gray-400 text-xs mt-0.5">{item.color || "Sin color"}</div>
-                                            {(item.ram || item.almacenamiento || item.pantalla) && (
+                                            {(item.ram || item.almacenamiento || item.pantalla || item.color) && (
                                                 <div className="flex flex-wrap gap-1 mt-1 text-[10px] text-gray-500">
+                                                    {item.color && <span className="px-1 rounded border border-gray-200">{item.color}</span>}
                                                     {item.ram && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.ram}</span>}
                                                     {item.almacenamiento && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.almacenamiento}</span>}
                                                     {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
@@ -922,7 +941,7 @@ export default function InventarioTelefonia() {
                                             )}
                                             <div className="mt-1">
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                                    {item.categoria || "TELEFONIA"}
+                                                    {item.condicion || "CONDICION"}
                                                 </span>
                                             </div>
                                         </td>
@@ -932,25 +951,17 @@ export default function InventarioTelefonia() {
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-1 items-start">
+                                            <div className="flex flex-col gap-2 items-center">
                                                 <EstadoBadge estado={item.estado} />
                                                 <span className="text-xs text-gray-400 px-1 border rounded bg-gray-50">
-                                                    {item.condicion || "Nuevo"}
+                                                    {item.categoria || "Nuevo"}
                                                 </span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4 text-sm text-gray-600">
-                                            <div className="flex flex-col">
-                                                <span>{item.asignacion_activa?.fundo_planta || "-"}</span>
-                                                {item.ubicacion && item.ubicacion !== "BASE" && (
-                                                    <span className="text-xs text-gray-400 flex items-center gap-1 mt-0.5" title="Ubicación Física">
-                                                        <MapPin className="w-3 h-3" />
-                                                        {item.ubicacion}
-                                                    </span>
-                                                )}
-                                                {(!item.asignacion_activa?.fundo_planta && item.ubicacion === "BASE") && (
-                                                    <span className="text-xs text-gray-400">BASE</span>
-                                                )}
+                                            <div className="flex items-center gap-2">
+                                                <MapPin className="h-4 w-4 text-gray-400" />
+                                                <span className="font-medium">{item.ubicacion}</span>
                                             </div>
                                         </td>
                                         <td className="px-6 py-4">
@@ -1105,6 +1116,10 @@ export default function InventarioTelefonia() {
                                         <td className="px-6 py-4 text-right">
                                             <div className="flex items-center justify-end gap-2">
                                                 <button onClick={() => handleEditChip(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar Chip"><Pencil className="h-4 w-4" /></button>
+
+                                                <button onClick={() => handleViewChipHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
+                                                    <History className="h-4 w-4" />
+                                                </button>
 
                                                 {/* Botón Vincular Plan */}
                                                 <button
@@ -2070,6 +2085,7 @@ export default function InventarioTelefonia() {
                 open={showHistory}
                 onClose={() => setShowHistory(false)}
                 title="Historial de Equipo"
+                size="xl"
             >
                 <div>
                     {historyLoading ? (
@@ -2128,6 +2144,96 @@ export default function InventarioTelefonia() {
                                                         <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded w-fit">
                                                             <ArrowLeftRight className="w-3.5 h-3.5" />
                                                             <span>Devolución: {new Date(assign.fecha_devolucion).toLocaleDateString()}</span>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top text-right">
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
+                                                    {assign.fecha_devolucion ? "Devuelto" : "Activo"}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+                </div>
+            </Modal>
+
+            {/* MODAL CHIP HISTORY */}
+            <Modal
+                open={showChipHistory}
+                onClose={() => setShowChipHistory(false)}
+                title="Historial de Chip"
+                size="xl"
+            >
+                <div>
+                    {chipHistoryLoading ? (
+                        <div className="flex justify-center p-8">
+                            <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
+                        </div>
+                    ) : chipHistoryData.length === 0 ? (
+                        <div className="text-center p-8 text-gray-500">
+                            <p>Este chip no tiene historial de asignaciones registrado.</p>
+                        </div>
+                    ) : (
+                        <div className="overflow-hidden border border-gray-200 rounded-lg">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsable / Usuario</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalle Equipo</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fechas</th>
+                                        <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {chipHistoryData.map((assign: any) => (
+                                        <tr key={assign.id} className="hover:bg-gray-50">
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="text-sm font-medium text-gray-900">
+                                                    {assign.usuario_final_nombre || assign.solicitud?.beneficiario_nombre || "N/A"}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {assign.usuario_final_area || assign.solicitud?.beneficiario_area || "-"}
+                                                </div>
+                                                {assign.solicitud_id && (
+                                                    <div className="mt-1">
+                                                        <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-600 border border-gray-200 font-mono">
+                                                            #{assign.solicitud_id.substring(0, 8)}
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1">
+                                                    {assign.tipo_equipo_destino ? (
+                                                        <div className="text-xs">
+                                                            <div className="font-semibold text-gray-700">{assign.tipo_equipo_destino}</div>
+                                                            <div className="text-gray-500 font-mono">{assign.codigo_equipo_destino || "S/N"}</div>
+                                                        </div>
+                                                    ) : assign.equipo ? (
+                                                        <div className="text-xs">
+                                                            <div className="font-semibold text-gray-700">{assign.equipo.marca} {assign.equipo.modelo}</div>
+                                                            <div className="text-gray-500 font-mono">IMEI: {assign.equipo.imei}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-xs text-gray-400 italic">Sin equipo vinculado</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1.5">
+                                                    <div className="flex items-center gap-1.5 text-xs text-gray-600">
+                                                        <Calendar className="w-3.5 h-3.5 text-gray-400" />
+                                                        <span>{assign.fecha_entrega ? new Date(assign.fecha_entrega).toLocaleDateString() : "Pendiente"}</span>
+                                                    </div>
+                                                    {assign.fecha_devolucion && (
+                                                        <div className="flex items-center gap-1.5 text-xs text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded w-fit">
+                                                            <ArrowLeftRight className="w-3.5 h-3.5" />
+                                                            <span>Retorno: {new Date(assign.fecha_devolucion).toLocaleDateString()}</span>
                                                         </div>
                                                     )}
                                                 </div>

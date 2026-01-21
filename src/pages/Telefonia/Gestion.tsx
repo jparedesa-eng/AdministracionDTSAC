@@ -97,43 +97,53 @@ export default function GestionTelefonia() {
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
     // Multi-assignment state
-    const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string; asignacionId?: string }[]>([]);
+    const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string; chipId?: string; type: "EQUIPO" | "CHIP"; asignacionId?: string }[]>([]);
 
     // NEW: Unified Scanner State
     const [imeiInput, setImeiInput] = useState("");
     const [showCamera, setShowCamera] = useState(false);
 
-    // Derived state for filtered options (Unified Search)
-    const filteredEquipos = telefoniaStore.equipos
-        .filter(e => e.estado === "Disponible" && !selectedItems.some(i => i.equipoId === e.id))
-        .filter(e => {
-            if (!imeiInput) return false; // Show nothing until typed? Or show all? User asked for "filter dropdown"
-            const search = imeiInput.toLowerCase();
-            return e.imei.includes(search) || e.modelo.toLowerCase().includes(search) || e.marca.toLowerCase().includes(search);
-        });
+    // Unified Search Logic (Equipment OR Chips)
+    const isSoloChip = selectedTicket?.tipo_solicitud === "Línea Nueva (SOLO CHIP)";
 
-    const assignEquipmentToSlot = (eqId: string) => {
-        // Find equipment
-        const eq = telefoniaStore.equipos.find(item => item.id === eqId);
-        if (!eq) return;
+    // Filtered Items (Either Equipos or Chips)
+    const filteredOptions = isSoloChip
+        ? telefoniaStore.chips
+            .filter(c => c.estado === "Disponible" && !c.equipo_id && !selectedItems.some(i => i.chipId === c.id))
+            .filter(c => {
+                if (!imeiInput) return false;
+                return c.numero_linea.includes(imeiInput);
+            })
+        : telefoniaStore.equipos
+            .filter(e => e.estado === "Disponible" && !selectedItems.some(i => i.equipoId === e.id))
+            .filter(e => {
+                if (!imeiInput) return false;
+                const search = imeiInput.toLowerCase();
+                return e.imei.includes(search) || e.modelo.toLowerCase().includes(search) || e.marca.toLowerCase().includes(search);
+            });
 
-        // Check if already selected locally
-        if (selectedItems.some(i => i.equipoId === eq.id)) {
-            setToast({ type: "warning", message: `El equipo ${eq.modelo} (${eq.imei}) ya está seleccionado.` });
+    const assignItemToSlot = (id: string, type: "EQUIPO" | "CHIP") => {
+        // Find first slot where main ID is missing
+        const slotIdx = selectedItems.findIndex(i => type === "EQUIPO" ? !i.equipoId : !i.chipId);
+
+        if (slotIdx === -1) {
+            setToast({ type: "info", message: "Todos los espacios ya están completos." });
             return;
         }
 
-        // Find first empty slot
-        const emptySlotIndex = selectedItems.findIndex(i => i.equipoId === "");
-        if (emptySlotIndex === -1) {
-            setToast({ type: "info", message: "Todos los espacios ya están completos. Elimine uno para cambiarlo." });
-            return;
+        if (type === "EQUIPO") {
+            const eq = telefoniaStore.equipos.find(item => item.id === id);
+            if (!eq) return;
+            setSelectedItems(prev => prev.map(item => item.index === slotIdx ? { ...item, equipoId: eq.id, type: "EQUIPO" } : item));
+            setToast({ type: "success", message: `Equipo agregado: ${eq.modelo}` });
+        } else {
+            const chip = telefoniaStore.chips.find(c => c.id === id);
+            if (!chip) return;
+            setSelectedItems(prev => prev.map(item => item.index === slotIdx ? { ...item, chipId: chip.id, equipoId: "", type: "CHIP" } : item)); // equipoId empty
+            setToast({ type: "success", message: `Chip agregado: ${chip.numero_linea}` });
         }
 
-        // Assign
-        setSelectedItems(prev => prev.map(item => item.index === emptySlotIndex ? { ...item, equipoId: eq.id } : item));
-        setToast({ type: "success", message: `Equipo agregado: ${eq.modelo}` });
-        setImeiInput(""); // Clear inputs
+        setImeiInput("");
         setShowCamera(false);
     };
 
@@ -143,11 +153,21 @@ export default function GestionTelefonia() {
             const imei = imeiInput.trim();
             if (!imei) return;
 
-            // 1. Try exact IMEI match
-            const exact = telefoniaStore.equipos.find(eq => eq.imei === imei && eq.estado === "Disponible");
-            if (exact) {
-                assignEquipmentToSlot(exact.id);
-                return;
+            // 1. Try exact match
+            if (isSoloChip) {
+                // Chip Search
+                const exact = telefoniaStore.chips.find(c => c.numero_linea === imei && c.estado === "Disponible");
+                if (exact) {
+                    assignItemToSlot(exact.id, "CHIP");
+                    return;
+                }
+            } else {
+                // Equipo Search
+                const exact = telefoniaStore.equipos.find(eq => eq.imei === imei && eq.estado === "Disponible");
+                if (exact) {
+                    assignItemToSlot(exact.id, "EQUIPO");
+                    return;
+                }
             }
 
             // 2. Try single filtered match? (Optional, maybe risky)
@@ -175,7 +195,7 @@ export default function GestionTelefonia() {
                 const eq = telefoniaStore.equipos.find(item => item.imei === imei && item.estado === "Disponible");
 
                 if (eq) {
-                    assignEquipmentToSlot(eq.id);
+                    assignItemToSlot(eq.id, "EQUIPO");
                     scanner.clear();
                     setShowCamera(false);
                 } else {
@@ -194,7 +214,7 @@ export default function GestionTelefonia() {
     }, [showCamera]);
 
     const handleRemoveSlot = (index: number) => {
-        setSelectedItems(prev => prev.map(item => item.index === index ? { ...item, equipoId: "" } : item));
+        setSelectedItems(prev => prev.map(item => item.index === index ? { ...item, equipoId: "", chipId: undefined } : item));
     };
 
     // Legacy support or extra fields
@@ -228,9 +248,11 @@ export default function GestionTelefonia() {
                 }
 
                 // If legacy assignment exists (single column), pre-fill slot 0 if still empty
-                if (selectedTicket.equipo_asignado_id && initialSlots.length > 0 && !initialSlots[0].equipoId) {
-                    initialSlots[0].equipoId = selectedTicket.equipo_asignado_id;
-                }
+                // (Legacy assignment check removed)
+
+                // Ensure type is set for initialized slots
+                initialSlots = initialSlots.map(s => ({ ...s, type: s.equipoId ? "EQUIPO" : (isSoloChip ? "CHIP" : "EQUIPO") }));
+
                 setSelectedItems(initialSlots);
 
                 setTimeout(() => sig.clear(), 100);
@@ -242,6 +264,7 @@ export default function GestionTelefonia() {
         try {
             await telefoniaStore.fetchSolicitudes();
             await telefoniaStore.fetchEquipos();
+            await telefoniaStore.fetchChips();
         } catch (e: any) {
             setToast({ type: "error", message: "Error cargando datos" });
         }
@@ -261,21 +284,32 @@ export default function GestionTelefonia() {
         }
 
         // Validate all slots filled
-        const filled = selectedItems.filter(i => i.equipoId !== "");
+        const filled = selectedItems.filter(i => (i.type === "EQUIPO" ? i.equipoId : i.chipId));
         const qty = selectedTicket.cantidad_lineas || 1;
 
         if (filled.length !== qty) {
-            alert(`Debe seleccionar ${qty} equipos para completar la entrega.`);
+            alert(`Debe seleccionar ${qty} items para completar la entrega.`);
             return;
         }
 
         try {
             // Map to store format
             const itemsToAssign = filled.map(i => {
-                const eq = telefoniaStore.equipos.find(e => e.id === i.equipoId);
+                let eqId = i.equipoId;
+                let chId: string | null | undefined = i.chipId;
+
+                // If Standard Flow (Equipo), Chip comes attached to Equipment
+                if (i.type === "EQUIPO" && eqId) {
+                    const eq = telefoniaStore.equipos.find(e => e.id === eqId);
+                    chId = eq?.chip_id || null;
+                }
+
+                // If Solo Chip, eqId is null? But AssignEquipos might need it? 
+                // We checked Store: It filters empty strings. So we can send eqId="" for Solo Chip.
+
                 return {
-                    equipoId: i.equipoId,
-                    chipId: eq?.chip_id || null,
+                    equipoId: eqId || "",
+                    chipId: chId || null,
                     asignacionId: i.asignacionId // Pass ID to update
                 };
             });
@@ -500,7 +534,7 @@ export default function GestionTelefonia() {
                                                 <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
                                                 <input
                                                     type="text"
-                                                    placeholder="Escanear IMEI o Buscar por Modelo..."
+                                                    placeholder={isSoloChip ? "Buscar por Número de Celular..." : "Escanear IMEI o Buscar por Modelo..."}
                                                     className="pl-9 pr-4 py-2 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border"
                                                     value={imeiInput}
                                                     onChange={(e) => setImeiInput(e.target.value)}
@@ -526,26 +560,39 @@ export default function GestionTelefonia() {
                                         )}
 
                                         {/* DROPDOWN RESULTS (Like Typeahead) */}
-                                        {imeiInput && !showCamera && filteredEquipos.length > 0 && (
+                                        {imeiInput && !showCamera && filteredOptions.length > 0 && (
                                             <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-60 overflow-y-auto">
-                                                {filteredEquipos.map(e => (
+                                                {filteredOptions.map((opt: any) => (
                                                     <div
-                                                        key={e.id}
-                                                        onClick={() => assignEquipmentToSlot(e.id)}
+                                                        key={opt.id}
+                                                        onClick={() => assignItemToSlot(opt.id, isSoloChip ? "CHIP" : "EQUIPO")}
                                                         className="p-2 hover:bg-indigo-50 cursor-pointer border-b border-gray-100 last:border-0 flex justify-between items-center"
                                                     >
-                                                        <div>
-                                                            <p className="text-sm font-bold text-gray-800">{e.marca} {e.modelo}</p>
-                                                            <p className="text-xs text-gray-500">IMEI: <span className="font-mono text-gray-700">{e.imei}</span></p>
-                                                        </div>
-                                                        <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${e.condicion === 'Nuevo' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
-                                                            {e.condicion || "Estado ?"}
-                                                        </span>
+                                                        {isSoloChip ? (
+                                                            <div>
+                                                                <p className="text-sm font-bold text-gray-800">Chip: {opt.numero_linea}</p>
+                                                                <p className="text-xs text-gray-500">Operador: <span className="font-medium">{opt.operador}</span></p>
+                                                            </div>
+                                                        ) : (
+                                                            <div>
+                                                                <p className="text-sm font-bold text-gray-800">{opt.marca} {opt.modelo}</p>
+                                                                <p className="text-xs text-gray-500">IMEI: <span className="font-mono text-gray-700">{opt.imei}</span></p>
+                                                            </div>
+                                                        )}
+
+                                                        {/* Status/Condition Badge */}
+                                                        {isSoloChip ? (
+                                                            <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-green-100 text-green-800">Disponible</span>
+                                                        ) : (
+                                                            <span className={`text-[10px] px-2 py-0.5 rounded font-bold ${opt.condicion === 'Nuevo' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'}`}>
+                                                                {opt.condicion || "Estado ?"}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 ))}
                                             </div>
                                         )}
-                                        {imeiInput && filteredEquipos.length === 0 && !showCamera && (
+                                        {imeiInput && filteredOptions.length === 0 && !showCamera && (
                                             <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 p-3 text-center text-xs text-gray-500">
                                                 No se encontraron equipos disponibles con ese criterio.
                                             </div>
@@ -560,19 +607,21 @@ export default function GestionTelefonia() {
                                 <div>
                                     <div className="flex justify-between items-center mb-2 px-1">
                                         <label className="block text-sm font-bold text-gray-700">
-                                            Lista de Equipos a Entregar ({selectedItems.filter(i => i.equipoId).length} / {selectedTicket.cantidad_lineas || 1})
+                                            Lista de {isSoloChip ? "Chips" : "Equipos"} a Entregar ({selectedItems.filter(i => i.equipoId || i.chipId).length} / {selectedTicket.cantidad_lineas || 1})
                                         </label>
                                         <span className="text-[10px] text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full">
-                                            Pendientes: {selectedItems.filter(i => !i.equipoId).length}
+                                            Pendientes: {selectedItems.filter(i => (!i.equipoId && !i.chipId)).length}
                                         </span>
                                     </div>
 
                                     <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
                                         {selectedItems.map((slot) => {
-                                            const eq = telefoniaStore.equipos.find(e => e.id === slot.equipoId);
+                                            const eq = slot.equipoId ? telefoniaStore.equipos.find(e => e.id === slot.equipoId) : null;
+                                            const chip = slot.chipId ? telefoniaStore.chips.find(c => c.id === slot.chipId) : null;
+                                            const isFilled = !!eq || !!chip;
 
                                             // RENDER FILLED SLOT
-                                            if (eq) {
+                                            if (isFilled) {
                                                 return (
                                                     <div key={slot.index} className="flex items-center justify-between p-3 bg-white border border-green-200 rounded-lg shadow-sm group hover:border-green-300 transition-colors">
                                                         <div className="flex items-center gap-3">
@@ -580,19 +629,30 @@ export default function GestionTelefonia() {
                                                                 #{slot.index + 1}
                                                             </div>
                                                             <div>
-                                                                <p className="text-sm font-bold text-gray-800">{eq.marca} {eq.modelo}</p>
-                                                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                                                    <span className="font-mono bg-gray-100 px-1 rounded">IMEI: {eq.imei}</span>
-                                                                    <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${eq.condicion === 'Nuevo' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
-                                                                        {eq.condicion || "Estado ?"}
-                                                                    </span>
-                                                                </div>
+                                                                {eq ? (
+                                                                    <>
+                                                                        <p className="text-sm font-bold text-gray-800">{eq.marca} {eq.modelo}</p>
+                                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                            <span className="font-mono bg-gray-100 px-1 rounded">IMEI: {eq.imei}</span>
+                                                                            <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${eq.condicion === 'Nuevo' ? 'bg-blue-50 text-blue-700' : 'bg-amber-50 text-amber-700'}`}>
+                                                                                {eq.condicion || "Estado ?"}
+                                                                            </span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : chip ? (
+                                                                    <>
+                                                                        <p className="text-sm font-bold text-gray-800">Chip: {chip.numero_linea}</p>
+                                                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                                                            <span className="font-mono bg-gray-100 px-1 rounded">{chip.operador}</span>
+                                                                        </div>
+                                                                    </>
+                                                                ) : null}
                                                             </div>
                                                         </div>
                                                         <button
                                                             onClick={() => handleRemoveSlot(slot.index)}
                                                             className="text-gray-400 hover:text-red-500 p-1 rounded-full hover:bg-red-50 transition-colors"
-                                                            title="Remover equipo"
+                                                            title="Remover item"
                                                         >
                                                             <XCircle className="w-5 h-5" />
                                                         </button>
@@ -609,7 +669,7 @@ export default function GestionTelefonia() {
                                                         </div>
                                                         <div>
                                                             <p className="text-sm font-medium text-gray-400 italic">Espacio Vacio</p>
-                                                            <p className="text-[10px] text-gray-400">Escanee o seleccione un equipo para asignar aquí.</p>
+                                                            <p className="text-[10px] text-gray-400">Escanee o seleccione un {isSoloChip ? "chip" : "equipo"} para asignar aquí.</p>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -648,7 +708,7 @@ export default function GestionTelefonia() {
                                 <div className="flex flex-col gap-2">
                                     <button
                                         onClick={submitEntrega}
-                                        disabled={selectedItems.some(i => i.equipoId === "")}
+                                        disabled={selectedItems.some(i => !i.equipoId && !i.chipId)}
                                         className="w-full bg-green-600 text-white rounded-lg py-2.5 font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
                                     >
                                         Confirmar Entrega

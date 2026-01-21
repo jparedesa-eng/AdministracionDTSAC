@@ -103,6 +103,8 @@ export default function SolicitarTelefonia() {
         perfil_puesto: "", // NEW - ID of selected Puesto Catalog
         alternativa_modelo: null as string | null, // NEW - Auto-registered suggested equipment
         condicion_equipo: "", // "Nuevo" | "Segundo Uso"
+        tipo_equipo_destino: "", // NEW: EQUIPO, DREAM, SENSOR, TABLET
+        codigo_equipo_destino: "", // NEW: IMEI
     });
 
     const [suggestedModel, setSuggestedModel] = useState<string>("");
@@ -242,6 +244,8 @@ export default function SolicitarTelefonia() {
             // Reset condicion_equipo if n_linea changes
             if (field === "n_linea") {
                 newState.condicion_equipo = "";
+                newState.tipo_equipo_destino = "";
+                newState.codigo_equipo_destino = "";
             }
 
             return newState;
@@ -376,6 +380,8 @@ export default function SolicitarTelefonia() {
                 return "Seleccione el Proyecto.";
             }
 
+
+
             // REPOSICIÓN SPECIFIC (Kept in Step 1 or moved? Let's keep specific motive/evidence in Step 1 or 2? 
             // The user moved "Detalle de Servicio" to Step 2. Reposition 'motivo' is kind of specific detail.
             // Let's keep Reposition details in Step 2 to align with "Configuración".
@@ -393,14 +399,26 @@ export default function SolicitarTelefonia() {
                     if (!formData.asume_costo) return "Indique quién asume el costo de la reposición.";
                 }
             } else {
-                // BRANCH: STANDARD SERVICES
+                // BRANCH: STANDARD SERVICES (Línea Nueva, Solicitar Equipo, Renovación, Solo Chip)
+
+                // NEW: Validate Solo Chip Extra Fields
+                if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+                    if (!formData.tipo_equipo_destino) return "Seleccione el tipo de equipo destino.";
+                    if (!formData.codigo_equipo_destino) return "Ingrese el código o IMEI del equipo destino.";
+                }
 
                 // NEW: Validate Condicion Equipo if "Solicitar Equipo"
                 if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
                     return "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
                 }
 
-                if (!formData.perfil_puesto) return "Seleccione el Perfil del Puesto";
+                if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
+                    return "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
+                }
+
+                if (formData.n_linea !== "Línea Nueva (SOLO CHIP)" && !formData.perfil_puesto) {
+                    return "Seleccione el Perfil del Puesto";
+                }
 
                 if (formData.tipo_servicio !== "PAQUETE ASIGNADO" && !formData.tipo_servicio) return "Seleccione el Operador";
                 if (!formData.tipo_servicio) return "Seleccione el Tipo de Servicio / Operador";
@@ -417,8 +435,8 @@ export default function SolicitarTelefonia() {
 
         if (step === 3) {
             // STEP 3: BENEFICIARIES
-            // If skipped, validation passes
-            if (skipBeneficiaries) return null;
+            // If skipped or SOLO CHIP, validation passes
+            if (skipBeneficiaries || formData.n_linea === "Línea Nueva (SOLO CHIP)") return null;
 
             if (formData.cantidad_lineas > 0) {
                 const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre);
@@ -480,10 +498,20 @@ export default function SolicitarTelefonia() {
             setBeneficiaries(prev => prev.map(b => ({ ...b, puesto: puestoName })));
         }
 
+        // SKIP STEP 3 if SOLO CHIP
+        if (currentStep === 2 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+            setCurrentStep(4);
+            return;
+        }
+
         setCurrentStep(prev => prev + 1);
     };
 
     const prevStep = () => {
+        if (currentStep === 4 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+            setCurrentStep(2);
+            return;
+        }
         setCurrentStep(prev => prev - 1);
     };
 
@@ -529,6 +557,8 @@ export default function SolicitarTelefonia() {
             puesto: ticket.beneficiario_puesto || "",
             n_linea: linea,
             condicion_equipo: condicion,
+            tipo_equipo_destino: ticket.tipo_equipo_destino || "",
+            codigo_equipo_destino: ticket.codigo_equipo_destino || "",
             numero_telefono: ticket.detalle_reposicion?.numero_afectado || "", // Best effort
             motivo_reposicion: ticket.detalle_reposicion?.motivo || "",
             tiene_evidencia: ticket.detalle_reposicion?.tiene_evidencia || false,
@@ -664,12 +694,15 @@ export default function SolicitarTelefonia() {
                 // For editing, we usually don't reset approval flow unless major change? 
                 // Requirement: "modificar su ticket". Usually implies re-submission -> Reset to initial state? 
                 // Let's reset to "Revisión Admin" / "Pendiente Gerencia" to be safe.
-                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
+
+                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.n_linea === "Línea Nueva (SOLO CHIP)" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
                 created_by: user?.id,
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
                 proyecto: formData.proyecto, // NEW (Renamed from descripcion_categoria)
                 alternativa_modelo: formData.alternativa_modelo, // NEW: Auto-registered suggested equipment
+                tipo_equipo_destino: formData.n_linea === "Línea Nueva (SOLO CHIP)" ? formData.tipo_equipo_destino : null,
+                codigo_equipo_destino: formData.n_linea === "Línea Nueva (SOLO CHIP)" ? formData.codigo_equipo_destino : null,
             };
 
             if (editingId) {
@@ -689,7 +722,8 @@ export default function SolicitarTelefonia() {
                 tipo_servicio: "", periodo_uso: "PERMANENTE",
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
-                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", proyecto: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: ""
+                paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", proyecto: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: "",
+                tipo_equipo_destino: "", codigo_equipo_destino: ""
             });
             setBeneficiaries([]);
             setSelectedApps([]);
@@ -827,7 +861,8 @@ export default function SolicitarTelefonia() {
 
     const renderConfigurationDetails = () => {
         const selectedPuesto = telefoniaStore.puestos.find(p => p.id === formData.perfil_puesto);
-        const isServiceLocked = !formData.perfil_puesto || !!selectedPuesto?.plan;
+        // LOCK SERVICE if standard flow and no profile selected. PROCEED if Solo Chip.
+        const isServiceLocked = (formData.n_linea !== "Línea Nueva (SOLO CHIP)" && !formData.perfil_puesto) || !!selectedPuesto?.plan;
 
         return (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
@@ -962,32 +997,74 @@ export default function SolicitarTelefonia() {
                         </div>
                     </div>
                 ) : (
-                    // --- STANDARD SERVICES FLOW ---
+                    // --- STANDARD SERVICES FLOW (Including Solo Chip) ---
                     <div className="space-y-4">
                         <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                             <div className="w-1.5 h-6 bg-indigo-500 rounded-full"></div>
                             Configuración de Línea / Equipo
                         </h3>
 
-                        {/* PUESTO DROPDOWN (NEW) - MOVED TO TOP */}
-                        <div>
-                            <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
-                                Perfil del Puesto <span className="text-gray-400 font-normal normal-case float-right">(Sugerido)</span>
-                            </label>
-                            <select
-                                className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
-                                value={formData.perfil_puesto}
-                                onChange={(e) => handlePuestoChange(e.target.value)}
-                            >
-                                <option value="">Seleccione perfil...</option>
-                                {telefoniaStore.puestos.map(p => (
-                                    <option key={p.id} value={p.id}>{p.nombre}</option>
-                                ))}
-                            </select>
-                        </div>
+                        {/* SOLO CHIP EXTRA FIELDS */}
+                        {formData.n_linea === "Línea Nueva (SOLO CHIP)" && (
+                            <div className="bg-purple-50 rounded-lg border border-purple-100 p-4 mb-4">
+                                <div className="flex items-center gap-2 mb-3">
+                                    <Smartphone className="w-4 h-4 text-purple-600" />
+                                    <h4 className="text-sm font-bold text-purple-900">Equipo de Destino</h4>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
+                                            Tipo <span className="text-red-500">*</span>
+                                        </label>
+                                        <select
+                                            className="block w-full rounded border-purple-200 border p-2 text-sm bg-white outline-none focus:border-purple-500 transition-all"
+                                            value={formData.tipo_equipo_destino || ""}
+                                            onChange={(e) => handleChange("tipo_equipo_destino", e.target.value)}
+                                        >
+                                            <option value="">Seleccione...</option>
+                                            <option value="EQUIPO">EQUIPO (Smartphone)</option>
+                                            <option value="DREAM">DREAM (Tableta/Dispositivo)</option>
+                                            <option value="SENSOR DE HUMEDAD">SENSOR DE HUMEDAD</option>
+                                            <option value="TABLET">TABLET</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
+                                            IMEI / Código <span className="text-red-500">*</span>
+                                        </label>
+                                        <input
+                                            type="text"
+                                            className="block w-full rounded border-purple-200 border p-2 text-sm outline-none focus:border-purple-500 transition-all font-mono"
+                                            placeholder="Ingrese código o IMEI..."
+                                            value={formData.codigo_equipo_destino || ""}
+                                            onChange={(e) => handleChange("codigo_equipo_destino", e.target.value)}
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* PUESTO DROPDOWN (NEW) - MOVED TO TOP. Hide for Solo Chip */}
+                        {formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                            <div>
+                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
+                                    Perfil del Puesto <span className="text-gray-400 font-normal normal-case float-right">(Sugerido)</span>
+                                </label>
+                                <select
+                                    className="block w-full rounded border-gray-300 border p-2 text-sm bg-white outline-none focus:border-indigo-500 transition-all"
+                                    value={formData.perfil_puesto}
+                                    onChange={(e) => handlePuestoChange(e.target.value)}
+                                >
+                                    <option value="">Seleccione perfil...</option>
+                                    {telefoniaStore.puestos.map(p => (
+                                        <option key={p.id} value={p.id}>{p.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
 
                         {/* SUGGESTED EQUIPMENT CARD */}
-                        {suggestedModel && (
+                        {suggestedModel && formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
                             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-white rounded-md border border-gray-200">
@@ -1211,7 +1288,7 @@ export default function SolicitarTelefonia() {
                                 >
                                     <option value="">Seleccione...</option>
                                     <option value="Solicitar Equipo">Solicitar Equipo</option>
-                                    <option value="Línea Nueva">Solicitar Línea Nueva (Solo Chip)</option>
+                                    <option value="Línea Nueva (SOLO CHIP)">Solicitar Línea Nueva (SOLO CHIP)</option>
                                     <option value="Renovación">Renovación de Equipo</option>
                                     <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
                                 </select>
@@ -1413,7 +1490,7 @@ export default function SolicitarTelefonia() {
                                                 />
                                             </div>
                                             <div>
-                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Área / Gerencia</label>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Área</label>
                                                 <input
                                                     className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300"
                                                     placeholder="Ej. Comercial"
@@ -1468,7 +1545,7 @@ export default function SolicitarTelefonia() {
                             />
                         </div>
 
-                        {formData.n_linea !== "Línea Nueva" && (
+                        {formData.n_linea !== "Línea Nueva" && formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aplicativos Necesarios</label>
 

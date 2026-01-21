@@ -262,14 +262,30 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
 
     if (asignaciones.length > 0) {
         asignaciones.forEach((a, i) => {
-            equipamientoBody.push([
-                i + 1,
-                `${a.equipo?.marca || ""} ${a.equipo?.modelo || "Equipo"}`,
-                `IMEI: ${a.equipo?.imei || "-"}`,
-                a.equipo?.condicion || "-",
-                a.chip?.numero_linea || "-",
-                a.usuario_final_nombre || "-"
-            ]);
+            if (a.equipo) {
+                equipamientoBody.push([
+                    i + 1,
+                    `${a.equipo.marca} ${a.equipo.modelo}`,
+                    `IMEI: ${a.equipo.imei}`,
+                    a.equipo.condicion || "-",
+                    a.chip?.numero_linea || "-",
+                    a.usuario_final_nombre || "-"
+                ]);
+            } else if (a.chip) {
+                // SOLO CHIP CASE
+                const destType = a.tipo_equipo_destino || ticket.tipo_equipo_destino || "Equipo";
+                const destCode = a.codigo_equipo_destino || ticket.codigo_equipo_destino || "?";
+                equipamientoBody.push([
+                    i + 1,
+                    `CHIP (SOLO LÍNEA)`,
+                    `Destino: ${destType} - ${destCode}`,
+                    "Nuevo",
+                    a.chip.numero_linea || "-",
+                    a.usuario_final_nombre || "-"
+                ]);
+            } else {
+                equipamientoBody.push([i + 1, "Pendiente", "-", "-", "-", "-"]);
+            }
         });
     } else if (ticket.equipo) {
         equipamientoBody.push([
@@ -278,6 +294,21 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
             `IMEI: ${ticket.equipo.imei}`,
             ticket.equipo.condicion || "-",
             ticket.chip?.numero_linea || "-",
+            ticket.beneficiario_nombre || "-"
+        ]);
+    } else if (ticket.tipo_solicitud === "Línea Nueva (SOLO CHIP)") {
+        // SOLO CHIP (Legacy Single)
+        const destType = ticket.tipo_equipo_destino || "Equipo";
+        const destCode = ticket.codigo_equipo_destino || "?";
+        // Try to find chip info if assigned directly (legacy) or via relation
+        const chipLine = ticket.chip?.numero_linea || "Pendiente";
+
+        equipamientoBody.push([
+            "1",
+            `CHIP (SOLO LÍNEA)`,
+            `Destino: ${destType} - ${destCode}`,
+            "Nuevo",
+            chipLine,
             ticket.beneficiario_nombre || "-"
         ]);
     } else {

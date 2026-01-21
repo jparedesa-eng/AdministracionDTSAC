@@ -3,7 +3,7 @@ import { telefoniaStore } from "../../store/telefoniaStore";
 import { useAuth } from "../../auth/AuthContext";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check } from "lucide-react";
+import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu } from "lucide-react";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 
 interface AsignacionUI {
@@ -28,6 +28,10 @@ interface AsignacionUI {
     temp_area: string;
     temp_sede: string;
     temp_fecha_entrega_final: string;
+    // Solo Chip Fields
+    isSoloChip: boolean;
+    tipo_equipo_destino?: string;
+    codigo_equipo_destino?: string;
 }
 
 export default function MisEquipos() {
@@ -66,7 +70,6 @@ export default function MisEquipos() {
                                     usuario_final_dni: asig.usuario_final_dni || "",
                                     usuario_final_nombre: asig.usuario_final_nombre || "",
                                     usuario_final_area: asig.usuario_final_area || "",
-                                    usuario_final_sede: asig.usuario_final_sede || "",
                                     fecha_entrega: asig.fecha_entrega || "",
                                     solicitud_id: asig.solicitud_id,
                                     fecha_entrega_final: asig.fecha_entrega_final || "",
@@ -74,8 +77,15 @@ export default function MisEquipos() {
                                     temp_dni: asig.usuario_final_dni || "",
                                     temp_nombre: asig.usuario_final_nombre || "",
                                     temp_area: asig.usuario_final_area || "",
-                                    temp_sede: asig.usuario_final_sede || "",
-                                    temp_fecha_entrega_final: asig.fecha_entrega_final || ""
+                                    temp_fecha_entrega_final: asig.fecha_entrega_final || "",
+
+                                    isSoloChip: !asig.equipo_id && !!asig.chip_id,
+                                    // Fallback to ticket data if assignment data is missing
+                                    tipo_equipo_destino: asig.tipo_equipo_destino || ticket.tipo_equipo_destino || "",
+                                    codigo_equipo_destino: asig.codigo_equipo_destino || ticket.codigo_equipo_destino || "",
+                                    // Fallback Sede to Ticket Fundo/Planta if missing
+                                    temp_sede: asig.usuario_final_sede || ticket.fundo_planta || "",
+                                    usuario_final_sede: asig.usuario_final_sede || ticket.fundo_planta || "" // Ensure it's set in main obj too
                                 });
                                 processedIds.add(asig.id);
                             }
@@ -110,7 +120,11 @@ export default function MisEquipos() {
                                 temp_nombre: asig.usuario_final_nombre || "",
                                 temp_area: asig.usuario_final_area || "",
                                 temp_sede: asig.usuario_final_sede || "",
-                                temp_fecha_entrega_final: asig.fecha_entrega_final || ""
+                                temp_fecha_entrega_final: asig.fecha_entrega_final || "",
+
+                                isSoloChip: !asig.equipo_id && !!asig.chip_id,
+                                tipo_equipo_destino: asig.tipo_equipo_destino || "",
+                                codigo_equipo_destino: asig.codigo_equipo_destino || ""
                             });
                             processedIds.add(asig.id);
                         }
@@ -161,10 +175,18 @@ export default function MisEquipos() {
 
     const handleSave = async (item: AsignacionUI) => {
         try {
+
             // Validation
-            if (!item.temp_dni || !item.temp_nombre || !item.temp_area || !item.temp_sede) {
-                setToast({ type: "error", message: "Todos los campos son obligatorios (DNI, Nombre, Área, Sede)" });
-                return;
+            if (item.isSoloChip) {
+                if (!item.temp_sede) {
+                    setToast({ type: "error", message: "La Sede es obligatoria para Chips" });
+                    return;
+                }
+            } else {
+                if (!item.temp_dni || !item.temp_nombre || !item.temp_area || !item.temp_sede) {
+                    setToast({ type: "error", message: "Todos los campos son obligatorios (DNI, Nombre, Área, Sede)" });
+                    return;
+                }
             }
 
             if (item.temp_fecha_entrega_final) {
@@ -276,15 +298,24 @@ export default function MisEquipos() {
                             <div className="p-4 flex-1">
                                 <div className="flex items-start justify-between">
                                     <div className="flex items-center gap-3">
-                                        <div className="p-2 bg-indigo-50 text-indigo-600 rounded-lg">
-                                            <Smartphone className="h-6 w-6" />
+                                        <div className={`p-2 rounded-lg ${item.isSoloChip ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                            {item.isSoloChip ? <Cpu className="h-6 w-6" /> : <Smartphone className="h-6 w-6" />}
                                         </div>
                                         <div>
-                                            <h3 className="font-semibold text-gray-900">{item.equipo_marca} {item.equipo_modelo}</h3>
-                                            <p className="text-xs text-gray-500 font-mono mb-1">{item.equipo_imei}</p>
+                                            <h3 className="font-semibold text-gray-900">
+                                                {item.isSoloChip
+                                                    ? (item.tipo_equipo_destino || "Línea Móvil (Solo Chip)")
+                                                    : `${item.equipo_marca} ${item.equipo_modelo}`}
+                                            </h3>
+                                            <p className="text-xs text-gray-500 font-mono mb-1">
+                                                {item.isSoloChip
+                                                    ? `En equipo: ${item.codigo_equipo_destino || 'N/A'}`
+                                                    : `IMEI: ${item.equipo_imei}`}
+                                            </p>
                                             <div className="flex gap-2">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
-                                                    {item.equipo_categoria}
+                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${item.isSoloChip ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
+                                                    }`}>
+                                                    {item.isSoloChip ? "CHIP" : item.equipo_categoria}
                                                 </span>
                                                 <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
                                                     <MapPin className="w-3 h-3 mr-1" />
@@ -305,33 +336,37 @@ export default function MisEquipos() {
 
                                         {item.editMode ? (
                                             <div className="space-y-3 animate-in fade-in duration-200">
-                                                <div>
-                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">DNI</label>
-                                                    <input
-                                                        className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
-                                                        placeholder="Ingrese DNI"
-                                                        value={item.temp_dni}
-                                                        onChange={e => handleChange(item.id, 'temp_dni', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Nombre Completo</label>
-                                                    <input
-                                                        className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
-                                                        placeholder="Nombres y Apellidos"
-                                                        value={item.temp_nombre}
-                                                        onChange={e => handleChange(item.id, 'temp_nombre', e.target.value)}
-                                                    />
-                                                </div>
-                                                <div>
-                                                    <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Área</label>
-                                                    <input
-                                                        className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
-                                                        placeholder="Ingresa el Área"
-                                                        value={item.temp_area}
-                                                        onChange={e => handleChange(item.id, 'temp_area', e.target.value)}
-                                                    />
-                                                </div>
+                                                {!item.isSoloChip && (
+                                                    <>
+                                                        <div>
+                                                            <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">DNI</label>
+                                                            <input
+                                                                className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                                placeholder="Ingrese DNI"
+                                                                value={item.temp_dni}
+                                                                onChange={e => handleChange(item.id, 'temp_dni', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Nombre Completo</label>
+                                                            <input
+                                                                className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                                placeholder="Nombres y Apellidos"
+                                                                value={item.temp_nombre}
+                                                                onChange={e => handleChange(item.id, 'temp_nombre', e.target.value)}
+                                                            />
+                                                        </div>
+                                                        <div>
+                                                            <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Área</label>
+                                                            <input
+                                                                className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                                placeholder="Ingresa el Área"
+                                                                value={item.temp_area}
+                                                                onChange={e => handleChange(item.id, 'temp_area', e.target.value)}
+                                                            />
+                                                        </div>
+                                                    </>
+                                                )}
                                                 <div>
                                                     <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Sede</label>
                                                     <select
@@ -360,7 +395,30 @@ export default function MisEquipos() {
                                             </div>
                                         ) : (
                                             <div className="pl-1">
-                                                {item.usuario_final_nombre ? (
+                                                {item.isSoloChip ? (
+                                                    <div className="space-y-2">
+                                                        <div className="grid grid-cols-2 gap-2">
+                                                            <div>
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Destino</span>
+                                                                <span className="text-sm font-medium text-gray-900">{item.tipo_equipo_destino || "No especificado"}</span>
+                                                            </div>
+                                                            <div>
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Código ID</span>
+                                                                <span className="text-sm font-medium text-gray-900">{item.codigo_equipo_destino || "S/N"}</span>
+                                                            </div>
+                                                        </div>
+                                                        <div>
+                                                            <span className="text-[10px] text-gray-400 font-semibold uppercase block">Sede / Ubicación</span>
+                                                            <span className={`text-sm font-bold ${item.usuario_final_sede ? 'text-indigo-600' : 'text-gray-400 italic'}`}>
+                                                                {item.usuario_final_sede || "Ubicación no definida"}
+                                                            </span>
+                                                        </div>
+                                                        <div className="pt-2 border-t border-gray-100 mt-2">
+                                                            <span className="text-[10px] text-gray-400 font-semibold uppercase block">Fecha Entrega</span>
+                                                            <span className="text-xs text-gray-700">{new Date(item.fecha_entrega).toLocaleDateString()}</span>
+                                                        </div>
+                                                    </div>
+                                                ) : item.usuario_final_nombre ? (
                                                     <>
                                                         <div className="font-medium text-gray-900 text-sm">{item.usuario_final_nombre}</div>
                                                         <div className="text-xs text-gray-500">{item.usuario_final_area} {item.usuario_final_sede ? `- ${item.usuario_final_sede}` : ''}</div>
