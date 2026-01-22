@@ -896,7 +896,7 @@ export default function InventarioTelefonia() {
                                     <tr>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Condición</th>
+                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Categoria</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                         <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>

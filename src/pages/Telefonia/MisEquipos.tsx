@@ -399,11 +399,11 @@ export default function MisEquipos() {
                                                     <div className="space-y-2">
                                                         <div className="grid grid-cols-2 gap-2">
                                                             <div>
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Destino</span>
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">EQUIPO</span>
                                                                 <span className="text-sm font-medium text-gray-900">{item.tipo_equipo_destino || "No especificado"}</span>
                                                             </div>
                                                             <div>
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Código ID</span>
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Código / IMEI</span>
                                                                 <span className="text-sm font-medium text-gray-900">{item.codigo_equipo_destino || "S/N"}</span>
                                                             </div>
                                                         </div>
