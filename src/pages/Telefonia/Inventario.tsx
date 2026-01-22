@@ -57,6 +57,10 @@ export default function InventarioTelefonia() {
     const [filterChipOperador, setFilterChipOperador] = useState("");
     const [filterChipPlan, setFilterChipPlan] = useState("");
 
+    // New Filter
+    const [filterVencimiento, setFilterVencimiento] = useState("");
+
+
     // Reset filters on tab change
     useEffect(() => {
         setFilterEstado("");
@@ -65,8 +69,11 @@ export default function InventarioTelefonia() {
         setFilterChipEstado("");
         setFilterChipOperador("");
         setFilterChipPlan("");
+        setFilterChipPlan("");
         setQ("");
+        setFilterVencimiento("");
     }, [activeTab]);
+
 
     // Sedes
     const [, setSedesVersion] = useState(0);
@@ -140,6 +147,12 @@ export default function InventarioTelefonia() {
     const [showLinkModal, setShowLinkModal] = useState(false);
     const [linkTarget, setLinkTarget] = useState<{ type: 'equipo' | 'chip', item: any } | null>(null);
     const [selectedLinkOption, setSelectedLinkOption] = useState("");
+
+    // Chips Actions
+    const [openAsignacionChip, setOpenAsignacionChip] = useState(false);
+    const [openDevolucionChip, setOpenDevolucionChip] = useState(false);
+    const [modalActionChip, setModalActionChip] = useState<Chip | null>(null);
+    const [deviceDataChip, setDeviceDataChip] = useState({ tipo_equipo: "Smartphone", codigo: "" });
     const [linkSearchTerm, setLinkSearchTerm] = useState("");
 
     // Linking Plan View
@@ -586,6 +599,85 @@ export default function InventarioTelefonia() {
         }
     };
 
+    // --- CHIP ASSIGNMENT / RETURN HANDLERS ---
+    const handleOpenAsignacionChip = (chip: Chip) => {
+        setModalActionChip(chip);
+        setDeviceDataChip({ tipo_equipo: "Smartphone", codigo: "" });
+        // Reset Responsable Data
+        setResponsableData({ dni: "", nombre: "", area: "", puesto: "" });
+        setAsignacionTicketData({
+            ceco: "",
+            justificacion: "Asignación Directa de Chip - Solo Sim",
+            tipo_servicio: chip.operador,
+            fundo_planta: "",
+            categoria: "",
+            proyecto: "",
+            gr: "",
+            perfil_puesto: "",
+            periodo: "PERMANENTE",
+            fecha_inicio: new Date().toISOString().slice(0, 10),
+            fecha_fin: "",
+            cultivo: "",
+            paquete_asignado: chip.plan?.nombre || ""
+        });
+
+        setOpenAsignacionChip(true);
+    };
+
+    const submitAsignacionChip = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!modalActionChip) return;
+        try {
+            await telefoniaStore.asignarChipDirectamente(
+                modalActionChip.id,
+                responsableData,
+                {
+                    ceco: asignacionTicketData.ceco,
+                    fundo_planta: asignacionTicketData.fundo_planta,
+                    categoria: asignacionTicketData.categoria,
+                    proyecto: asignacionTicketData.proyecto,
+                    gr: asignacionTicketData.gr,
+                    fecha_inicio: asignacionTicketData.fecha_inicio,
+
+                    periodo: asignacionTicketData.periodo,
+                    fecha_fin: asignacionTicketData.fecha_fin, // Pass to store
+                    cultivo: asignacionTicketData.cultivo,
+
+                    usuario_creador_id: user?.id
+                },
+                deviceDataChip
+            );
+
+            setToast({ type: "success", message: "Chip asignado correctamente" });
+            setOpenAsignacionChip(false);
+            loadData(true);
+        } catch (error: any) {
+            setToast({ type: "error", message: error.message || "Error al asignar chip" });
+        }
+    };
+
+    const handleOpenDevolucionChip = (chip: Chip) => {
+        setModalActionChip(chip);
+        setDevolucionData({ estado: "Bueno", observaciones: "" });
+        setOpenDevolucionChip(true);
+    };
+
+    const submitDevolucionChip = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!modalActionChip) return;
+        try {
+            await telefoniaStore.registrarDevolucionChip(
+                modalActionChip.id,
+                devolucionData.observaciones
+            );
+            setToast({ type: "success", message: "Devolución de chip registrada" });
+            setOpenDevolucionChip(false);
+            loadData(true);
+        } catch (error: any) {
+            setToast({ type: "error", message: error.message || "Error al registrar devolución" });
+        }
+    };
+
     // --- RENDER HELPERS ---
     const EstadoBadge = ({ estado }: { estado: string }) => {
         let color = "bg-gray-100 text-gray-800";
@@ -626,8 +718,32 @@ export default function InventarioTelefonia() {
             if (anio !== filterAnio) return false;
         }
 
+        if (filterVencimiento) {
+            if (!e.asignacion_activa) return false;
+            const periodo = e.asignacion_activa.periodo_uso || "PERMANENTE";
+            const fechaFin = e.asignacion_activa.fecha_fin_uso ? new Date(e.asignacion_activa.fecha_fin_uso) : null;
+            const now = new Date();
+
+            if (filterVencimiento === "PERMANENTES") {
+                if (periodo !== "PERMANENTE") return false;
+            } else if (filterVencimiento === "VENCIDOS") {
+                // Expired if not permanente and date < now
+                if (periodo === "PERMANENTE") return false;
+                if (!fechaFin || fechaFin >= now) return false;
+            } else if (filterVencimiento === "POR_VENCER") {
+                // Expiring within 30 days
+                if (periodo === "PERMANENTE") return false;
+                if (!fechaFin) return false;
+                const diffTime = fechaFin.getTime() - now.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                // Show if future but within 30 days. Also include if expiring today (diffDays >= 0).
+                if (diffDays < 0 || diffDays > 30) return false;
+            }
+        }
+
         return true;
     });
+
 
     // Unique Values for Filters
     const uniqueFundos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.fundo_planta || "Sin Asignar"))).sort();
@@ -655,7 +771,29 @@ export default function InventarioTelefonia() {
             (!filterChipOperador || c.operador === filterChipOperador) &&
             (!filterChipPlan || (filterChipPlan === "Sin Plan" ? !c.plan : c.plan?.nombre === filterChipPlan))
         );
+    }).filter(c => {
+        if (filterVencimiento) {
+            if (!c.asignacion_activa) return false;
+            const periodo = c.asignacion_activa.periodo_uso || "PERMANENTE";
+            const fechaFin = c.asignacion_activa.fecha_fin_uso ? new Date(c.asignacion_activa.fecha_fin_uso) : null;
+            const now = new Date();
+
+            if (filterVencimiento === "PERMANENTES") {
+                if (periodo !== "PERMANENTE") return false;
+            } else if (filterVencimiento === "VENCIDOS") {
+                if (periodo === "PERMANENTE") return false;
+                if (!fechaFin || fechaFin >= now) return false;
+            } else if (filterVencimiento === "POR_VENCER") {
+                if (periodo === "PERMANENTE") return false;
+                if (!fechaFin) return false;
+                const diffTime = fechaFin.getTime() - now.getTime();
+                const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+                if (diffDays < 0 || diffDays > 30) return false;
+            }
+        }
+        return true;
     });
+
 
     const filteredPlanes = telefoniaStore.planes?.filter((p) => {
         const term = q.toLowerCase();
@@ -693,13 +831,40 @@ export default function InventarioTelefonia() {
     return (
         <div className="space-y-6">
             {/* HEADER */}
-            <div>
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">
-                    Inventario de Telefonía
-                </h1>
-                <p className="mt-1 text-sm text-gray-500">
-                    Gestiona los equipos celulares y chips telefónicos.
-                </p>
+            {/* HEADER & COUNTER CARD */}
+            <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">
+                        Inventario de Telefonía
+                    </h1>
+                    <p className="mt-1 text-sm text-gray-500">
+                        Gestiona los equipos celulares y chips telefónicos.
+                    </p>
+                </div>
+
+                {/* Total Counters (Unfiltered) */}
+                <div className="flex gap-3">
+                    {/* Equipos */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm flex items-center gap-3 min-w-[140px]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
+                            <Smartphone className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 uppercase">Equipos</p>
+                            <p className="text-xl font-bold text-gray-900">{telefoniaStore.equipos.length}</p>
+                        </div>
+                    </div>
+                    {/* Chips */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm flex items-center gap-3 min-w-[140px]">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                            <Cpu className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 uppercase">Chips</p>
+                            <p className="text-xl font-bold text-gray-900">{telefoniaStore.chips.length}</p>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
@@ -738,7 +903,7 @@ export default function InventarioTelefonia() {
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
                             type="text"
-                            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-4 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            className="w-full rounded-lg border border-gray-300 py-2 pl-10 pr-20 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                             placeholder={
                                 activeTab === "equipos" ? "Buscar..." :
                                     activeTab === "chips" ? "Buscar..." :
@@ -747,6 +912,9 @@ export default function InventarioTelefonia() {
                             value={q}
                             onChange={(e) => setQ(e.target.value)}
                         />
+                        <div className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-gray-400 font-medium pointer-events-none">
+                            {totalItems} Res.
+                        </div>
                     </div>
 
                     {/* FILTERS IN TOOLBAR */}
@@ -805,6 +973,7 @@ export default function InventarioTelefonia() {
                                 </button>
                             )}
                         </>
+
                     )}
 
                     {/* FILTERS IN TOOLBAR (CHIPS) */}
@@ -864,6 +1033,26 @@ export default function InventarioTelefonia() {
                             )}
                         </>
                     )}
+
+
+                    {/* Filter Vencimiento Selector */}
+                    {(activeTab === "equipos" || activeTab === "chips") && (
+                        <div className="relative group min-w-[200px]">
+                            <History className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                            <select
+                                className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                value={filterVencimiento}
+                                onChange={(e) => setFilterVencimiento(e.target.value)}
+                            >
+                                <option value="">Estado Asignación</option>
+                                <option value="PERMANENTES">Permanentes</option>
+                                <option value="VENCIDOS">Vencidos</option>
+                                <option value="POR_VENCER">Por Vencer (30 días)</option>
+                            </select>
+                        </div>
+                    )}
+
                 </div>
 
                 <button
@@ -883,375 +1072,441 @@ export default function InventarioTelefonia() {
             </div>
 
             {/* CONTENT */}
-            {loading ? (
-                <div className="flex justify-center py-10">
-                    <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
-                </div>
-            ) : (
-                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden text-sm">
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full divide-y divide-gray-200">
-                            <thead className="bg-gray-50">
-                                {activeTab === "equipos" && (
-                                    <tr>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Categoria</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
-                                        <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
-                                    </tr>
-                                )}
-                                {activeTab === "chips" && (
-                                    <tr>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Número</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo Vinculado</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
-                                        <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
-                                    </tr>
-                                )}
-                                {activeTab === "planes" && (
-                                    <tr>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan (Costo)</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Detalles</th>
-                                        <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
-                                        <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
-                                    </tr>
-                                )}
-                            </thead>
-                            {/* CUERPO */}
-                            <tbody className="divide-y divide-gray-200 bg-white">
-                                {activeTab === "equipos" ? (currentData as Equipo[]).map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4">
-                                            <div className="font-medium text-gray-900">{item.marca} {item.modelo}</div>
-                                            <div className="text-gray-500 font-mono text-xs mt-0.5">IMEI: {item.imei}</div>
-                                            {(item.ram || item.almacenamiento || item.pantalla || item.color) && (
-                                                <div className="flex flex-wrap gap-1 mt-1 text-[10px] text-gray-500">
-                                                    {item.color && <span className="px-1 rounded border border-gray-200">{item.color}</span>}
-                                                    {item.ram && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.ram}</span>}
-                                                    {item.almacenamiento && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.almacenamiento}</span>}
-                                                    {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
+            {
+                loading ? (
+                    <div className="flex justify-center py-10">
+                        <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
+                    </div>
+                ) : (
+                    <div className="rounded-xl border border-gray-200 bg-white overflow-hidden text-sm">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full divide-y divide-gray-200">
+                                <thead className="bg-gray-50">
+                                    {activeTab === "equipos" && (
+                                        <tr>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Categoria</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
+
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fin Periodo</th>
+                                            <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
+
+                                        </tr>
+                                    )}
+                                    {activeTab === "chips" && (
+                                        <tr>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Número</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo Vinculado</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
+
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fin Periodo</th>
+                                            <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
+
+                                        </tr>
+                                    )}
+                                    {activeTab === "planes" && (
+                                        <tr>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan (Costo)</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Detalles</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
+                                            <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
+                                        </tr>
+                                    )}
+                                </thead>
+                                {/* CUERPO */}
+                                <tbody className="divide-y divide-gray-200 bg-white">
+                                    {activeTab === "equipos" ? (currentData as Equipo[]).map((item) => (
+                                        <tr key={item.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4">
+                                                <div className="font-medium text-gray-900">{item.marca} {item.modelo}</div>
+                                                <div className="text-gray-500 font-mono text-xs mt-0.5">IMEI: {item.imei}</div>
+                                                {(item.ram || item.almacenamiento || item.pantalla || item.color) && (
+                                                    <div className="flex flex-wrap gap-1 mt-1 text-[10px] text-gray-500">
+                                                        {item.color && <span className="px-1 rounded border border-gray-200">{item.color}</span>}
+                                                        {item.ram && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.ram}</span>}
+                                                        {item.almacenamiento && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.almacenamiento}</span>}
+                                                        {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
+                                                    </div>
+                                                )}
+                                                <div className="mt-1">
+                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
+                                                        {item.condicion || "CONDICION"}
+                                                    </span>
                                                 </div>
-                                            )}
-                                            <div className="mt-1">
-                                                <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
-                                                    {item.condicion || "CONDICION"}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="text-sm text-gray-600">
-                                                {item.fecha_compra ? new Date(item.fecha_compra).toLocaleDateString() : "-"}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col gap-2 items-center">
-                                                <EstadoBadge estado={item.estado} />
-                                                <span className="text-xs text-gray-400 px-1 border rounded bg-gray-50">
-                                                    {item.categoria || "Nuevo"}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-sm text-gray-600">
-                                            <div className="flex items-center gap-2">
-                                                <MapPin className="h-4 w-4 text-gray-400" />
-                                                <span className="font-medium">{item.ubicacion}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {item.chip ? (
-                                                <div className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 w-fit">
-                                                    <Cpu className="w-3 h-3" />
-                                                    <span className="font-mono font-medium">{item.chip.numero_linea}</span>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="text-sm text-gray-600">
+                                                    {item.fecha_compra ? new Date(item.fecha_compra).toLocaleDateString() : "-"}
                                                 </div>
-                                            ) : (
-                                                <span className="text-gray-400 italic text-xs">Sin vincular</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {item.chip ? (
-                                                item.chip.plan ? (
-                                                    <div className="text-xs">
-                                                        <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
-                                                            item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
-                                                                item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
-                                                            }`}>
-                                                            {item.chip.plan.operador}
-                                                        </div>
-                                                        <div className="font-semibold text-gray-800">{item.chip.plan.nombre}</div>
-                                                        <div className="text-gray-500 text-[10px]">S/ {item.chip.plan.costo.toFixed(2)} - {item.chip.plan.gigas}</div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex flex-col gap-2 items-center">
+                                                    <EstadoBadge estado={item.estado} />
+                                                    <span className="text-xs text-gray-400 px-1 border rounded bg-gray-50">
+                                                        {item.categoria || "Nuevo"}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">
+                                                <div className="flex items-center gap-2">
+                                                    <MapPin className="h-4 w-4 text-gray-400" />
+                                                    <span className="font-medium">{item.ubicacion}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.chip ? (
+                                                    <div className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 w-fit">
+                                                        <Cpu className="w-3 h-3" />
+                                                        <span className="font-mono font-medium">{item.chip.numero_linea}</span>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-gray-400 italic text-xs">Sin Plan</span>
-                                                )
-                                            ) : (
-                                                <span className="text-gray-300">-</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {item.estado === "Asignado" && item.asignacion_activa ? (
-                                                <div>
-                                                    <div className="font-medium text-gray-900">{item.asignacion_activa.beneficiario_nombre}</div>
-                                                    <div className="text-xs text-gray-500">{item.asignacion_activa.beneficiario_area}</div>
-                                                    <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
-                                                        <Calendar className="w-3 h-3" />
-                                                        {new Date(item.asignacion_activa.fecha_entrega || '').toLocaleDateString()}
-                                                    </div>
-                                                </div>
-                                            ) : (
-                                                <span className="text-gray-300">-</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                {/* Botones de acción principales */}
-                                                {item.estado === "Asignado" && (
-                                                    <button
-                                                        onClick={() => handleOpenDevolucion(item)}
-                                                        className="p-1.5 rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 transition-colors"
-                                                        title="Registrar Devolución"
-                                                    >
-                                                        <ArrowLeftRight className="h-4 w-4" />
-                                                    </button>
+                                                    <span className="text-gray-400 italic text-xs">Sin vincular</span>
                                                 )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.chip ? (
+                                                    item.chip.plan ? (
+                                                        <div className="text-xs">
+                                                            <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
+                                                                item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
+                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
+                                                                }`}>
+                                                                {item.chip.plan.operador}
+                                                            </div>
+                                                            <div className="font-semibold text-gray-800">{item.chip.plan.nombre}</div>
+                                                            <div className="text-gray-500 text-[10px]">S/ {item.chip.plan.costo.toFixed(2)} - {item.chip.plan.gigas}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400 italic text-xs">Sin Plan</span>
+                                                    )
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.estado === "Asignado" && item.asignacion_activa ? (
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">{item.asignacion_activa.beneficiario_nombre}</div>
+                                                        <div className="text-xs text-gray-500">{item.asignacion_activa.beneficiario_area}</div>
+                                                        <div className="text-xs text-gray-400 mt-0.5 flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3" />
+                                                            {new Date(item.asignacion_activa.fecha_entrega || '').toLocaleDateString()}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.estado === "Asignado" && item.asignacion_activa ? (
+                                                    <div className="text-xs">
+                                                        {item.asignacion_activa.periodo_uso === "PERMANENTE" ? (
+                                                            <span className="font-bold text-gray-600">PERMANENTE</span>
+                                                        ) : (
+                                                            <div className={`flex items-center gap-1 ${item.asignacion_activa.fecha_fin_uso && new Date(item.asignacion_activa.fecha_fin_uso) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                                {item.asignacion_activa.fecha_fin_uso ? new Date(item.asignacion_activa.fecha_fin_uso).toLocaleDateString() : "-"}
+                                                                {item.asignacion_activa.fecha_fin_uso && new Date(item.asignacion_activa.fecha_fin_uso) < new Date() && (
+                                                                    <AlertTriangle className="w-3 h-3" />
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
 
-                                                {item.estado === "Disponible" && (
-                                                    <>
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {/* Botones de acción principales */}
+                                                    {item.estado === "Asignado" && (
                                                         <button
-                                                            onClick={() => handleOpenAsignacion(item)}
+                                                            onClick={() => handleOpenDevolucion(item)}
+                                                            className="p-1.5 rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                                                            title="Registrar Devolución"
+                                                        >
+                                                            <ArrowLeftRight className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+
+                                                    {item.estado === "Disponible" && (
+                                                        <>
+                                                            <button
+                                                                onClick={() => handleOpenAsignacion(item)}
+                                                                className="p-1.5 rounded-md bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 transition-colors"
+                                                                title="Asignar Manualmente"
+                                                            >
+                                                                <UserPlus className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleOpenBaja(item)}
+                                                                className="p-1.5 rounded-md bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors"
+                                                                title="Solicitar Baja (Dañado/Obsoleto)"
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </button>
+                                                        </>
+                                                    )}
+
+                                                    {item.estado === "Mantenimiento" && (
+                                                        <div className="flex gap-1">
+                                                            <button
+                                                                onClick={() => handleProcesarBaja(item, 'APROBAR')}
+                                                                className="p-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
+                                                                title="Confirmar Baja Definitiva"
+                                                            >
+                                                                <CheckCircle className="h-4 w-4" />
+                                                            </button>
+                                                            <button
+                                                                onClick={() => handleProcesarBaja(item, 'REPARADO')}
+                                                                className="p-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                                                                title="Marcar como Reparado (Disponible)"
+                                                            >
+                                                                <div className="text-[10px] font-bold">R</div>
+                                                            </button>
+                                                        </div>
+                                                    )}
+
+                                                    {/* Tools */}
+                                                    <div className="h-4 w-px bg-gray-200 mx-1"></div>
+
+                                                    <button onClick={() => handleEditEquipo(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar">
+                                                        <Pencil className="h-4 w-4" />
+                                                    </button>
+
+                                                    <button onClick={() => handleViewHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
+                                                        <History className="h-4 w-4" />
+                                                    </button>
+
+                                                    {!item.chip ? (
+                                                        <button onClick={() => handleOpenLink('equipo', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Línea">
+                                                            <Link className="h-4 w-4" />
+                                                        </button>
+                                                    ) : (
+                                                        <button onClick={() => handleUnlink('equipo', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500" title="Desvincular Línea">
+                                                            <Unlink className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+
+
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    )) : null}
+
+                                    {activeTab === "chips" ? (currentData as Chip[]).map((item) => (
+                                        <tr key={item.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 font-medium">{item.numero_linea}</td>
+                                            <td className="px-6 py-4 text-gray-600">{item.operador}</td>
+                                            <td className="px-6 py-4">
+                                                <div className="flex items-center gap-2">
+                                                    {item.plan ? (
+                                                        <div className="text-xs">
+                                                            <div className="font-semibold text-gray-800">{item.plan.nombre}</div>
+                                                            <div className="text-gray-500 text-[10px]">{item.plan.gigas} - S/ {item.plan.costo}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-gray-400 text-xs italic">Sin Plan</span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.equipo ? (
+                                                    <div className="flex items-center gap-1 text-gray-700 text-xs">
+                                                        <Smartphone className="w-3 h-3" />
+                                                        {item.equipo.marca} {item.equipo.modelo}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 italic text-xs">Sin vincular</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4"><EstadoBadge estado={item.estado} /></td>
+                                            <td className="px-6 py-4">
+                                                {item.estado === "Asignado" && item.asignacion_activa ? (
+                                                    <div className="text-xs">
+                                                        {item.asignacion_activa.periodo_uso === "PERMANENTE" ? (
+                                                            <span className="font-bold text-gray-600">PERMANENTE</span>
+                                                        ) : (
+                                                            <div className={`flex items-center gap-1 ${item.asignacion_activa.fecha_fin_uso && new Date(item.asignacion_activa.fecha_fin_uso) < new Date() ? 'text-red-600 font-bold' : 'text-gray-600'}`}>
+                                                                {item.asignacion_activa.fecha_fin_uso ? new Date(item.asignacion_activa.fecha_fin_uso).toLocaleDateString() : "-"}
+                                                                {item.asignacion_activa.fecha_fin_uso && new Date(item.asignacion_activa.fecha_fin_uso) < new Date() && (
+                                                                    <AlertTriangle className="w-3 h-3" />
+                                                                )}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+
+                                                <div className="flex items-center justify-end gap-2">
+                                                    {item.estado === "Disponible" && !item.equipo && (
+                                                        <button
+                                                            onClick={() => handleOpenAsignacionChip(item)}
                                                             className="p-1.5 rounded-md bg-green-50 text-green-600 hover:bg-green-100 hover:text-green-700 transition-colors"
-                                                            title="Asignar Manualmente"
+                                                            title="Asignar Chip Directamente"
                                                         >
                                                             <UserPlus className="h-4 w-4" />
                                                         </button>
+                                                    )}
+
+                                                    {item.estado === "Asignado" && !item.equipo && (
                                                         <button
-                                                            onClick={() => handleOpenBaja(item)}
-                                                            className="p-1.5 rounded-md bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 transition-colors"
-                                                            title="Solicitar Baja (Dañado/Obsoleto)"
+                                                            onClick={() => handleOpenDevolucionChip(item)}
+                                                            className="p-1.5 rounded-md bg-amber-50 text-amber-600 hover:bg-amber-100 hover:text-amber-700 transition-colors"
+                                                            title="Registrar Devolución Chip"
                                                         >
-                                                            <Trash2 className="h-4 w-4" />
+                                                            <ArrowLeftRight className="h-4 w-4" />
                                                         </button>
-                                                    </>
-                                                )}
+                                                    )}
 
-                                                {item.estado === "Mantenimiento" && (
-                                                    <div className="flex gap-1">
-                                                        <button
-                                                            onClick={() => handleProcesarBaja(item, 'APROBAR')}
-                                                            className="p-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
-                                                            title="Confirmar Baja Definitiva"
-                                                        >
-                                                            <CheckCircle className="h-4 w-4" />
-                                                        </button>
-                                                        <button
-                                                            onClick={() => handleProcesarBaja(item, 'REPARADO')}
-                                                            className="p-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
-                                                            title="Marcar como Reparado (Disponible)"
-                                                        >
-                                                            <div className="text-[10px] font-bold">R</div>
-                                                        </button>
-                                                    </div>
-                                                )}
+                                                    <button onClick={() => handleEditChip(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar Chip"><Pencil className="h-4 w-4" /></button>
 
-                                                {/* Tools */}
-                                                <div className="h-4 w-px bg-gray-200 mx-1"></div>
-
-                                                <button onClick={() => handleEditEquipo(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar">
-                                                    <Pencil className="h-4 w-4" />
-                                                </button>
-
-                                                <button onClick={() => handleViewHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
-                                                    <History className="h-4 w-4" />
-                                                </button>
-
-                                                {!item.chip ? (
-                                                    <button onClick={() => handleOpenLink('equipo', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Línea">
-                                                        <Link className="h-4 w-4" />
+                                                    <button onClick={() => handleViewChipHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
+                                                        <History className="h-4 w-4" />
                                                     </button>
-                                                ) : (
-                                                    <button onClick={() => handleUnlink('equipo', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500" title="Desvincular Línea">
-                                                        <Unlink className="h-4 w-4" />
+
+                                                    {/* Botón Vincular Plan */}
+                                                    <button
+                                                        onClick={() => handleOpenLinkPlan(item)}
+                                                        className={`p-1.5 rounded-md transition-colors ${item.plan ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'hover:bg-gray-100 text-gray-500'}`}
+                                                        title={item.plan ? "Cambiar Plan" : "Vincular Plan"}
+                                                    >
+                                                        <Wifi className="h-4 w-4" />
                                                     </button>
-                                                )}
 
-
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )) : null}
-
-                                {activeTab === "chips" ? (currentData as Chip[]).map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 font-medium">{item.numero_linea}</td>
-                                        <td className="px-6 py-4 text-gray-600">{item.operador}</td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                {item.plan ? (
-                                                    <div className="text-xs">
-                                                        <div className="font-semibold text-gray-800">{item.plan.nombre}</div>
-                                                        <div className="text-gray-500 text-[10px]">{item.plan.gigas} - S/ {item.plan.costo}</div>
-                                                    </div>
-                                                ) : (
-                                                    <span className="text-gray-400 text-xs italic">Sin Plan</span>
-                                                )}
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            {item.equipo ? (
-                                                <div className="flex items-center gap-1 text-gray-700 text-xs">
-                                                    <Smartphone className="w-3 h-3" />
-                                                    {item.equipo.marca} {item.equipo.modelo}
+                                                    {/* Botón Vincular Equipo */}
+                                                    {!item.equipo ? (
+                                                        <button onClick={() => handleOpenLink('chip', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Equipo"><Link className="h-4 w-4" /></button>
+                                                    ) : (
+                                                        <button onClick={() => handleUnlink('chip', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500" title="Desvincular Equipo"><Unlink className="h-4 w-4" /></button>
+                                                    )}
                                                 </div>
-                                            ) : (
-                                                <span className="text-gray-400 italic text-xs">Sin vincular</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4"><EstadoBadge estado={item.estado} /></td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button onClick={() => handleEditChip(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar Chip"><Pencil className="h-4 w-4" /></button>
+                                            </td>
+                                        </tr>
+                                    )) : null}
 
-                                                <button onClick={() => handleViewChipHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
-                                                    <History className="h-4 w-4" />
-                                                </button>
-
-                                                {/* Botón Vincular Plan */}
-                                                <button
-                                                    onClick={() => handleOpenLinkPlan(item)}
-                                                    className={`p-1.5 rounded-md transition-colors ${item.plan ? 'bg-indigo-50 text-indigo-600 hover:bg-indigo-100' : 'hover:bg-gray-100 text-gray-500'}`}
-                                                    title={item.plan ? "Cambiar Plan" : "Vincular Plan"}
-                                                >
-                                                    <Wifi className="h-4 w-4" />
-                                                </button>
-
-                                                {/* Botón Vincular Equipo */}
-                                                {!item.equipo ? (
-                                                    <button onClick={() => handleOpenLink('chip', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Equipo"><Link className="h-4 w-4" /></button>
+                                    {activeTab === "planes" && (currentData as PlanTelefonico[]).map((item) => (
+                                        <tr key={item.id} className="hover:bg-gray-50">
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <span className={`px-2 py-1 rounded text-xs font-bold ${item.operador === 'CLARO' ? 'bg-red-100 text-red-800' :
+                                                    item.operador === 'MOVISTAR' ? 'bg-blue-100 text-blue-800' :
+                                                        'bg-orange-100 text-orange-800'
+                                                    }`}>
+                                                    {item.operador}
+                                                </span>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                <div className="font-bold text-gray-900">{item.nombre}</div>
+                                                <div className="text-xs text-gray-500">S/ {item.costo.toFixed(2)}</div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                                                <div className="flex flex-col">
+                                                    <span>Datos: {item.gigas}</span>
+                                                    <span className="text-xs text-gray-400">Min: {item.llamadas} | SMS: {item.sms}</span>
+                                                </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                {item.active ? (
+                                                    <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold">Activo</span>
                                                 ) : (
-                                                    <button onClick={() => handleUnlink('chip', item)} className="p-1.5 rounded-md hover:bg-red-50 text-red-500" title="Desvincular Equipo"><Unlink className="h-4 w-4" /></button>
+                                                    <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">Inactivo</span>
                                                 )}
-                                            </div>
-                                        </td>
-                                    </tr>
-                                )) : null}
-
-                                {activeTab === "planes" && (currentData as PlanTelefonico[]).map((item) => (
-                                    <tr key={item.id} className="hover:bg-gray-50">
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <span className={`px-2 py-1 rounded text-xs font-bold ${item.operador === 'CLARO' ? 'bg-red-100 text-red-800' :
-                                                item.operador === 'MOVISTAR' ? 'bg-blue-100 text-blue-800' :
-                                                    'bg-orange-100 text-orange-800'
-                                                }`}>
-                                                {item.operador}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            <div className="font-bold text-gray-900">{item.nombre}</div>
-                                            <div className="text-xs text-gray-500">S/ {item.costo.toFixed(2)}</div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
-                                            <div className="flex flex-col">
-                                                <span>Datos: {item.gigas}</span>
-                                                <span className="text-xs text-gray-400">Min: {item.llamadas} | SMS: {item.sms}</span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap">
-                                            {item.active ? (
-                                                <span className="px-2 py-0.5 bg-green-100 text-green-800 rounded-full text-xs font-semibold">Activo</span>
-                                            ) : (
-                                                <span className="px-2 py-0.5 bg-gray-100 text-gray-500 rounded-full text-xs font-semibold">Inactivo</span>
-                                            )}
-                                        </td>
-                                        <td className="px-6 py-4 whitespace-nowrap text-right">
-                                            <div className="flex items-center justify-end gap-2">
-                                                <button
-                                                    onClick={() => handleEditPlan(item)}
-                                                    className="p-1.5 rounded-md bg-gray-50 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Pencil className="h-4 w-4" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleDeletePlan(item.id)}
-                                                    className="p-1.5 rounded-md bg-gray-50 text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
-                                                    title="Eliminar"
-                                                >
-                                                    <Trash2 className="h-4 w-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                    {/* Pagination Controls */}
-                    {!loading && totalItems > 0 && (
-                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
-                            <div className="flex items-center gap-2">
-                                <span className="text-xs text-gray-400 font-medium uppercase">Filas:</span>
-                                <select
-                                    className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
-                                    value={itemsPerPage}
-                                    onChange={(e) => setItemsPerPage(Number(e.target.value))}
-                                >
-                                    <option value={10}>10</option>
-                                    <option value={20}>20</option>
-                                    <option value={50}>50</option>
-                                    <option value={100}>100</option>
-                                    <option value={0}>Todos</option>
-                                </select>
-                            </div>
-
-                            <div className="flex items-center gap-1">
-                                <button
-                                    onClick={() => handlePageChange(1)}
-                                    disabled={currentPage === 1}
-                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Primera Página"
-                                >
-                                    <ChevronsLeft className="h-4 w-4" />
-                                </button>
-                                <button
-                                    onClick={() => handlePageChange(currentPage - 1)}
-                                    disabled={currentPage === 1}
-                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Página Anterior"
-                                >
-                                    <ChevronLeft className="h-4 w-4" />
-                                </button>
-
-                                <span className="text-xs font-medium px-4 text-gray-400">
-                                    {currentPage} / {totalPages}
-                                </span>
-
-                                <button
-                                    onClick={() => handlePageChange(currentPage + 1)}
-                                    disabled={currentPage === totalPages}
-                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Página Siguiente"
-                                >
-                                    <ChevronRight className="h-4 w-4" />
-                                </button>
-                                <button
-                                    onClick={() => handlePageChange(totalPages)}
-                                    disabled={currentPage === totalPages}
-                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Última Página"
-                                >
-                                    <ChevronsRight className="h-4 w-4" />
-                                </button>
-                            </div>
+                                            </td>
+                                            <td className="px-6 py-4 whitespace-nowrap text-right">
+                                                <div className="flex items-center justify-end gap-2">
+                                                    <button
+                                                        onClick={() => handleEditPlan(item)}
+                                                        className="p-1.5 rounded-md bg-gray-50 text-gray-500 hover:bg-indigo-50 hover:text-indigo-600 transition-colors"
+                                                        title="Editar"
+                                                    >
+                                                        <Pencil className="h-4 w-4" />
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleDeletePlan(item.id)}
+                                                        className="p-1.5 rounded-md bg-gray-50 text-gray-500 hover:bg-red-50 hover:text-red-600 transition-colors"
+                                                        title="Eliminar"
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         </div>
-                    )}
-                </div>
-            )}
+                        {/* Pagination Controls */}
+                        {!loading && totalItems > 0 && (
+                            <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-xs text-gray-400 font-medium uppercase">Filas:</span>
+                                    <select
+                                        className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
+                                        value={itemsPerPage}
+                                        onChange={(e) => setItemsPerPage(Number(e.target.value))}
+                                    >
+                                        <option value={10}>10</option>
+                                        <option value={20}>20</option>
+                                        <option value={50}>50</option>
+                                        <option value={100}>100</option>
+                                        <option value={0}>Todos</option>
+                                    </select>
+                                </div>
+
+                                <div className="flex items-center gap-1">
+                                    <button
+                                        onClick={() => handlePageChange(1)}
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Primera Página"
+                                    >
+                                        <ChevronsLeft className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handlePageChange(currentPage - 1)}
+                                        disabled={currentPage === 1}
+                                        className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Página Anterior"
+                                    >
+                                        <ChevronLeft className="h-4 w-4" />
+                                    </button>
+
+                                    <span className="text-xs font-medium px-4 text-gray-400">
+                                        {currentPage} / {totalPages}
+                                    </span>
+
+                                    <button
+                                        onClick={() => handlePageChange(currentPage + 1)}
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Página Siguiente"
+                                    >
+                                        <ChevronRight className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        onClick={() => handlePageChange(totalPages)}
+                                        disabled={currentPage === totalPages}
+                                        className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                        title="Última Página"
+                                    >
+                                        <ChevronsRight className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )
+            }
 
             {/* --- MODALS DE ACCIÓN --- */}
 
@@ -1370,14 +1625,14 @@ export default function InventarioTelefonia() {
                             <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Usuario Final</h4>
                             <div className="grid grid-cols-2 gap-3">
                                 <input
-                                    required={!sameAsResponsable}
+
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
                                     value={asignacionData.dni}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, dni: e.target.value })}
                                     placeholder="DNI Usuario"
                                 />
                                 <input
-                                    required={!sameAsResponsable}
+
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
                                     value={asignacionData.nombre}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, nombre: e.target.value })}
@@ -1386,15 +1641,15 @@ export default function InventarioTelefonia() {
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <input
-                                    required={!sameAsResponsable}
+
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
                                     placeholder="Ingrese el Área..."
                                     value={asignacionData.area}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
                                 />
                                 <select
-                                    required={!sameAsResponsable}
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
+
                                     disabled={!!asignacionTicketData.perfil_puesto} // Lock if Ticket Profile is set
                                     value={asignacionData.puesto}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
@@ -1408,8 +1663,8 @@ export default function InventarioTelefonia() {
                             <div className="grid grid-cols-1 gap-3">
                                 <label className="block text-sm font-medium text-gray-700">Sede del Usuario</label>
                                 <select
-                                    required={!sameAsResponsable}
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+
                                     value={asignacionData.sede}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, sede: e.target.value })}
                                 >
@@ -2373,6 +2628,240 @@ export default function InventarioTelefonia() {
                             className="inline-flex justify-center rounded-md border border-transparent bg-indigo-600 py-2 px-4 text-sm font-medium text-white hover:bg-indigo-700"
                         >
                             Guardar Vinculación
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* MODAL ASIGNACION CHIP */}
+            <Modal
+                open={openAsignacionChip}
+                onClose={() => setOpenAsignacionChip(false)}
+                title="Asignación Directa de Chip"
+            >
+                <form onSubmit={submitAsignacionChip} className="space-y-6">
+                    <p className="text-sm text-gray-600">
+                        Chip: <strong>{modalActionChip?.numero_linea}</strong> - {modalActionChip?.operador}
+                    </p>
+
+                    {/* RESPONSABLE */}
+                    <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-3">
+                        <h4 className="text-sm font-semibold text-blue-900 border-b border-blue-200 pb-1">Datos del Responsable</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <input
+                                required
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.dni}
+                                onChange={(e) => setResponsableData({ ...responsableData, dni: e.target.value })}
+                                placeholder="DNI Responsable"
+                            />
+                            <input
+                                required
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.nombre}
+                                onChange={(e) => setResponsableData({ ...responsableData, nombre: e.target.value })}
+                                placeholder="Nombre Responsable"
+                            />
+                        </div>
+                        <div className="grid grid-cols-1 gap-3">
+                            <select
+                                required
+                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                value={responsableData.area}
+                                onChange={(e) => {
+                                    setResponsableData({ ...responsableData, area: e.target.value });
+                                }}
+                            >
+                                <option value="">Seleccione Gerencia...</option>
+                                {gerencias.map(g => (
+                                    <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    {/* DATOS DEL EQUIPO DESTINO */}
+                    <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                        <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Equipo Destino</h4>
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 uppercase">Tipo de Equipo</label>
+                                <select
+                                    required
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                    value={deviceDataChip.tipo_equipo}
+                                    onChange={(e) => setDeviceDataChip({ ...deviceDataChip, tipo_equipo: e.target.value })}
+                                >
+                                    <option value="Smartphone">Smartphone</option>
+                                    <option value="Tablet">Tablet</option>
+                                    <option value="Modem">Modem</option>
+                                    <option value="Router">Router</option>
+                                    <option value="Otros">Otros</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 uppercase">IMEI / Serie / Código</label>
+                                <input
+                                    required
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                    value={deviceDataChip.codigo}
+                                    onChange={(e) => setDeviceDataChip({ ...deviceDataChip, codigo: e.target.value })}
+                                    placeholder="Ingrese identificador"
+                                />
+                            </div>
+                        </div>
+                        <p className="text-[10px] text-gray-500">
+                            La Sede del usuario final será la misma que la del Ticket (Fundo/Planta).
+                        </p>
+                    </div>
+
+                    {/* DATOS DEL TICKET */}
+                    <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 space-y-3">
+                        <h4 className="text-sm font-semibold text-indigo-900 border-b border-indigo-200 pb-1">Ubicación y Ticket</h4>
+
+                        {/* Fundo / Planta & Cultivo */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Fundo / Planta</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.fundo_planta}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value })}
+                                >
+                                    <option value="">Seleccione Fundo/Planta...</option>
+                                    <option value="BASE">BASE</option>
+                                    {sedes.map(sede => (
+                                        <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Cultivo</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.cultivo}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, cultivo: e.target.value })}
+                                >
+                                    <option value="">Seleccione Cultivo...</option>
+                                    <option value="ARANDANO">ARANDANO</option>
+                                    <option value="PALTA">PALTA</option>
+                                    <option value="ESPARRAGO">ESPARRAGO</option>
+                                    <option value="UVA">UVA</option>
+                                    <option value="MANGO">MANGO</option>
+                                    <option value="PIMIENTO">PIMIENTO</option>
+                                    <option value="OTROS">OTROS</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* Categoria / Descripcion */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Categoría</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.categoria}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, categoria: e.target.value })}
+                                >
+                                    <option value="">Seleccione...</option>
+                                    <option value="PROYECTO">PROYECTO</option>
+                                    <option value="TELEFONIA">TELEFONIA</option>
+                                </select>
+                            </div>
+                            <div>
+                                {asignacionTicketData.categoria === "PROYECTO" ? (
+                                    <>
+                                        <label className="block text-xs font-medium text-indigo-800 uppercase">Proyecto</label>
+                                        <select
+                                            className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                            value={asignacionTicketData.proyecto}
+                                            onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, proyecto: e.target.value })}
+                                        >
+                                            <option value="">Seleccione Proyecto...</option>
+                                            {telefoniaStore.proyectos
+                                                .filter(p => p.active)
+                                                .map(p => (
+                                                    <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                                ))}
+                                        </select>
+                                    </>
+                                ) : (
+                                    <div className="h-full"></div> // Spacer
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Periodo */}
+                        <div className="grid grid-cols-1 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">Periodo</label>
+                                <select
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.periodo}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, periodo: e.target.value })}
+                                >
+                                    <option value="PERMANENTE">PERMANENTE</option>
+                                    <option value="CAMPAÑA">CAMPAÑA</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 gap-3">
+                            <div>
+                                <label className="block text-xs font-medium text-indigo-800 uppercase">CECO</label>
+                                <input
+                                    required
+                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    value={asignacionTicketData.ceco}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, ceco: e.target.value })}
+                                    placeholder="Centro de Costos"
+                                />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-medium text-indigo-800 uppercase">GR</label>
+                            <input
+                                className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                value={asignacionTicketData.gr}
+                                onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, gr: e.target.value })}
+                                placeholder="GR..."
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end pt-2">
+                        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium">
+                            Asignar Chip
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* MODAL DEVOLUCION CHIP */}
+            <Modal
+                open={openDevolucionChip}
+                onClose={() => setOpenDevolucionChip(false)}
+                title="Registrar Devolución de Chip"
+            >
+                <form onSubmit={submitDevolucionChip} className="space-y-4">
+                    <p className="text-sm text-gray-600">
+                        Chip: <strong>{modalActionChip?.numero_linea}</strong> - {modalActionChip?.operador}
+                        <br />
+                        <span className="text-xs">Al devolver, el chip pasará a estado <strong>Disponible</strong> y se desvinculará del usuario actual.</span>
+                    </p>
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Observaciones</label>
+                        <textarea
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            rows={3}
+                            value={devolucionData.observaciones}
+                            onChange={(e) => setDevolucionData({ ...devolucionData, observaciones: e.target.value })}
+                            placeholder="Razón de la devolución..."
+                        />
+                    </div>
+                    <div className="flex justify-end pt-2">
+                        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">
+                            Confirmar Devolución
                         </button>
                     </div>
                 </form>

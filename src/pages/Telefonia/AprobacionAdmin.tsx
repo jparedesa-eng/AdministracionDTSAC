@@ -4,7 +4,7 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { CheckCircle2, ShoppingCart, X, FileDown } from "lucide-react";
+import { CheckCircle2, ShoppingCart, X, FileDown, Calendar } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
@@ -194,7 +194,8 @@ export default function AprobacionAdmin() {
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
                                         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
-                                            {new Date(t.created_at).toLocaleDateString()}
+                                            <span className="flex items-center gap-1"><Calendar className="w-4 h-4 text-gray-400" />
+                                                {new Date(t.created_at).toLocaleDateString()}</span>
                                         </span>
                                         {t.aprobacion_gerencia ? (
                                             <span className="text-xs font-semibold text-green-700 bg-green-50 border border-green-100 px-2 py-0.5 rounded">
@@ -208,6 +209,9 @@ export default function AprobacionAdmin() {
                                         {t.beneficiario_nombre}
                                     </h3>
                                     <p className="text-sm text-gray-500">{t.beneficiario_area}</p>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <p className="text-xs text-gray-400">RESPONSABLE DEL LA SOLICITUD</p>
+                                    </div>
                                     {viewMode === "history" && (
                                         <div className="mt-2">
                                             <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium border ${t.estado === "Rechazada" ? "bg-red-50 text-red-700 border-red-100" :

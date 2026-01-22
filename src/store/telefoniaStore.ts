@@ -61,6 +61,8 @@ export interface Equipo {
     estado_actual?: string; // Estado físico actual (Bueno, Dañado, Robado)
     // Helpers (Populated by store)
     asignacion_activa?: Solicitud | null;
+    periodo_asignado?: string; // Derived from active assignment
+    fecha_fin_asignado?: string; // Derived from active assignment
 }
 
 export interface Chip {
@@ -74,6 +76,9 @@ export interface Chip {
     equipo_id?: string | null;
     equipo?: Equipo | null;
     plan?: PlanTelefonico | null;
+    asignacion_activa?: any | null; // Derived from active assignment
+    periodo_asignado?: string; // Derived from active assignment
+    fecha_fin_asignado?: string; // Derived from active assignment
 }
 
 export interface Asignacion {
@@ -146,9 +151,9 @@ export interface Solicitud {
     // chip_asignado_id?: string | null;
     fecha_entrega?: string | null; // Keeps global delivery date
     recibido_por?: string | null; // Global signature
-    fecha_devolucion?: string | null;
-    estado_retorno?: string | null;
-    observaciones_retorno?: string | null;
+    // fecha_devolucion?: string | null; // Removed
+    // estado_retorno?: string | null; // Removed
+    // observaciones_retorno?: string | null; // Removed
 
     created_by?: string | null;
 
@@ -410,7 +415,9 @@ export const telefoniaStore = {
                     solicitud:telefonia_solicitudes (
                         beneficiario_nombre,
                         beneficiario_area,
-                        fundo_planta
+                        fundo_planta,
+                        periodo_uso,
+                        fecha_fin_uso
                     )
                 `)
                 .eq("estado", "Entregado")
@@ -426,13 +433,19 @@ export const telefoniaStore = {
                         // Priority for Fundo/Planta display: Sede (Usuario Final) -> Fundo/Planta (Ticket)
                         const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta || "";
 
+                        // Period info
+                        const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
+                        const fechaFin = a.solicitud?.fecha_fin_uso || "";
+
                         activeMap.set(a.equipo_id, {
                             id: a.solicitud_id,
                             beneficiario_nombre: nombre,
                             beneficiario_area: area,
                             fecha_entrega: a.fecha_entrega,
                             tipo_servicio: "Asignación Múltiple",
-                            fundo_planta: fundo
+                            fundo_planta: fundo,
+                            periodo_uso: periodo, // Add to summary object
+                            fecha_fin_uso: fechaFin
                         });
                     }
                 });
@@ -441,10 +454,15 @@ export const telefoniaStore = {
             console.warn("Could not fetch new assignments in fetchEquipos", e);
         }
 
-        this.equipos = (allEquipos as Equipo[]).map(e => ({
-            ...e,
-            asignacion_activa: activeMap.get(e.id) || null
-        }));
+        this.equipos = (allEquipos as Equipo[]).map(e => {
+            const active = activeMap.get(e.id);
+            return {
+                ...e,
+                asignacion_activa: active || null,
+                periodo_asignado: active?.periodo_uso,
+                fecha_fin_asignado: active?.fecha_fin_uso
+            };
+        });
     },
 
     async createEquipo(eq: Omit<Equipo, "id" | "created_at">) {
@@ -513,7 +531,64 @@ export const telefoniaStore = {
             }
             page++;
         }
-        this.chips = allChips as Chip[];
+
+        // Fetch Active Assignments for Chips
+        const activeChipMap = new Map();
+        try {
+            const { data: chipAssigns, error: chipAssignError } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .select(`
+                    id, 
+                    chip_id, 
+                    usuario_final_nombre, 
+                    usuario_final_area,
+                    usuario_final_sede,
+                    fecha_entrega, 
+                    solicitud_id,
+                    solicitud:telefonia_solicitudes (
+                        beneficiario_nombre,
+                        beneficiario_area,
+                        fundo_planta,
+                        periodo_uso,
+                        fecha_fin_uso
+                    )
+                `)
+                .eq("estado", "Entregado")
+                .is("fecha_devolucion", null)
+                .not("chip_id", "is", null);
+
+            if (!chipAssignError && chipAssigns) {
+                chipAssigns.forEach((a: any) => {
+                    if (a.chip_id) {
+                        const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "";
+                        const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "";
+                        const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
+                        const fechaFin = a.solicitud?.fecha_fin_uso || "";
+
+                        activeChipMap.set(a.chip_id, {
+                            id: a.solicitud_id,
+                            beneficiario_nombre: nombre,
+                            beneficiario_area: area,
+                            fecha_entrega: a.fecha_entrega,
+                            periodo_uso: periodo,
+                            fecha_fin_uso: fechaFin
+                        });
+                    }
+                });
+            }
+        } catch (e) {
+            console.warn("Could not fetch chip assignments", e);
+        }
+
+        this.chips = (allChips as Chip[]).map(c => {
+            const active = activeChipMap.get(c.id);
+            return {
+                ...c,
+                asignacion_activa: active || null,
+                periodo_asignado: active?.periodo_uso,
+                fecha_fin_asignado: active?.fecha_fin_uso
+            };
+        });
     },
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
@@ -931,7 +1006,9 @@ export const telefoniaStore = {
             .from("telefonia_solicitud_asignaciones")
             .update({
                 fecha_devolucion: fechaDevolucion,
-                estado: 'Devuelto'
+                estado: 'Devuelto',
+                observacion_retorno: observaciones,
+                condicion_retorno: estadoRetorno
             })
             .eq("equipo_id", equipoId)
             .is("fecha_devolucion", null);
@@ -959,9 +1036,6 @@ export const telefoniaStore = {
                     await supabase
                         .from("telefonia_solicitudes")
                         .update({
-                            fecha_devolucion: fechaDevolucion,
-                            estado_retorno: estadoRetorno,
-                            observaciones_retorno: observaciones,
                             estado: 'Devuelto'
                         })
                         .eq("id", solicitudId);
@@ -1069,7 +1143,12 @@ export const telefoniaStore = {
             responsable_dni: datosResponsable.dni,
             responsable_nombre: datosResponsable.nombre,
             responsable_area: datosResponsable.area,
-            responsable_puesto: datosResponsable.puesto
+
+            // responsable_puesto: datosResponsable.puesto, // Removed as per user request
+            // New fields request
+            periodo_uso: ticketData?.periodo || "PERMANENTE",
+            fecha_fin_uso: ticketData?.fecha_fin || null
+
         };
 
         const { error } = await supabase
@@ -1099,6 +1178,149 @@ export const telefoniaStore = {
 
         await this.fetchEquipos();
         await this.fetchSolicitudes(); // Refresh tickets too
+    },
+
+    async asignarChipDirectamente(
+        chipId: string,
+        datosResponsable: { dni: string; nombre: string; area: string; puesto: string },
+        ticketData: {
+            ceco: string;
+            fundo_planta: string;
+            categoria: string;
+            proyecto: string;
+            gr: string;
+
+            fecha_inicio: string;
+            fecha_fin?: string;
+            periodo: string;
+
+
+            cultivo: string;
+            usuario_creador_id?: string;
+        },
+        deviceData: {
+            tipo_equipo: string;
+            codigo: string;
+        }
+    ) {
+        const fechaEntrega = new Date().toISOString();
+        const chip = this.chips.find(c => c.id === chipId);
+
+        // 1. Create Ticket (Solicitud) - Status Entregado
+        const ticketPayload = {
+            tipo_solicitud: "ASIGNACION_SOLO_CHIP",
+            tipo_servicio: chip?.operador || "Línea Nueva",
+            justificacion: "Asignación Directa de Chip - Solo Sim",
+            ceco: ticketData.ceco,
+            fundo_planta: ticketData.fundo_planta,
+            categoria: ticketData.categoria,
+            proyecto: ticketData.proyecto,
+            gr: ticketData.gr,
+            beneficiario_puesto: datosResponsable.puesto,
+            periodo_uso: ticketData.periodo,
+            fecha_inicio_uso: ticketData.fecha_inicio,
+            fecha_fin_uso: ticketData.fecha_fin || null, // Now supported in signature
+            cultivo: ticketData.cultivo,
+
+            cantidad_lineas: 1,
+            paquete_asignado: chip?.plan?.nombre || null,
+            plan_costo: chip?.plan?.costo || 0,
+            plan_datos: chip?.plan?.gigas || null,
+            estado: "Entregado",
+            fecha_entrega: fechaEntrega,
+            beneficiario_dni: datosResponsable.dni,
+            beneficiario_nombre: datosResponsable.nombre,
+            beneficiario_area: datosResponsable.area,
+            created_by: ticketData.usuario_creador_id,
+            // New Device Fields
+            tipo_equipo_destino: deviceData.tipo_equipo,
+            codigo_equipo_destino: deviceData.codigo
+        };
+
+        const { data: ticket, error: ticketError } = await supabase
+            .from("telefonia_solicitudes")
+            .insert([ticketPayload])
+            .select()
+            .single();
+
+        if (ticketError) throw ticketError;
+
+        // 2. Create Assignment
+        const assignPayload = {
+            solicitud_id: ticket.id,
+            equipo_id: null,
+            chip_id: chipId,
+            estado: "Entregado",
+            fecha_entrega: fechaEntrega,
+            // Usuario Final is Responsable (Ticket Owner)
+            usuario_final_dni: datosResponsable.dni,
+            usuario_final_nombre: datosResponsable.nombre,
+            usuario_final_area: datosResponsable.area,
+            usuario_final_puesto: datosResponsable.puesto,
+            usuario_final_sede: ticketData.fundo_planta, // Matches Ticket Sede
+            // Responsable
+            responsable_dni: datosResponsable.dni,
+            responsable_nombre: datosResponsable.nombre,
+            responsable_area: datosResponsable.area,
+
+            periodo_uso: ticketData.periodo || "PERMANENTE",
+
+            fecha_fin_uso: ticketData.fecha_fin || null,
+
+
+            // Device Info
+            tipo_equipo_destino: deviceData.tipo_equipo,
+            codigo_equipo_destino: deviceData.codigo
+        };
+
+        const { error: assignError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .insert([assignPayload]);
+
+        if (assignError) throw assignError;
+
+        // 3. Update Chip Status
+        await supabase
+            .from("telefonia_chips")
+            .update({ estado: "Asignado" })
+            .eq("id", chipId);
+
+        await this.fetchChips();
+        await this.fetchSolicitudes();
+    },
+
+    async registrarDevolucionChip(chipId: string, observaciones: string) {
+        // Find active assignment for this chip
+        const { data: assignments, error: fetchErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("*")
+            .eq("chip_id", chipId)
+            .eq("estado", "Entregado")
+            .is("fecha_devolucion", null);
+
+        if (fetchErr) throw fetchErr;
+
+        if (assignments && assignments.length > 0) {
+            // Close all active assignments for this chip (should be one usually)
+            for (const assign of assignments) {
+                await supabase
+                    .from("telefonia_solicitud_asignaciones")
+                    .update({
+                        estado: "Devuelto",
+                        fecha_devolucion: new Date().toISOString(),
+                        observacion_retorno: observaciones
+                    })
+                    .eq("id", assign.id);
+            }
+        }
+
+        // Update Chip Status
+        await supabase
+            .from("telefonia_chips")
+            .update({ estado: "Disponible" })
+            .eq("id", chipId);
+
+        await this.fetchChips();
     },
 
     async solicitarBajaDirecta(equipoId: string, motivo: string, usuarioId?: string) {

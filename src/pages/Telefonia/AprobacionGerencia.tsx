@@ -4,7 +4,7 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { UserCheck, Check, X, FileDown } from "lucide-react";
+import { UserCheck, Check, X, FileDown, Calendar } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
@@ -182,16 +182,15 @@ export default function AprobacionGerencia() {
                                 {/* LEFT: Solicitante */}
                                 <div className="flex-1 min-w-0">
                                     <div className="flex items-center gap-2 mb-1">
-                                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded">
+                                        <span className="text-xs text-gray-500 bg-gray-100 px-2 py-0.5 rounded inline-flex items-center gap-1">
+                                            <Calendar className="w-3 h-3" />
                                             {new Date(t.created_at).toLocaleDateString()}
-                                        </span>
-                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-blue-50 text-blue-700 border border-blue-100">
-                                            {t.alternativa_modelo || "Sin Obs. IT"}
                                         </span>
                                     </div>
                                     <h3 className="text-base font-bold text-gray-900 truncate" title={t.beneficiario_nombre || ""}>
                                         {t.beneficiario_nombre}
                                     </h3>
+                                    <span className="text-xs text-gray-500">RESPONSABLE DE LA SOLICITUD</span>
                                     <p className="text-sm text-gray-500">{t.beneficiario_puesto}</p>
                                     {viewMode === "history" && (
                                         <div className="mt-2">
@@ -210,6 +209,12 @@ export default function AprobacionGerencia() {
                                     <div className="flex justify-between items-baseline mb-1">
                                         <span className="text-xs text-gray-500 uppercase tracking-wide">Solicitud</span>
                                         <span className="text-sm font-bold text-blue-700">{t.tipo_solicitud || "Línea Nueva"}</span>
+                                    </div>
+                                    <div className="flex justify-between items-baseline mb-1">
+                                        <span className="text-xs text-gray-500 uppercase tracking-wide">CANTIDAD</span>
+                                        <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-semibold bg-slate-50 text-slate-700">
+                                            {t.cantidad_lineas} {(t.cantidad_lineas ?? 0) > 1 ? "LINEAS" : "LINEA"}
+                                        </span>
                                     </div>
                                     <div className="flex justify-between items-baseline mb-1">
                                         <span className="text-xs text-gray-500 uppercase tracking-wide">Servicio Solicitado</span>

@@ -8,6 +8,7 @@ import {
     XCircle,
     MapPin,
     Briefcase,
+    Blocks,
 } from "lucide-react";
 import type { Solicitud } from "../../store/telefoniaStore";
 
@@ -79,7 +80,7 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                         </div>
                         <div className="flex items-center gap-2 text-xs text-gray-400 mt-0.5">
                             DNI: {ticket.beneficiario_dni}
-                            <span className="text-grau-600"> | RESPONSABLE DE LOS EQUIPOS</span>
+                            <span className="text-grau-600">| RESPONSABLE DE LA SOLICITUD</span>
                         </div>
                     </div>
                 </div>
@@ -189,7 +190,7 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                 {/* APPS */}
                 <div>
                     <span className="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-2 flex items-center gap-1">
-                        <Smartphone className="w-3 h-3" /> Aplicativos Solicitados
+                        <Blocks className="w-3 h-3" /> Aplicativos Solicitados
                     </span>
                     <div className="flex flex-wrap gap-2">
                         {ticket.aplicativos && ticket.aplicativos.length > 0 ? (
@@ -206,8 +207,8 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
 
                 {/* MODELO */}
                 <div>
-                    <span className="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-2">
-                        Modelo Sugerido / Asignado
+                    <span className="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-2 flex items-center gap-1">
+                        <Smartphone className="w-3 h-3" /> Modelo Sugerido / Asignado
                     </span>
                     <div className="bg-emerald-50 border border-emerald-100 rounded-lg p-2.5">
                         <p className="text-sm font-bold text-emerald-800">
