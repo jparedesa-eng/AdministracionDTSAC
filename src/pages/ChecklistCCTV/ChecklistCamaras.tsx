@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
-import html2canvas from 'html2canvas';
+// import html2canvas from 'html2canvas'; // Removing html2canvas
+import { toPng } from 'html-to-image'; // Using html-to-image instead
 import jsPDF from 'jspdf';
 import {
     Activity,
@@ -388,26 +389,38 @@ export default function ChecklistCamaras() {
 
         container.innerHTML = `
                 <style>
-                    * { box-sizing: border-box; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
-                    .report-card { padding: 32px; background: white; }
-                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #0f172a; padding-bottom: 15px; margin-bottom: 24px; }
-                    .logo-box { background: #0f172a; color: white; padding: 8px 12px; border-radius: 6px; font-weight: 900; font-size: 18px; }
+                    /* STRICT RESET for html2canvas + Tailwind 4 compatibility */
+                    * { 
+                        box-sizing: border-box !important; 
+                        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif !important;
+                        border-color: #e2e8f0 !important;
+                        -webkit-text-fill-color: initial !important;
+                    }
+                    *, ::before, ::after {
+                        box-shadow: none !important;
+                        text-decoration-color: #000000 !important;
+                        outline-color: #000000 !important;
+                    }
+                    
+                    .report-card { padding: 32px; background: #ffffff !important; }
+                    .header { display: flex; justify-content: space-between; align-items: center; border-bottom: 4px solid #0f172a !important; padding-bottom: 15px; margin-bottom: 24px; }
+                    .logo-box { background: #0f172a !important; color: #ffffff !important; padding: 8px 12px; border-radius: 6px; font-weight: 900; font-size: 18px; }
                     .stats-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; margin-bottom: 24px; }
-                    .stat-item { border: 2px solid #e2e8f0; padding: 12px; border-radius: 12px; text-align: center; }
-                    .stat-main { background: #0f172a; color: white; border-color: #0f172a; }
+                    .stat-item { border: 2px solid #e2e8f0 !important; padding: 12px; border-radius: 12px; text-align: center; background: #ffffff !important; }
+                    .stat-main { background: #0f172a !important; color: #ffffff !important; border-color: #0f172a !important; }
                     .report-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
-                    .zona-card { border: 2px solid #f1f5f9; border-radius: 12px; margin-bottom: 15px; overflow: hidden; break-inside: avoid; }
-                    .zona-header { background: #f8fafc; padding: 6px 12px; border-bottom: 2px solid #f1f5f9; display: flex; justify-content: space-between; font-weight: 800; font-size: 9px; text-transform: uppercase; }
+                    .zona-card { border: 2px solid #f1f5f9 !important; border-radius: 12px; margin-bottom: 15px; overflow: hidden; break-inside: avoid; background: #ffffff !important; }
+                    .zona-header { background: #f8fafc !important; padding: 6px 12px; border-bottom: 2px solid #f1f5f9 !important; display: flex; justify-content: space-between; font-weight: 800; font-size: 9px; text-transform: uppercase; color: #334155 !important; }
                     table { width: 100%; border-collapse: collapse; }
-                    th { text-align: left; padding: 6px 8px; font-size: 8px; color: #64748b; text-transform: uppercase; border-bottom: 1px solid #f1f5f9; }
-                    td { padding: 6px 8px; font-size: 9px; border-bottom: 1px solid #f8fafc; }
+                    th { text-align: left; padding: 6px 8px; font-size: 8px; color: #64748b !important; text-transform: uppercase; border-bottom: 1px solid #f1f5f9 !important; background: #ffffff !important; }
+                    td { padding: 6px 8px; font-size: 9px; border-bottom: 1px solid #f8fafc !important; color: #334155 !important; }
                     .badge { padding: 2px 6px; border-radius: 4px; font-weight: 800; font-size: 7px; text-transform: uppercase; display: inline-block; }
-                    .on { color: #10b981; } .off { color: #ef4444; }
-                    .q-5 { background: #dcfce7; color: #166534; }
-                    .q-3 { background: #fef3c7; color: #92400e; }
-                    .q-1 { background: #fee2e2; color: #991b1b; }
+                    .on { color: #10b981 !important; } .off { color: #ef4444 !important; }
+                    .q-5 { background: #dcfce7 !important; color: #166534 !important; }
+                    .q-3 { background: #fef3c7 !important; color: #92400e !important; }
+                    .q-1 { background: #fee2e2 !important; color: #991b1b !important; }
                     .incidents-title { display: flex; align-items: center; gap: 10px; margin-top: 30px; margin-bottom: 10px; }
-                    .title-dot { width: 4px; height: 16px; background: #ef4444; border-radius: 2px; }
+                    .title-dot { width: 4px; height: 16px; background: #ef4444 !important; border-radius: 2px; }
                 </style>
             <div class="report-card" id="report-content">
                 <div class="header">
@@ -543,20 +556,27 @@ export default function ChecklistCamaras() {
                 const content = document.getElementById('report-content');
                 if (!content) throw new Error("No se pudo generar el contenedor del reporte.");
 
-                const canvas = await html2canvas(content, {
-                    scale: 3,
-                    useCORS: true,
-                    logging: false,
-                    backgroundColor: '#ffffff'
+                // Use html-to-image instead of html2canvas
+                const dataUrl = await toPng(content, {
+                    backgroundColor: '#ffffff',
+                    cacheBust: true,
+                    pixelRatio: 2, // Aumentar calidad
+                    preferredFontFormat: 'woff2'
                 });
 
-                const imgData = canvas.toDataURL('image/jpeg', 1.0);
                 const pdf = new jsPDF('p', 'mm', 'a4');
-                const pdfWidth = pdf.internal.pageSize.getWidth();
-                const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
-                pdf.addImage(imgData, 'JPEG', 0, 0, pdfWidth, pdfHeight);
-                pdf.save(`REPORTE_${centralName}_${selectedDate}.pdf`);
+                // Calculate dimensions
+                const imgProps = pdf.getImageProperties(dataUrl);
+                const pdfWidth = 210; // A4 width
+                const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+
+                // Re-initialize if height > A4 height (297) to match content
+                // Or just use the custom size directly
+                const dynamicPdf = new jsPDF('p', 'mm', [pdfWidth, pdfHeight]);
+
+                dynamicPdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, pdfHeight);
+                dynamicPdf.save(`REPORTE_${centralName}_${selectedDate}.pdf`);
 
                 document.body.removeChild(container);
                 setToast({ type: "success", message: "PDF descargado con éxito." });
@@ -565,7 +585,7 @@ export default function ChecklistCamaras() {
                 setToast({ type: "error", message: "No se pudo generar el PDF. Reintente." });
                 if (document.body.contains(container)) document.body.removeChild(container);
             }
-        }, 300);
+        }, 100);
     };
 
     const SignalMeter = ({ quality, active = true, forceInactive = false }: { quality: number, active?: boolean, forceInactive?: boolean }) => {

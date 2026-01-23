@@ -215,7 +215,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 2. Checklist CCTV
     const checklistSubItems: NavItem[] = [];
-    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-dash', label: 'Dashboard', path: '/checklist-cctv/dashboard', icon: LayoutDashboard });
+    if (canSeeSeg_Dashboard) checklistSubItems.push({ id: 'seg-dash', label: 'Dashboard', path: '/checklist-cctv/dashboard', icon: LayoutDashboard });
     if (hasAccess("/checklist-cctv/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos CCTV', path: '/checklist-cctv/eventos', icon: Settings });
     if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/checklist-cctv/checklist-camaras', icon: ClipboardList });
     if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/checklist-cctv/inventario-camaras', icon: Wrench });
