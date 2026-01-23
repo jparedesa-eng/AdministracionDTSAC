@@ -120,7 +120,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
                 { content: 'DNI:', styles: { fontStyle: 'bold' } }, ticket.beneficiario_dni || "-"
             ],
             [
-                { content: 'Área:', styles: { fontStyle: 'bold' } }, ticket.beneficiario_area || "-",
+                { content: 'Gerencia:', styles: { fontStyle: 'bold' } }, ticket.beneficiario_area || "-",
                 { content: 'Puesto:', styles: { fontStyle: 'bold' } }, ticket.beneficiario_puesto || "-"
             ],
             [

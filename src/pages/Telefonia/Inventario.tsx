@@ -59,6 +59,7 @@ export default function InventarioTelefonia() {
 
     // New Filter
     const [filterVencimiento, setFilterVencimiento] = useState("");
+    const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
 
     // Reset filters on tab change
@@ -270,6 +271,20 @@ export default function InventarioTelefonia() {
     const submitAsignacion = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!modalActionItem) return;
+        // Validation
+        const errors: Record<string, string> = {};
+        if (!asignacionTicketData.ceco) {
+            errors.ceco = "Ingrese el CECO.";
+        } else if (asignacionTicketData.ceco.length !== 10) {
+            errors.ceco = "El CECO debe tener 10 dígitos.";
+            setToast({ type: "error", message: "Corrija los errores marcados." });
+        }
+
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            return;
+        }
+
         try {
             // Find Puesto Name
             const puestoObj = telefoniaStore.puestos.find(p => p.id === asignacionTicketData.perfil_puesto);
@@ -627,6 +642,13 @@ export default function InventarioTelefonia() {
     const submitAsignacionChip = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!modalActionChip) return;
+
+        // Validation
+        if (!asignacionTicketData.ceco || asignacionTicketData.ceco.length !== 10) {
+            setToast({ type: "error", message: "El CECO debe tener 10 dígitos" });
+            return;
+        }
+
         try {
             await telefoniaStore.asignarChipDirectamente(
                 modalActionChip.id,
@@ -845,7 +867,7 @@ export default function InventarioTelefonia() {
                 {/* Total Counters (Unfiltered) */}
                 <div className="flex gap-3">
                     {/* Equipos */}
-                    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm flex items-center gap-3 min-w-[140px]">
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px]">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                             <Smartphone className="h-5 w-5" />
                         </div>
@@ -855,7 +877,7 @@ export default function InventarioTelefonia() {
                         </div>
                     </div>
                     {/* Chips */}
-                    <div className="rounded-xl border border-gray-200 bg-white p-3 shadow-sm flex items-center gap-3 min-w-[140px]">
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px]">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                             <Cpu className="h-5 w-5" />
                         </div>
@@ -1156,8 +1178,10 @@ export default function InventarioTelefonia() {
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-600">
                                                 <div className="flex items-center gap-2">
-                                                    <MapPin className="h-4 w-4 text-gray-400" />
-                                                    <span className="font-medium">{item.ubicacion}</span>
+                                                    <MapPin className="h-5 w-5 text-gray-400" />
+                                                    <span className="font-medium">
+                                                        {item.asignacion_activa?.fundo_planta || item.ubicacion}
+                                                    </span>
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">
@@ -1647,18 +1671,13 @@ export default function InventarioTelefonia() {
                                     value={asignacionData.area}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, area: e.target.value })}
                                 />
-                                <select
+                                <input
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 bg-white disabled:bg-gray-100"
-
                                     disabled={!!asignacionTicketData.perfil_puesto} // Lock if Ticket Profile is set
                                     value={asignacionData.puesto}
                                     onChange={(e) => setAsignacionData({ ...asignacionData, puesto: e.target.value })}
-                                >
-                                    <option value="">Seleccione Puesto...</option>
-                                    {telefoniaStore.puestos.map(p => (
-                                        <option key={p.id} value={p.nombre}>{p.nombre}</option>
-                                    ))}
-                                </select>
+                                    placeholder="Ingrese Puesto..."
+                                />
                             </div>
                             <div className="grid grid-cols-1 gap-3">
                                 <label className="block text-sm font-medium text-gray-700">Sede del Usuario</label>
@@ -1856,11 +1875,26 @@ export default function InventarioTelefonia() {
                                 <label className="block text-xs font-medium text-indigo-800 uppercase">CECO</label>
                                 <input
                                     required
-                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                    maxLength={10}
+                                    className={`block w-full rounded-md border p-2 mt-1 sm:text-sm outline-none transition-all ${formErrors.ceco ? "border-red-500 bg-red-50 focus:border-red-600" : "border-indigo-300"
+                                        }`}
                                     value={asignacionTicketData.ceco}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, ceco: e.target.value })}
+                                    onChange={(e) => {
+                                        setAsignacionTicketData({ ...asignacionTicketData, ceco: e.target.value.replace(/\D/g, '').slice(0, 10) });
+                                        if (formErrors.ceco) setFormErrors({ ...formErrors, ceco: "" });
+                                    }}
+                                    onBlur={() => {
+                                        if (asignacionTicketData.ceco && asignacionTicketData.ceco.length !== 10) {
+                                            setFormErrors({ ...formErrors, ceco: "El CECO debe tener 10 dígitos." });
+                                        }
+                                    }}
                                     placeholder="Centro de Costos"
                                 />
+                                {formErrors.ceco && (
+                                    <p className="text-[10px] text-red-600 font-bold mt-1 animate-in fade-in slide-in-from-top-1">
+                                        {formErrors.ceco}
+                                    </p>
+                                )}
                             </div>
                         </div>
                         <div>
@@ -2385,8 +2419,11 @@ export default function InventarioTelefonia() {
                                                 <div className="text-sm font-medium text-indigo-700">
                                                     {assign.usuario_final_nombre || "Mismo Beneficiario"}
                                                 </div>
-                                                <div className="text-xs text-gray-500">
+                                                <div className="text-xs text-gray-500 font-bold">
                                                     {assign.usuario_final_area || "-"}
+                                                </div>
+                                                <div className="text-xs text-gray-500">
+                                                    {assign.usuario_final_sede || "-"}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 align-top">

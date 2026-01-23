@@ -1,4 +1,3 @@
-// src/App.tsx
 import React from "react";
 // import { Menu } from "lucide-react"; // Removed
 import { Routes, Route, Outlet, Navigate } from "react-router-dom";
@@ -55,20 +54,30 @@ import SupervisorST from "./pages/configuracion/SupervisorST";
 import AplicativosCelular from "./pages/configuracion/AplicativosCelular";
 
 /* Seguridad */
-import ProgramacionPuestos from "./pages/Seguridad/ProgramacionPuestos";
-import GestionRecursos from "./pages/Seguridad/GestionRecursos";
-import ChecklistCamaras from "./pages/Seguridad/ChecklistCamaras";
-import InventarioCamaras from "./pages/Seguridad/InventarioCamaras";
-import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen";
-import { DestinationsTable } from "./pages/Seguridad/DestinationsTable";
-import { ReportingManager } from "./pages/Seguridad/ReportingManager";
-import { AgentReportView } from "./pages/Seguridad/AgentReportView";
-import { TravelTimesTable } from "./pages/Seguridad/TravelTimesTable";
-import InventarioSensores from "./pages/Seguridad/InventarioSensores";
-import InventarioPantallas from "./pages/Seguridad/InventarioPantallas";
-import InventarioNVR from "./pages/Seguridad/InventarioNVR";
-import RegistroEventosMayores from "./pages/Seguridad/RegistroEventosMayores";
-import DashboardCCTV from "./pages/Seguridad/DashboardCCTV";
+/* Seguridad Refactored Routes */
+/* Programación Puestos */
+import ProgramacionPuestos from "./pages/ProgramacionPuestos/ProgramacionPuestos";
+import GestionRecursos from "./pages/ProgramacionPuestos/GestionRecursos";
+
+/* Checklist CCTV */
+import ChecklistCamaras from "./pages/ChecklistCCTV/ChecklistCamaras";
+import InventarioCamaras from "./pages/ChecklistCCTV/InventarioCamaras";
+import DashboardCCTV from "./pages/ChecklistCCTV/DashboardCCTV";
+import RegistroEventosMayores from "./pages/ChecklistCCTV/RegistroEventosMayores";
+import InventarioPantallas from "./pages/ChecklistCCTV/InventarioPantallas";
+import InventarioNVR from "./pages/ChecklistCCTV/InventarioNVR";
+import InventarioSensores from "./pages/ChecklistCCTV/InventarioSensores";
+
+/* Monitoreo Unidades */
+import MonitoreoPT from "./pages/MonitoreoUnidades/MonitoreoPTScreen"; // Check if this was correct screen
+// import MonitoreoPTComponent from "./pages/MonitoreoUnidades/MonitoreoPT"; // This might be the inner component, App used MonitoreoPTScreen usually or MonitoreoPT? 
+// Original import was: import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen"; 
+import { DestinationsTable } from "./pages/MonitoreoUnidades/DestinationsTable";
+import { TravelTimesTable } from "./pages/MonitoreoUnidades/TravelTimesTable";
+
+/* Seguimiento Agentes */
+import { ReportingManager } from "./pages/SeguimientoAgentes/ReportingManager";
+import { AgentReportView } from "./pages/SeguimientoAgentes/AgentReportView";
 
 
 
@@ -231,14 +240,7 @@ export default function App() {
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/seguridad/tiempos-viaje"
-            element={
-              <ProtectedRoute path="/seguridad/tiempos-viaje">
-                <TravelTimesTable />
-              </ProtectedRoute>
-            }
-          />
+
 
           {/* Pasajes & Hospedaje */}
           <Route
@@ -457,122 +459,181 @@ export default function App() {
 
 
 
-          {/* Seguridad */}
+          {/* SEGURIDAD: Programación de Puestos */}
           <Route
-            path="/seguridad"
+            path="/programacion-puestos"
             element={
-              <ProtectedRoute path="/seguridad/*">
+              <ProtectedRoute path="/programacion-puestos">
                 <div className="px-1">
                   <h1 className="text-xl font-semibold">
-                    Seguridad Patrimonial
+                    Programación de Puestos
                   </h1>
                   <p className="mt-2 text-sm text-gray-600">
-                    Selecciona una opción del submenú.
+                    Gestión de programación y recursos.
                   </p>
                 </div>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/dashboard"
+            path="/programacion-puestos/programacion"
             element={
-              <ProtectedRoute path="/seguridad/dashboard">
-                <DashboardCCTV />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/seguridad/programacion"
-            element={
-              <ProtectedRoute path="/seguridad/programacion">
+              <ProtectedRoute path="/programacion-puestos/programacion">
                 <ProgramacionPuestos />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/recursos"
+            path="/programacion-puestos/recursos"
             element={
-              <ProtectedRoute path="/seguridad/recursos">
+              <ProtectedRoute path="/programacion-puestos/recursos">
                 <GestionRecursos />
               </ProtectedRoute>
             }
           />
+
+          {/* SEGURIDAD: Checklist CCTV */}
           <Route
-            path="/seguridad/checklist-camaras"
+            path="/checklist-cctv"
             element={
-              <ProtectedRoute path="/seguridad/checklist-camaras">
+              <ProtectedRoute path="/checklist-cctv">
+                <div className="px-1">
+                  <h1 className="text-xl font-semibold">
+                    Checklist CCTV
+                  </h1>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Dashboard, eventos e inventarios de cámaras.
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/checklist-cctv/dashboard"
+            element={
+              <ProtectedRoute path="/checklist-cctv/dashboard">
+                <DashboardCCTV />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/checklist-cctv/checklist-camaras"
+            element={
+              <ProtectedRoute path="/checklist-cctv/checklist-camaras">
                 <ChecklistCamaras />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/inventario-camaras"
+            path="/checklist-cctv/inventario-camaras"
             element={
-              <ProtectedRoute path="/seguridad/inventario-camaras">
+              <ProtectedRoute path="/checklist-cctv/inventario-camaras">
                 <InventarioCamaras />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/monitoreo-pt"
+            path="/checklist-cctv/pantallas"
             element={
-              <ProtectedRoute path="/seguridad/monitoreo-pt">
-                <MonitoreoPT />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/seguridad/destinos"
-            element={
-              <ProtectedRoute path="/seguridad/monitoreo-pt">
-                <DestinationsTable />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/seguridad/sensores"
-            element={
-              <ProtectedRoute path="/seguridad/sensores">
-                <InventarioSensores />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/seguridad/pantallas"
-            element={
-              <ProtectedRoute path="/seguridad/pantallas">
+              <ProtectedRoute path="/checklist-cctv/pantallas">
                 <InventarioPantallas />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/nvr"
+            path="/checklist-cctv/nvr"
             element={
-              <ProtectedRoute path="/seguridad/nvr">
+              <ProtectedRoute path="/checklist-cctv/nvr">
                 <InventarioNVR />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/eventos"
+            path="/checklist-cctv/sensores"
             element={
-              <ProtectedRoute path="/seguridad/eventos">
-                <RegistroEventosMayores />
+              <ProtectedRoute path="/checklist-cctv/sensores">
+                <InventarioSensores />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/reporting-manager"
+            path="/checklist-cctv/eventos"
             element={
-              <ProtectedRoute path="/seguridad/reporting-manager">
+              <ProtectedRoute path="/checklist-cctv/eventos">
+                <RegistroEventosMayores />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SEGURIDAD: Monitoreo Unidades */}
+          <Route
+            path="/monitoreo-unidades"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades">
+                <div className="px-1">
+                  <h1 className="text-xl font-semibold">
+                    Monitoreo de Unidades
+                  </h1>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Monitoreo PT, destinos y tiempos de viaje.
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/monitoreo-pt"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/monitoreo-pt">
+                <MonitoreoPT />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/destinos"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/destinos">
+                <DestinationsTable />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/tiempos-viaje"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/tiempos-viaje">
+                <TravelTimesTable />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SEGURIDAD: Seguimiento Agentes */}
+          <Route
+            path="/seguimiento-agentes"
+            element={
+              <ProtectedRoute path="/seguimiento-agentes/*">
+                <div className="px-1">
+                  <h1 className="text-xl font-semibold">
+                    Seguimiento Agentes
+                  </h1>
+                  <p className="mt-2 text-sm text-gray-600">
+                    Reportes y terminal de agente.
+                  </p>
+                </div>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/seguimiento-agentes/reporting-manager"
+            element={
+              <ProtectedRoute path="/seguimiento-agentes/reporting-manager">
                 <ReportingManager />
               </ProtectedRoute>
             }
           />
           <Route
-            path="/seguridad/agent-report"
+            path="/seguimiento-agentes/agent-report"
             element={
-              <ProtectedRoute path="/seguridad/agent-report">
+              <ProtectedRoute path="/seguimiento-agentes/agent-report">
                 <AgentReportView
                   schedules={schedules}
                   setSchedules={setSchedules}
@@ -580,6 +641,10 @@ export default function App() {
               </ProtectedRoute>
             }
           />
+
+
+
+
 
           {/* 403 (protegido) */}
           <Route

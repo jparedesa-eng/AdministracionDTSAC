@@ -34,14 +34,21 @@ const PRIORITY_PATHS = [
     "/telefonia/aprobacion-admin",
     "/telefonia/gestion",
 
-    // Seguridad
-    "/seguridad/checklist-camaras",
-    "/seguridad/inventario-camaras",
-    "/seguridad/programacion",
-    "/seguridad/recursos",
-    "/seguridad/monitoreo-pt",
-    "/seguridad/reporting-manager",
-    "/seguridad/agent-report",
+    // Seguridad (New Paths)
+    "/checklist-cctv/checklist-camaras",
+    "/checklist-cctv/inventario-camaras",
+    "/checklist-cctv/dashboard",
+    "/checklist-cctv/eventos",
+    "/checklist-cctv/pantallas",
+    "/checklist-cctv/nvr",
+    "/checklist-cctv/sensores",
+    "/programacion-puestos/programacion",
+    "/programacion-puestos/recursos",
+    "/monitoreo-unidades/monitoreo-pt",
+    "/monitoreo-unidades/destinos",
+    "/monitoreo-unidades/tiempos-viaje",
+    "/seguimiento-agentes/reporting-manager",
+    "/seguimiento-agentes/agent-report",
 
     // Configuración (Last resort)
     "/configuracion/personal",
@@ -50,8 +57,6 @@ const PRIORITY_PATHS = [
     "/configuracion/centrales-cctv",
     "/configuracion/supervisores",
     "/configuracion/aplicativos-celular",
-    // Old config path if still relevant, though we removed it from App.tsx routes,
-    // we keep specific sub-routes if they exist.
 ];
 
 export default function HomeRedirect() {

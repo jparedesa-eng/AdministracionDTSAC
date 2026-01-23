@@ -55,6 +55,7 @@ export default function SolicitarTelefonia() {
     // Validation State
     const [validationResult, setValidationResult] = useState<ValidationResult | null>(null);
     const [validating, setValidating] = useState(false);
+    const [errors, setErrors] = useState<Record<string, string>>({});
 
     // Modal controls
     const [selectedDetail, setSelectedDetail] = useState<Solicitud | null>(null);
@@ -107,6 +108,7 @@ export default function SolicitarTelefonia() {
         codigo_equipo_destino: "", // NEW: IMEI
     });
 
+    const [chipTargets, setChipTargets] = useState<{ type: string; imei: string }[]>([]);
     const [suggestedModel, setSuggestedModel] = useState<string>("");
 
     const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -175,6 +177,19 @@ export default function SolicitarTelefonia() {
             // Simpler: Just set to true if > 5. If <= 5, set to false (reset).
             setSkipBeneficiaries(false);
         }
+    }, [formData.cantidad_lineas]);
+
+    // Update chipTargets when count changes (Solo Chip)
+    useEffect(() => {
+        const count = Number(formData.cantidad_lineas) || 1;
+        setChipTargets(prev => {
+            if (prev.length === count) return prev;
+            if (count > prev.length) {
+                const newItems = Array(count - prev.length).fill(null).map(() => ({ type: "", imei: "" }));
+                return [...prev, ...newItems];
+            }
+            return prev.slice(0, count);
+        });
     }, [formData.cantidad_lineas]);
 
     // Auto-fill user data from profile
@@ -354,110 +369,115 @@ export default function SolicitarTelefonia() {
 
 
     const validateStep = (step: number) => {
+        const newErrors: Record<string, string> = {};
+
         if (step === 1) {
             // STEP 1: MOTIVO & DATOS GENERALES
-            if (!formData.n_linea) return "Seleccione el motivo de solicitud";
+            if (!formData.n_linea) newErrors.n_linea = "Seleccione el motivo de solicitud";
 
             if ((formData.n_linea === "Renovación" || formData.n_linea === "Reposición") && !formData.numero_telefono) {
-                return "Debe ingresar el número de teléfono.";
+                newErrors.numero_telefono = "Debe ingresar el número de teléfono.";
             }
 
             // Validation Rules
             if (formData.n_linea === "Renovación" && !validationResult?.valid) {
-                return "Debe validar la antigüedad del equipo para continuar (mínimo 3 años).";
+                return { general: "Debe validar la antigüedad del equipo para continuar (mínimo 3 años)." };
             }
+
             if (formData.n_linea === "Reposición" && !renewalCalculated.valid) {
-                return "Debe validar el número para proceder con la reposición.";
+                return { general: "Debe validar el número para proceder con la reposición." };
             }
 
             // COMMON VALIDATIONS
-            if (!formData.fundo_planta) return "Seleccione Fundo / Planta.";
-            if (!formData.cultivo) return "Seleccione Cultivo.";
-            if (!formData.ceco) return "Ingrese el CECO (Centro de Costo).";
-            if (!formData.categoria) return "Seleccione la Categoría (Proyecto/Telefonia).";
+            if (!formData.fundo_planta) newErrors.fundo_planta = "Seleccione Fundo / Planta.";
+            if (!formData.cultivo) newErrors.cultivo = "Seleccione Cultivo.";
 
-            if (formData.categoria === "PROYECTO" && !formData.proyecto) {
-                return "Seleccione el Proyecto.";
+            // CECO Validation
+            if (!formData.ceco) {
+                newErrors.ceco = "Ingrese el CECO (Centro de Costo).";
+            } else if (formData.ceco.length !== 10) {
+                newErrors.ceco = "El CECO debe tener 10 dígitos.";
             }
 
+            if (!formData.categoria) newErrors.categoria = "Seleccione la Categoría (Proyecto/Telefonia).";
 
-
-            // REPOSICIÓN SPECIFIC (Kept in Step 1 or moved? Let's keep specific motive/evidence in Step 1 or 2? 
-            // The user moved "Detalle de Servicio" to Step 2. Reposition 'motivo' is kind of specific detail.
-            // Let's keep Reposition details in Step 2 to align with "Configuración".
-            // See render logic updates.
+            if (formData.categoria === "PROYECTO" && !formData.proyecto) {
+                newErrors.proyecto = "Seleccione el Proyecto.";
+            }
         }
 
         if (step === 2) {
-            // STEP 2: CONFIGURACIÓN (Puesto, Service Details, Reposition Details)
-
-            // BRANCH: REPOSICIÓN
+            // ... existing logic mapped to errors ...
             if (formData.n_linea === "Reposición") {
-                if (!formData.motivo_reposicion) return "Seleccione el motivo de la reposición.";
-                if (!formData.tiene_evidencia) return "Es obligatorio tener evidencia (denuncia/reporte) para reposición.";
+                if (!formData.motivo_reposicion) newErrors.motivo_reposicion = "Seleccione el motivo de la reposición.";
+                if (!formData.tiene_evidencia) newErrors.tiene_evidencia = "Es obligatorio tener evidencia.";
                 if (["ROBO", "PERDIDA"].includes(formData.motivo_reposicion)) {
-                    if (!formData.asume_costo) return "Indique quién asume el costo de la reposición.";
+                    if (!formData.asume_costo) newErrors.asume_costo = "Indique quién asume el costo.";
                 }
             } else {
-                // BRANCH: STANDARD SERVICES (Línea Nueva, Solicitar Equipo, Renovación, Solo Chip)
-
-                // NEW: Validate Solo Chip Extra Fields
-                if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
-                    if (!formData.tipo_equipo_destino) return "Seleccione el tipo de equipo destino.";
-                    if (!formData.codigo_equipo_destino) return "Ingrese el código o IMEI del equipo destino.";
-                }
-
-                // NEW: Validate Condicion Equipo if "Solicitar Equipo"
                 if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
-                    return "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
+                    newErrors.condicion_equipo = "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
                 }
-
-                if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
-                    return "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
-                }
-
                 if (formData.n_linea !== "Línea Nueva (SOLO CHIP)" && !formData.perfil_puesto) {
-                    return "Seleccione el Perfil del Puesto";
+                    newErrors.perfil_puesto = "Seleccione el Perfil del Puesto";
                 }
-
-                if (formData.tipo_servicio !== "PAQUETE ASIGNADO" && !formData.tipo_servicio) return "Seleccione el Operador";
-                if (!formData.tipo_servicio) return "Seleccione el Tipo de Servicio / Operador";
+                if (formData.tipo_servicio !== "PAQUETE ASIGNADO" && !formData.tipo_servicio) newErrors.tipo_servicio = "Seleccione el Operador";
 
                 if (["CLARO", "ENTEL", "MOVISTAR"].includes(formData.tipo_servicio) && !formData.paquete_asignado) {
-                    return "Seleccione un paquete asignado";
+                    newErrors.paquete_asignado = "Seleccione un paquete asignado";
                 }
-                if (!formData.fecha_inicio) return "Ingrese fecha de inicio";
-                if (formData.periodo_uso === "CAMPAÑA" && !formData.fecha_fin) return "Ingrese fecha de fin para campaña";
+                if (!formData.fecha_inicio) newErrors.fecha_inicio = "Ingrese fecha de inicio";
+                if (formData.periodo_uso === "CAMPAÑA" && !formData.fecha_fin) newErrors.fecha_fin = "Ingrese fecha de fin para campaña";
 
-                if (!formData.cantidad_lineas || formData.cantidad_lineas < 1) return "Cantidad debe ser al menos 1";
+                if (formData.fecha_inicio && formData.fecha_fin && formData.periodo_uso !== "PERMANENTE") {
+                    if (formData.fecha_inicio > formData.fecha_fin) {
+                        newErrors.fecha_inicio = "Fecha Inicio > Fecha Fin";
+                        newErrors.fecha_fin = "Fecha Fin < Fecha Inicio";
+                    }
+                }
+
+                if (!formData.cantidad_lineas || formData.cantidad_lineas < 1) newErrors.cantidad_lineas = "Cantidad debe ser al menos 1";
             }
         }
 
         if (step === 3) {
-            // STEP 3: BENEFICIARIES
-            // If skipped or SOLO CHIP, validation passes
-            if (skipBeneficiaries || formData.n_linea === "Línea Nueva (SOLO CHIP)") return null;
-
-            if (formData.cantidad_lineas > 0) {
-                const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre);
-                if (invalid) return "Complete todos los datos de los beneficiarios (DNI 8 dígitos y Nombre).";
-
-                if (beneficiaries.length !== Number(formData.cantidad_lineas)) return `Debe registrar ${formData.cantidad_lineas} beneficiarios.`;
+            if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+                const invalidTarget = chipTargets.find(t => !t.type || !t.imei);
+                if (invalidTarget) {
+                    return { general: "Complete todos los campos de Equipo de Destino (Tipo e IMEI) para cada solicitud." };
+                }
+            } else if (!skipBeneficiaries) {
+                if (formData.cantidad_lineas > 0) {
+                    const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre);
+                    if (invalid) return { general: "Complete todos los datos de los beneficiarios (DNI 8 dígitos y Nombre)." };
+                }
             }
         }
+
         if (step === 4) {
-            // STEP 4: JUSTIFICATION
-            if (!formData.justificacion) return "Ingrese una justificación";
+            if (!formData.justificacion) newErrors.justificacion = "Ingrese una justificación";
         }
-        return null;
+
+        return Object.keys(newErrors).length > 0 ? newErrors : null;
     };
 
     const nextStep = () => {
-        const error = validateStep(currentStep);
-        if (error) {
-            setToast({ type: "error", message: error });
+        const validationErrors = validateStep(currentStep);
+        if (validationErrors) {
+            // Updated: Set errors state
+            setErrors(validationErrors);
+
+            // If it's a general string error (legacy/complex), show toast
+            if (validationErrors.general) {
+                setToast({ type: "error", message: validationErrors.general });
+            } else {
+                // Determine if we should show a generic toast "Fix errors"
+                setToast({ type: "error", message: "Por favor corrija los errores marcados en rojo." });
+            }
             return;
         }
+        // Clear errors if valid
+        setErrors({});
 
         // Prepare Beneficiaries State when moving to Step 2 (Beneficiaries)
         if (currentStep === 2 && formData.cantidad_lineas > 0) {
@@ -498,20 +518,25 @@ export default function SolicitarTelefonia() {
             setBeneficiaries(prev => prev.map(b => ({ ...b, puesto: puestoName })));
         }
 
-        // SKIP STEP 3 if SOLO CHIP
+        // SKIP STEP 3 logic removed for Solo Chip as it now uses Step 3
+
+        /* 
         if (currentStep === 2 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
             setCurrentStep(4);
             return;
-        }
+        } 
+        */
 
         setCurrentStep(prev => prev + 1);
     };
 
     const prevStep = () => {
+        /*
         if (currentStep === 4 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
             setCurrentStep(2);
             return;
         }
+        */
         setCurrentStep(prev => prev - 1);
     };
 
@@ -635,9 +660,14 @@ export default function SolicitarTelefonia() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const error = validateStep(4);
-        if (error) {
-            setToast({ type: "error", message: error });
+        const validationErrors = validateStep(4);
+        if (validationErrors) {
+            setErrors(validationErrors);
+            if (validationErrors.general) {
+                setToast({ type: "error", message: validationErrors.general });
+            } else {
+                setToast({ type: "error", message: "Faltan campos por completar." });
+            }
             return;
         }
 
@@ -701,17 +731,45 @@ export default function SolicitarTelefonia() {
                 categoria: formData.categoria, // NEW
                 proyecto: formData.proyecto, // NEW (Renamed from descripcion_categoria)
                 alternativa_modelo: formData.alternativa_modelo, // NEW: Auto-registered suggested equipment
-                tipo_equipo_destino: formData.n_linea === "Línea Nueva (SOLO CHIP)" ? formData.tipo_equipo_destino : null,
-                codigo_equipo_destino: formData.n_linea === "Línea Nueva (SOLO CHIP)" ? formData.codigo_equipo_destino : null,
+                tipo_equipo_destino: null, // Legacy field, now handled in assignments
+                codigo_equipo_destino: null, // Legacy field
             };
+
+            let assignmentsPayload: any[] = [];
+
+            if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+                // Map chipTargets to assignments
+                assignmentsPayload = chipTargets.map(t => ({
+                    tipo_equipo_destino: t.type,
+                    codigo_equipo_destino: t.imei,
+                    estado: "Pendiente"
+                }));
+            } else {
+                // Map beneficiaries (Standard Flow)
+                // Filter out empty ones if quantity > beneficiarios length (though step valid ensures they are filled if required)
+                // If skipBeneficiaries is true, we create empty ones?
+                // The store handles creation of empty assignments if we pass empty array? No, implementation plan said pass generic assignments.
+                // Re-read store: createSolicitud accepts asignacionesList.
+
+                if (beneficiaries.length > 0) {
+                    assignmentsPayload = beneficiaries.map(b => ({
+                        usuario_final_dni: b.dni,
+                        usuario_final_nombre: b.nombre,
+                        usuario_final_area: b.area,
+                        usuario_final_puesto: b.puesto,
+                        estado: "Pendiente"
+                    }));
+                }
+            }
 
             if (editingId) {
                 // UPDATE
                 await telefoniaStore.updateSolicitud(editingId, payload);
+                // TODO: Update assignments on edit? Complex. For now just update ticket.
                 setToast({ type: "success", message: "Solicitud actualizada correctamente" });
             } else {
                 // CREATE
-                await telefoniaStore.createSolicitud(payload, beneficiaries);
+                await telefoniaStore.createSolicitud(payload, assignmentsPayload);
                 setToast({ type: "success", message: "Solicitud creada correctamente" });
             }
             // Reset form
@@ -726,6 +784,7 @@ export default function SolicitarTelefonia() {
                 tipo_equipo_destino: "", codigo_equipo_destino: ""
             });
             setBeneficiaries([]);
+            setChipTargets([]);
             setSelectedApps([]);
             setSuggestedModel("");
             setCurrentStep(1);
@@ -805,11 +864,26 @@ export default function SolicitarTelefonia() {
                                 type="text"
                                 inputMode="numeric"
                                 pattern="[0-9]*"
-                                className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                maxLength={10}
+                                className={`block w-full rounded border p-2 text-sm outline-none transition-all ${errors.ceco ? "border-red-500 bg-red-50 focus:border-red-600" : "border-gray-300 focus:border-indigo-500"
+                                    }`}
                                 value={formData.ceco}
-                                onChange={(e) => handleChange("ceco", e.target.value.replace(/\D/g, ''))}
+                                onChange={(e) => {
+                                    handleChange("ceco", e.target.value.replace(/\D/g, '').slice(0, 10));
+                                    if (errors.ceco) setErrors({ ...errors, ceco: "" });
+                                }}
+                                onBlur={() => {
+                                    if (formData.ceco && formData.ceco.length !== 10) {
+                                        setErrors({ ...errors, ceco: "El CECO debe tener 10 dígitos." });
+                                    }
+                                }}
                                 placeholder="Centro de Costo"
                             />
+                            {errors.ceco && (
+                                <p className="text-[10px] text-red-600 font-bold mt-1 animate-in fade-in slide-in-from-top-1">
+                                    {errors.ceco}
+                                </p>
+                            )}
                         </div>
                     </div>
 
@@ -1004,45 +1078,7 @@ export default function SolicitarTelefonia() {
                             Configuración de Línea / Equipo
                         </h3>
 
-                        {/* SOLO CHIP EXTRA FIELDS */}
-                        {formData.n_linea === "Línea Nueva (SOLO CHIP)" && (
-                            <div className="bg-purple-50 rounded-lg border border-purple-100 p-4 mb-4">
-                                <div className="flex items-center gap-2 mb-3">
-                                    <Smartphone className="w-4 h-4 text-purple-600" />
-                                    <h4 className="text-sm font-bold text-purple-900">Equipo de Destino</h4>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
-                                            Tipo <span className="text-red-500">*</span>
-                                        </label>
-                                        <select
-                                            className="block w-full rounded border-purple-200 border p-2 text-sm bg-white outline-none focus:border-purple-500 transition-all"
-                                            value={formData.tipo_equipo_destino || ""}
-                                            onChange={(e) => handleChange("tipo_equipo_destino", e.target.value)}
-                                        >
-                                            <option value="">Seleccione...</option>
-                                            <option value="EQUIPO">EQUIPO (Smartphone)</option>
-                                            <option value="DREAM">DREAM (Tableta/Dispositivo)</option>
-                                            <option value="SENSOR DE HUMEDAD">SENSOR DE HUMEDAD</option>
-                                            <option value="TABLET">TABLET</option>
-                                        </select>
-                                    </div>
-                                    <div>
-                                        <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
-                                            IMEI / Código <span className="text-red-500">*</span>
-                                        </label>
-                                        <input
-                                            type="text"
-                                            className="block w-full rounded border-purple-200 border p-2 text-sm outline-none focus:border-purple-500 transition-all font-mono"
-                                            placeholder="Ingrese código o IMEI..."
-                                            value={formData.codigo_equipo_destino || ""}
-                                            onChange={(e) => handleChange("codigo_equipo_destino", e.target.value)}
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-                        )}
+                        {/* SOLO CHIP EXTRA FIELDS REMOVED FROM HERE - MOVED TO STEP 3 */}
 
                         {/* PUESTO DROPDOWN (NEW) - MOVED TO TOP. Hide for Solo Chip */}
                         {formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
@@ -1244,20 +1280,36 @@ export default function SolicitarTelefonia() {
                                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha Inicio</label>
                                         <input
                                             type="date"
-                                            className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all"
+                                            className={`block w-full rounded border p-2 text-sm outline-none transition-all ${formData.fecha_inicio && formData.fecha_fin && formData.periodo_uso !== "PERMANENTE" && formData.fecha_inicio > formData.fecha_fin
+                                                ? "border-red-300 bg-red-50 text-red-900 focus:border-red-500"
+                                                : "border-gray-300 focus:border-indigo-500"
+                                                }`}
                                             value={formData.fecha_inicio}
                                             onChange={(e) => handleChange("fecha_inicio", e.target.value)}
                                         />
+                                        {formData.fecha_inicio && formData.fecha_fin && formData.periodo_uso !== "PERMANENTE" && formData.fecha_inicio > formData.fecha_fin && (
+                                            <p className="text-[10px] text-red-600 font-bold mt-1">
+                                                No puede ser mayor a Fecha Fin
+                                            </p>
+                                        )}
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Fecha Fin</label>
                                         <input
                                             type="date"
                                             disabled={formData.periodo_uso !== "CAMPAÑA"}
-                                            className="block w-full rounded border-gray-300 border p-2 text-sm outline-none focus:border-indigo-500 transition-all disabled:bg-gray-100 disabled:text-gray-400"
+                                            className={`block w-full rounded border p-2 text-sm outline-none transition-all disabled:bg-gray-100 disabled:text-gray-400 ${formData.fecha_inicio && formData.fecha_fin && formData.periodo_uso !== "PERMANENTE" && formData.fecha_inicio > formData.fecha_fin
+                                                ? "border-red-300 bg-red-50 text-red-900 focus:border-red-500" // Highlight Error
+                                                : "border-gray-300 focus:border-indigo-500"
+                                                }`}
                                             value={formData.fecha_fin}
                                             onChange={(e) => handleChange("fecha_fin", e.target.value)}
                                         />
+                                        {formData.fecha_inicio && formData.fecha_fin && formData.periodo_uso !== "PERMANENTE" && formData.fecha_inicio > formData.fecha_fin && (
+                                            <p className="text-[10px] text-red-600 font-bold mt-1">
+                                                No puede ser menor a Fecha Inicio
+                                            </p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
@@ -1390,28 +1442,82 @@ export default function SolicitarTelefonia() {
                             <div className="flex items-center gap-3">
                                 <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
                                     <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
-                                    Lista de Beneficiarios
+                                    {formData.n_linea === "Línea Nueva (SOLO CHIP)" ? "Equipos de Destino" : "Lista de Beneficiarios"}
                                 </h3>
-                                <button
-                                    type="button"
-                                    onClick={() => setSkipBeneficiaries(!skipBeneficiaries)}
-                                    className={`
-                                        text-[10px] font-bold px-3 py-1 rounded transition-colors uppercase tracking-wider select-none
-                                        ${skipBeneficiaries
-                                            ? "bg-indigo-600 text-white hover:bg-indigo-700"
-                                            : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
-                                        }
-                                    `}
-                                >
-                                    {skipBeneficiaries ? "Detalle Omitido" : "Omitir Detalle"}
-                                </button>
+                                {formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                                    <button
+                                        type="button"
+                                        onClick={() => setSkipBeneficiaries(!skipBeneficiaries)}
+                                        className={`
+                                            text-[10px] font-bold px-3 py-1 rounded transition-colors uppercase tracking-wider select-none
+                                            ${skipBeneficiaries
+                                                ? "bg-indigo-600 text-white hover:bg-indigo-700"
+                                                : "bg-gray-100 text-gray-500 hover:bg-gray-200 hover:text-gray-700"
+                                            }
+                                        `}
+                                    >
+                                        {skipBeneficiaries ? "Detalle Omitido" : "Omitir Detalle"}
+                                    </button>
+                                )}
                             </div>
                             <div className="text-xs text-gray-500 font-medium bg-gray-50 px-2 py-1 rounded border border-gray-200">
                                 Total: {formData.cantidad_lineas}
                             </div>
                         </div>
 
-                        {skipBeneficiaries ? (
+                        {formData.n_linea === "Línea Nueva (SOLO CHIP)" ? (
+                            <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
+                                {chipTargets.map((target, idx) => (
+                                    <div key={idx} className="bg-purple-50 rounded-lg border border-purple-100 p-4 relative">
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <div className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold border border-purple-200">
+                                                {idx + 1}
+                                            </div>
+                                            <h4 className="text-sm font-bold text-purple-900">Equipo de Destino</h4>
+                                        </div>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div>
+                                                <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
+                                                    Tipo <span className="text-red-500">*</span>
+                                                </label>
+                                                <select
+                                                    className="block w-full rounded border-purple-200 border p-2 text-sm bg-white outline-none focus:border-purple-500 transition-all cursor-pointer hover:border-purple-300"
+                                                    value={target.type}
+                                                    onChange={(e) => {
+                                                        const newArr = [...chipTargets];
+                                                        newArr[idx].type = e.target.value;
+                                                        setChipTargets(newArr);
+                                                    }}
+                                                >
+                                                    <option value="">Seleccione...</option>
+                                                    <option value="EQUIPO">EQUIPO (Smartphone)</option>
+                                                    <option value="DREAM">DREAM (Tableta/Dispositivo)</option>
+                                                    <option value="SENSOR DE HUMEDAD">SENSOR DE HUMEDAD</option>
+                                                    <option value="TABLET">TABLET</option>
+                                                    <option value="OTRO">OTRO</option>
+                                                </select>
+                                            </div>
+                                            <div>
+                                                <label className="block text-xs font-semibold text-purple-700 uppercase tracking-wide mb-1">
+                                                    IMEI / Código <span className="text-red-500">*</span>
+                                                </label>
+                                                <input
+                                                    type="text"
+                                                    className="block w-full rounded border-purple-200 border p-2 text-sm outline-none focus:border-purple-500 transition-all font-mono placeholder-purple-300"
+                                                    placeholder="Ingrese código o IMEI..."
+                                                    value={target.imei}
+                                                    onChange={(e) => {
+                                                        const newArr = [...chipTargets];
+                                                        newArr[idx].imei = e.target.value;
+                                                        setChipTargets(newArr);
+                                                    }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : skipBeneficiaries ? (
                             <div className="p-8 text-center bg-gray-50 border border-gray-200 rounded-lg border-dashed">
                                 <p className="text-sm text-gray-500">Se ha omitido el registro detallado de beneficiarios.</p>
                                 <p className="text-xs text-gray-400 mt-1">Podrá continuar al siguiente paso sin ingresar esta información pero deberas ingresarlo en la vista de Mis Equipos.</p>
@@ -1647,7 +1753,7 @@ export default function SolicitarTelefonia() {
                             setIsWizardOpen(true);
                             setCurrentStep(1);
                         }}
-                        className="inline-flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                        className="inline-flex items-center gap-2 bg-[#FF0000] hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                     >
                         <Plus className="w-4 h-4" />
                         Nueva Solicitud
@@ -1661,24 +1767,28 @@ export default function SolicitarTelefonia() {
                     {/* Header with Inline Stepper */}
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-4">
                         <h2 className="text-lg font-bold text-gray-900">Nueva Solicitud</h2>
-                        <div className={`flex items-center gap-1 ${currentStep >= 1 ? "text-indigo-600 font-semibold" : ""}`}>
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 1 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>1</div>
-                            <span>Datos</span>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-gray-300" />
-                        <div className={`flex items-center gap-1 ${currentStep >= 2 ? "text-indigo-600 font-semibold" : ""}`}>
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 2 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>2</div>
-                            <span>Config</span>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-gray-300" />
-                        <div className={`flex items-center gap-1 ${currentStep >= 3 ? "text-indigo-600 font-semibold" : ""}`}>
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 3 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>3</div>
-                            <span>Beneficiarios</span>
-                        </div>
-                        <ChevronRight className="w-3 h-3 text-gray-300" />
-                        <div className={`flex items-center gap-1 ${currentStep >= 4 ? "text-indigo-600 font-semibold" : ""}`}>
-                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 4 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>4</div>
-                            <span>Fin</span>
+
+                        {/* Steps Group */}
+                        <div className="flex items-center gap-2 overflow-x-auto">
+                            <div className={`flex items-center gap-1 ${currentStep >= 1 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 1 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>1</div>
+                                <span className="whitespace-nowrap">Datos</span>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+                            <div className={`flex items-center gap-1 ${currentStep >= 2 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 2 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>2</div>
+                                <span className="whitespace-nowrap">Config</span>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+                            <div className={`flex items-center gap-1 ${currentStep >= 3 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 3 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>3</div>
+                                <span className="whitespace-nowrap">Beneficiarios</span>
+                            </div>
+                            <ChevronRight className="w-3 h-3 text-gray-300" />
+                            <div className={`flex items-center gap-1 ${currentStep >= 4 ? "text-indigo-600 font-semibold" : ""}`}>
+                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 4 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>4</div>
+                                <span className="whitespace-nowrap">Fin</span>
+                            </div>
                         </div>
                     </div>
                     {/* Removed Old StepIndicator component */}
@@ -1688,7 +1798,7 @@ export default function SolicitarTelefonia() {
                             {renderStepContent()}
                         </div>
 
-                        <div className="flex justify-between pt-4 border-t mt-6">
+                        <div className="flex justify-between pt-4 border-t border-gray-200 mt-6">
                             <button
                                 type="button"
                                 onClick={() => {

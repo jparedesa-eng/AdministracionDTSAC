@@ -749,7 +749,7 @@ export const telefoniaStore = {
         })) as Solicitud[];
     },
 
-    async createSolicitud(sol: Partial<Solicitud>, beneficiariosList: BeneficiarioInput[] = []) {
+    async createSolicitud(sol: Partial<Solicitud>, asignacionesList: Partial<Asignacion>[] = []) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
         const { equipo, chip, id, created_at, usuario, ...rest } = sol;
         const payload: any = { ...rest };
@@ -763,18 +763,15 @@ export const telefoniaStore = {
 
         const newSol = data as Solicitud;
 
-        // Insert Beneficiaries if any
-        if (beneficiariosList.length > 0) {
-            const assignsPayload = beneficiariosList.map(b => ({
+        // Insert Assignments if any
+        if (asignacionesList.length > 0) {
+            const assignsPayload = asignacionesList.map(a => ({
+                ...a,
                 solicitud_id: newSol.id,
                 estado: "Pendiente", // Waiting for assignment
-                // Usuario Final (Beneficiary)
-                usuario_final_dni: b.dni,
-                usuario_final_nombre: b.nombre,
-                usuario_final_area: b.area,
-                usuario_final_puesto: b.puesto,
-                // Responsable (Creator of ticket)
-                responsable_dni: newSol.beneficiario_dni, // In new model creator is "beneficiario_*" column
+
+                // Ensure responsible data is linked if not provided (it usually isn't for beneficiaries)
+                responsable_dni: newSol.beneficiario_dni,
                 responsable_nombre: newSol.beneficiario_nombre,
                 responsable_area: newSol.beneficiario_area,
                 responsable_puesto: newSol.beneficiario_puesto
@@ -785,7 +782,7 @@ export const telefoniaStore = {
                 .insert(assignsPayload);
 
             if (assignError) {
-                console.error("Error creating beneficiaries assignments", assignError);
+                console.error("Error creating assignments", assignError);
                 // Non-blocking but warning
             }
         }
@@ -1496,7 +1493,7 @@ export const telefoniaStore = {
         await this.fetchEquipos();
     },
 
-    async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; sede?: string; fecha_entrega_final?: string }) {
+    async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; sede?: string; fecha_entrega_final?: string; puesto?: string }) {
         const { error } = await supabase
             .from("telefonia_solicitud_asignaciones")
             .update({
@@ -1504,6 +1501,7 @@ export const telefoniaStore = {
                 usuario_final_nombre: datos.nombre,
                 usuario_final_area: datos.area,
                 usuario_final_sede: datos.sede,
+                usuario_final_puesto: datos.puesto,
                 fecha_entrega_final: datos.fecha_entrega_final
             })
             .eq("id", asignacionId);

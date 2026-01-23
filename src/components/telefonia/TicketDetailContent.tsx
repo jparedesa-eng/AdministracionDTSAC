@@ -215,7 +215,7 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                             {ticket.alternativa_modelo || ticket.equipo?.modelo || "Estándar"}
                         </p>
                         <p className="text-[10px] text-emerald-600 mt-0.5">
-                            Sujeto a disponibilidad de stock TI
+                            Sujeto a disponibilidad de stock
                         </p>
                     </div>
                 </div>

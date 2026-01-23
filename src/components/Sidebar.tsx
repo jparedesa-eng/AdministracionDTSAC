@@ -124,15 +124,16 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeCoberturaOperadores = hasAccess("/configuracion/cobertura-operadores");
 
   // Seguridad
-  const canSeeSeg_Programacion = hasAccess("/seguridad/programacion");
-  const canSeeSeg_Recursos = hasAccess("/seguridad/recursos");
-  const canSeeSeg_ChecklistCamaras = hasAccess("/seguridad/checklist-camaras");
-  const canSeeSeg_InventarioCamaras = hasAccess("/seguridad/inventario-camaras");
-  const canSeeSeg_MonitoreoPT = hasAccess("/seguridad/monitoreo-pt");
-  const canSeeSeg_Destinos = hasAccess("/seguridad/destinos");
-  const canSeeSeg_TiemposViaje = hasAccess("/seguridad/tiempos-viaje");
-  const canSeeSeg_ReportingManager = hasAccess("/seguridad/reporting-manager");
-  const canSeeSeg_AgentReport = hasAccess("/seguridad/agent-report");
+  const canSeeSeg_Programacion = hasAccess("/programacion-puestos/programacion");
+  const canSeeSeg_Recursos = hasAccess("/programacion-puestos/recursos");
+  const canSeeSeg_ChecklistCamaras = hasAccess("/checklist-cctv/checklist-camaras");
+  const canSeeSeg_Dashboard = hasAccess("/checklist-cctv/dashboard");
+  const canSeeSeg_InventarioCamaras = hasAccess("/checklist-cctv/inventario-camaras");
+  const canSeeSeg_MonitoreoPT = hasAccess("/monitoreo-unidades/monitoreo-pt");
+  const canSeeSeg_Destinos = hasAccess("/monitoreo-unidades/destinos");
+  const canSeeSeg_TiemposViaje = hasAccess("/monitoreo-unidades/tiempos-viaje");
+  const canSeeSeg_ReportingManager = hasAccess("/seguimiento-agentes/reporting-manager");
+  const canSeeSeg_AgentReport = hasAccess("/seguimiento-agentes/agent-report");
   const canSeeAyuda = hasAccess("/ayuda");
 
 
@@ -205,8 +206,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 1. Programacion de puestos
     const progSubItems: NavItem[] = [];
-    if (canSeeSeg_Programacion) progSubItems.push({ id: 'seg-prog', label: 'Programación', path: '/seguridad/programacion', icon: CalendarDays });
-    if (canSeeSeg_Recursos) progSubItems.push({ id: 'seg-rec', label: 'Recursos', path: '/seguridad/recursos', icon: Users });
+    if (canSeeSeg_Programacion) progSubItems.push({ id: 'seg-prog', label: 'Programación', path: '/programacion-puestos/programacion', icon: CalendarDays });
+    if (canSeeSeg_Recursos) progSubItems.push({ id: 'seg-rec', label: 'Recursos', path: '/programacion-puestos/recursos', icon: Users });
 
     if (progSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-puestos', label: 'Programación de Puestos', icon: CalendarDays, subItems: progSubItems });
@@ -214,13 +215,13 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 2. Checklist CCTV
     const checklistSubItems: NavItem[] = [];
-    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-dash', label: 'Dashboard', path: '/seguridad/dashboard', icon: LayoutDashboard });
-    if (hasAccess("/seguridad/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos CCTV', path: '/seguridad/eventos', icon: Settings });
-    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/seguridad/checklist-camaras', icon: ClipboardList });
-    if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/seguridad/inventario-camaras', icon: Wrench });
-    if (hasAccess("/seguridad/pantallas")) checklistSubItems.push({ id: 'seg-pant', label: 'Inventario Pan.', path: '/seguridad/pantallas', icon: Monitor });
-    if (hasAccess("/seguridad/nvr")) checklistSubItems.push({ id: 'seg-nvr', label: 'Inventario NVR', path: '/seguridad/nvr', icon: Building2 });
-    if (hasAccess("/seguridad/sensores")) checklistSubItems.push({ id: 'seg-sens', label: 'Inventario Sens.', path: '/seguridad/sensores', icon: Activity });
+    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-dash', label: 'Dashboard', path: '/checklist-cctv/dashboard', icon: LayoutDashboard });
+    if (hasAccess("/checklist-cctv/eventos")) checklistSubItems.push({ id: 'seg-evts', label: 'Eventos CCTV', path: '/checklist-cctv/eventos', icon: Settings });
+    if (canSeeSeg_ChecklistCamaras) checklistSubItems.push({ id: 'seg-check', label: 'Checklist Cam.', path: '/checklist-cctv/checklist-camaras', icon: ClipboardList });
+    if (canSeeSeg_InventarioCamaras) checklistSubItems.push({ id: 'seg-inv', label: 'Inventario Cam.', path: '/checklist-cctv/inventario-camaras', icon: Wrench });
+    if (hasAccess("/checklist-cctv/pantallas")) checklistSubItems.push({ id: 'seg-pant', label: 'Inventario Pan.', path: '/checklist-cctv/pantallas', icon: Monitor });
+    if (hasAccess("/checklist-cctv/nvr")) checklistSubItems.push({ id: 'seg-nvr', label: 'Inventario NVR', path: '/checklist-cctv/nvr', icon: Building2 });
+    if (hasAccess("/checklist-cctv/sensores")) checklistSubItems.push({ id: 'seg-sens', label: 'Inventario Sens.', path: '/checklist-cctv/sensores', icon: Activity });
 
     if (checklistSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-camaras', label: 'Checklist CCTV', icon: ClipboardList, subItems: checklistSubItems });
@@ -228,9 +229,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 3. Monitoreo de Unidades
     const monitoreoSubItems: NavItem[] = [];
-    if (canSeeSeg_MonitoreoPT) monitoreoSubItems.push({ id: 'seg-mon', label: 'Monitoreo PT', path: '/seguridad/monitoreo-pt', icon: Monitor });
-    if (canSeeSeg_Destinos) monitoreoSubItems.push({ id: 'seg-dest', label: 'Lugares de Destino', path: '/seguridad/destinos', icon: MapPin });
-    if (canSeeSeg_TiemposViaje) monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/seguridad/tiempos-viaje', icon: Truck });
+    if (canSeeSeg_MonitoreoPT) monitoreoSubItems.push({ id: 'seg-mon', label: 'Monitoreo PT', path: '/monitoreo-unidades/monitoreo-pt', icon: Monitor });
+    if (canSeeSeg_Destinos) monitoreoSubItems.push({ id: 'seg-dest', label: 'Lugares de Destino', path: '/monitoreo-unidades/destinos', icon: MapPin });
+    if (canSeeSeg_TiemposViaje) monitoreoSubItems.push({ id: 'seg-viaje', label: 'Tiempos de Viaje', path: '/monitoreo-unidades/tiempos-viaje', icon: Truck });
 
     if (monitoreoSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-unidades', label: 'Monitoreo de Unidades', icon: Route, subItems: monitoreoSubItems });
@@ -238,8 +239,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 4. Seguimiento Agentes
     const agentesSubItems: NavItem[] = [];
-    if (canSeeSeg_ReportingManager) agentesSubItems.push({ id: 'seg-rep', label: 'Reporte de Puestos', path: '/seguridad/reporting-manager', icon: ShieldCheck });
-    if (canSeeSeg_AgentReport) agentesSubItems.push({ id: 'seg-agent', label: 'Terminal de Agente', path: '/seguridad/agent-report', icon: Smartphone });
+    if (canSeeSeg_ReportingManager) agentesSubItems.push({ id: 'seg-rep', label: 'Reporte de Puestos', path: '/seguimiento-agentes/reporting-manager', icon: ShieldCheck });
+    if (canSeeSeg_AgentReport) agentesSubItems.push({ id: 'seg-agent', label: 'Terminal de Agente', path: '/seguimiento-agentes/agent-report', icon: Smartphone });
 
     if (agentesSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-agentes', label: 'Seguimiento Agentes', icon: Users, subItems: agentesSubItems }); // Changed icon to Users regarding 'Agentes'
