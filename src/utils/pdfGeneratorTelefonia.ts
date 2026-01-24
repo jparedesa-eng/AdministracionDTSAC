@@ -156,7 +156,6 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
     if (isReposicion) {
         const detalle = ticket.detalle_reposicion || {};
         const simulacion = ticket.simulacion_descuento;
-
         const motivoRep = detalle.motivo || "-";
         const asume = detalle.asume || "-";
         const cuotas = detalle.cuotas || 0;
@@ -269,7 +268,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
                     `IMEI: ${a.equipo.imei}`,
                     a.equipo.condicion || "-",
                     a.chip?.numero_linea || "-",
-                    a.usuario_final_nombre || "-"
+                    a.usuario_final_nombre || a.responsable_nombre || ticket.beneficiario_nombre || "-"
                 ]);
             } else if (a.chip) {
                 // SOLO CHIP CASE
@@ -281,10 +280,10 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
                     `Destino: ${destType} - ${destCode}`,
                     "Nuevo",
                     a.chip.numero_linea || "-",
-                    a.usuario_final_nombre || "-"
+                    a.usuario_final_nombre || a.responsable_nombre || ticket.beneficiario_nombre || "-"
                 ]);
             } else {
-                equipamientoBody.push([i + 1, "Pendiente", "-", "-", "-", "-"]);
+                equipamientoBody.push([i + 1, "Pendiente", "-", "-", "-", a.usuario_final_nombre || a.responsable_nombre || ticket.beneficiario_nombre || "-"]);
             }
         });
     } else if (ticket.equipo) {
@@ -321,6 +320,40 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
         head: [['#', 'Modelo', 'Detalle', 'Condición', 'Línea', 'Beneficiario']],
         body: equipamientoBody,
         headStyles: { fillColor: [44, 62, 80], textColor: 255 }
+    });
+
+    // 4.1 DETALLE USUARIOS
+    currentY = (doc as any).lastAutoTable.finalY + 10;
+    currentY = addSectionTitle("Detalle de Usuarios Asignados", currentY);
+
+    const usuariosBody: any[] = [];
+    if (asignaciones.length > 0) {
+        asignaciones.forEach((a, i) => {
+            usuariosBody.push([
+                i + 1,
+                a.usuario_final_nombre || a.responsable_nombre || ticket.beneficiario_nombre || "-",
+                a.usuario_final_dni || a.responsable_dni || ticket.beneficiario_dni || "-",
+                a.usuario_final_puesto || a.usuario_final_area || a.responsable_puesto || ticket.beneficiario_puesto || "-",
+                a.usuario_final_sede || ticket.fundo_planta || "-"
+            ]);
+        });
+    } else {
+        usuariosBody.push([
+            "1",
+            ticket.beneficiario_nombre || "Beneficiario",
+            ticket.beneficiario_dni || "-",
+            ticket.beneficiario_puesto || "-",
+            ticket.fundo_planta || "-"
+        ]);
+    }
+
+    autoTable(doc, {
+        startY: currentY,
+        ...tableStyles,
+        head: [['#', 'Usuario Final', 'DNI', 'Puesto', 'Sede']],
+        body: usuariosBody,
+        headStyles: { fillColor: [44, 62, 80], textColor: 255 },
+        columnStyles: { 0: { cellWidth: 10, halign: 'center' } }
     });
 
     // 5. APROBACIONES

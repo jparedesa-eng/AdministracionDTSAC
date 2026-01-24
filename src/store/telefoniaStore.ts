@@ -3,7 +3,7 @@ import { supabase } from "../supabase/supabaseClient";
 /* =========================
  * Tipos
  * ========================= */
-export type EstadoEquipo = "Disponible" | "Asignado" | "Mantenimiento" | "Baja";
+export type EstadoEquipo = "Disponible" | "Asignado" | "Mantenimiento" | "Baja" | "Para Devolucion" | "Para Revisión";
 export type EstadoChip = "Disponible" | "Asignado" | "Baja";
 export type EstadoSolicitud =
     | "Pendiente IT" // Legacy or specific workflow
@@ -155,7 +155,7 @@ export interface Solicitud {
     // estado_retorno?: string | null; // Removed
     // observaciones_retorno?: string | null; // Removed
 
-    created_by?: string | null;
+    // created_by?: string | null;
 
     // Relations (para UI)
     equipo?: Equipo | null;
@@ -227,6 +227,80 @@ export const telefoniaStore = {
     proyectos: [] as Proyecto[],
     solicitudes: [] as Solicitud[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
+
+    // --- DEVOLUCIONES ---
+    async marcarParaDevolucion(asignacionId: string, equipoId?: string, _chipId?: string) {
+        // 1. Update Asignacion Status
+        const { error: asigError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({ estado: "PARA DEVOLUCION" })
+            .eq("id", asignacionId);
+
+        if (asigError) throw asigError;
+
+        // 2. Update Equipo Status (if exists)
+        if (equipoId) {
+            const { error: eqError } = await supabase
+                .from("telefonia_equipos")
+                .update({ estado: "Para Devolucion" }) // Note casing matches type
+                .eq("id", equipoId);
+
+            if (eqError) throw eqError;
+        }
+
+        // 3. Update Chip Status (if exists and is solo chip or part of package?) 
+        // User mainly mentioned 'Equipo', but let's be safe. If it's a chip assignment, maybe chip status too?
+        // Usually chips don't go "Para Revision" in the same way, but let's stick to user request "cambiando el estado del equipo".
+        // If it's just a chip, maybe we treat it similar. 
+        // For now, I will assume this applies primarily to physical Equipment.
+    },
+
+    async recepcionarEquipo(asignacionId: string, equipoId?: string) {
+        // 1. Update Asignacion Status
+        const { error: asigError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({ estado: "PARA REVISION" })
+            .eq("id", asignacionId);
+
+        if (asigError) throw asigError;
+
+        // 2. Update Equipo Status
+        if (equipoId) {
+            const { error } = await supabase
+                .from("telefonia_equipos")
+                .update({ estado: "Para Revisión" })
+                .eq("id", equipoId);
+            if (error) throw error;
+        }
+    },
+
+    async finalizarRevision(asignacionId: string, equipoId: string, nuevoEstado: "Disponible" | "Mantenimiento") {
+        // 1. Update Equipo Status
+        const { error: eqError } = await supabase
+            .from("telefonia_equipos")
+            .update({
+                estado: nuevoEstado,
+                // If it's available, it's no longer assigned physically? 
+                // Wait, logic says "DISPONBILE SI ESTA BUENO".
+                // We should probably unlink the active assignment?
+                // But the user said "EL ESTADO EN ASIGNACIONES CAMBIARIA A DEVUELTO".
+            })
+            .eq("id", equipoId);
+
+        if (eqError) throw eqError;
+
+        // 2. Update Asignacion Status -> "DEVUELTO"
+        const { error: asigError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                estado: "DEVUELTO",
+                fecha_devolucion: new Date().toISOString() // Set return date now
+            })
+            .eq("id", asignacionId);
+
+        if (asigError) throw asigError;
+    },
+
 
     // --- PROYECTOS ---
     async fetchProyectos() {
@@ -412,6 +486,7 @@ export const telefoniaStore = {
                     usuario_final_sede,
                     fecha_entrega, 
                     solicitud_id,
+                    estado,
                     solicitud:telefonia_solicitudes (
                         beneficiario_nombre,
                         beneficiario_area,
@@ -420,7 +495,7 @@ export const telefoniaStore = {
                         fecha_fin_uso
                     )
                 `)
-                .eq("estado", "Entregado")
+                .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
                 .is("fecha_devolucion", null);
 
             if (!newAssignError && newAssigns) {
@@ -545,6 +620,7 @@ export const telefoniaStore = {
                     usuario_final_sede,
                     fecha_entrega, 
                     solicitud_id,
+                    estado,
                     solicitud:telefonia_solicitudes (
                         beneficiario_nombre,
                         beneficiario_area,
@@ -553,7 +629,7 @@ export const telefoniaStore = {
                         fecha_fin_uso
                     )
                 `)
-                .eq("estado", "Entregado")
+                .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
                 .is("fecha_devolucion", null)
                 .not("chip_id", "is", null);
 
@@ -773,8 +849,7 @@ export const telefoniaStore = {
                 // Ensure responsible data is linked if not provided (it usually isn't for beneficiaries)
                 responsable_dni: newSol.beneficiario_dni,
                 responsable_nombre: newSol.beneficiario_nombre,
-                responsable_area: newSol.beneficiario_area,
-                responsable_puesto: newSol.beneficiario_puesto
+                responsable_area: newSol.beneficiario_area
             }));
 
             const { error: assignError } = await supabase
@@ -823,6 +898,22 @@ export const telefoniaStore = {
             .eq("id", chipId);
         if (errCh) throw errCh;
 
+        // 3. Update Active Assignment if exists (Fix for vincular post-delivery)
+        const { data: activeAssignments } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("id")
+            .eq("equipo_id", equipoId)
+            .eq("estado", "Entregado");
+
+        if (activeAssignments && activeAssignments.length > 0) {
+            for (const assign of activeAssignments) {
+                await supabase
+                    .from("telefonia_solicitud_asignaciones")
+                    .update({ chip_id: chipId })
+                    .eq("id", assign.id);
+            }
+        }
+
         await this.fetchEquipos();
         await this.fetchChips();
     },
@@ -834,11 +925,30 @@ export const telefoniaStore = {
             .eq("id", equipoId);
         if (errEq) throw errEq;
 
+        // 2. Update Chip
         const { error: errCh } = await supabase
             .from("telefonia_chips")
             .update({ equipo_id: null })
             .eq("id", chipId);
         if (errCh) throw errCh;
+
+        // 3. Update Active Assignment if exists (Fix for desvincular post-delivery)
+        // ONLY if status is 'Entregado' (not Devuelto)
+        const { data: activeAssignments } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("id")
+            .eq("equipo_id", equipoId)
+            .eq("chip_id", chipId) // Ensure we are unlinking the correct chip from the assignment
+            .eq("estado", "Entregado");
+
+        if (activeAssignments && activeAssignments.length > 0) {
+            for (const assign of activeAssignments) {
+                await supabase
+                    .from("telefonia_solicitud_asignaciones")
+                    .update({ chip_id: null }) // Remove chip from assignment
+                    .eq("id", assign.id);
+            }
+        }
 
         await this.fetchEquipos();
         await this.fetchChips();
@@ -1110,7 +1220,7 @@ export const telefoniaStore = {
             beneficiario_nombre: datosResponsable.nombre,
             beneficiario_area: datosResponsable.area,
             // beneficiario_puesto is set above from ticketData
-            created_by: ticketData?.usuario_creador_id || null
+            usuario_creador_id: ticketData?.usuario_creador_id || null
         };
 
         const { data: ticket, error: ticketError } = await supabase
@@ -1127,6 +1237,7 @@ export const telefoniaStore = {
             chip_id: equipo?.chip_id || null,
             estado: "Entregado",
             fecha_entrega: fechaEntrega,
+            fecha_entrega_final: fechaEntrega,
             solicitud_id: ticket.id,
 
             // Usuario Final
@@ -1228,7 +1339,7 @@ export const telefoniaStore = {
             beneficiario_dni: datosResponsable.dni,
             beneficiario_nombre: datosResponsable.nombre,
             beneficiario_area: datosResponsable.area,
-            created_by: ticketData.usuario_creador_id,
+            usuario_creador_id: ticketData.usuario_creador_id,
             // New Device Fields
             tipo_equipo_destino: deviceData.tipo_equipo,
             codigo_equipo_destino: deviceData.codigo
@@ -1326,7 +1437,7 @@ export const telefoniaStore = {
             justificacion: motivo,
             estado: "Pendiente Admin",
             beneficiario_nombre: "INTERNAL_SYSTEM",
-            created_by: usuarioId
+            usuario_creador_id: usuarioId
         };
 
         const { data: ticket, error } = await supabase
@@ -1396,18 +1507,18 @@ export const telefoniaStore = {
                 chip:telefonia_chips(*)
             `)
             .eq("responsable_dni", dni)
-            .eq("estado", "Entregado")
+            .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
             .is("fecha_devolucion", null);
 
         if (error) throw error;
         return data as Asignacion[];
     },
 
-    async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string) {
+    async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string, gr?: string) {
         // 0. Fetch Ticket Data to propagate fields (e.g. tipo_equipo_destino) and location
         const { data: ticketData } = await supabase
             .from("telefonia_solicitudes")
-            .select("fundo_planta, tipo_equipo_destino, codigo_equipo_destino")
+            .select("fundo_planta, tipo_equipo_destino, codigo_equipo_destino, beneficiario_dni, beneficiario_nombre, beneficiario_area, beneficiario_puesto")
             .eq("id", solicitudId)
             .single();
 
@@ -1426,7 +1537,11 @@ export const telefoniaStore = {
                 // Propagate fields from Ticket if present
                 tipo_equipo_destino: ticketData?.tipo_equipo_destino || null,
                 codigo_equipo_destino: ticketData?.codigo_equipo_destino || null,
-                usuario_final_sede: ticketData?.fundo_planta || null
+
+                // Ensure Responsable Data is filled (User Request)
+                responsable_dni: ticketData?.beneficiario_dni || null,
+                responsable_nombre: ticketData?.beneficiario_nombre || null,
+                responsable_area: ticketData?.beneficiario_area || null
             };
 
             if ((item as any).asignacionId) {
@@ -1441,6 +1556,7 @@ export const telefoniaStore = {
                 // INSERT new assignment (Legacy fallback)
                 newAssignments.push({
                     solicitud_id: solicitudId,
+                    usuario_final_sede: ticketData?.fundo_planta || null, // Add default Sede for new assignments
                     ...assignmentPayload
                 });
             }
@@ -1486,7 +1602,8 @@ export const telefoniaStore = {
         await this.updateSolicitud(solicitudId, {
             estado: "Entregado",
             fecha_entrega: new Date().toISOString(),
-            recibido_por: firma
+            recibido_por: firma,
+            gr: gr
         });
 
         await this.fetchSolicitudes();

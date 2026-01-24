@@ -31,12 +31,14 @@ import { getPuestosState, subscribePuestos } from "../../store/puestosStore";
 import {
     getProgramacionState,
     subscribeProgramacion,
-    upsertProgramacion,
     deleteAssignmentsByCell,
     refreshProgramacion,
     deleteProgramacion,
-    updateAssignmentStatus
+    updateAssignmentStatus,
+    bulkUpsertProgramacion,
+    upsertProgramacion
 } from "../../store/programacionStore";
+import { upsertAgente } from "../../store/agentesStore";
 
 // --- Helpers de Fecha ---
 
@@ -247,6 +249,7 @@ export default function ProgramacionPuestos() {
 
     // Modals
     const [modalOpen, setModalOpen] = useState(false);
+    const [bulkModalOpen, setBulkModalOpen] = useState(false); // Modal "Grupales"
     const [agentViewOpen, setAgentViewOpen] = useState(false); // Modal "Por Agente"
 
     const [activeCell, setActiveCell] = useState<{
@@ -365,6 +368,10 @@ export default function ProgramacionPuestos() {
 
     // Validar asignacion diaria unica (Global)
     const isAgentAssignedElsewhere = (agentId: string, fullDateStr: string, currentKey: string): boolean => {
+        // "Prosegur" exception: Can be assigned multiple times anywhere.
+        const agentName = agentes.find(a => a.id === agentId)?.nombre || "";
+        if (agentName.startsWith("Prosegur")) return false;
+
         return Object.entries(assignments).some(([key, valArray]) => {
             if (key === currentKey) return false; // Misma celda, ignorar (aunque ahora es array, chequeamos duplicados visualmente)
 
@@ -619,7 +626,8 @@ export default function ProgramacionPuestos() {
         if (!newAgentId) return;
 
         // Validar si ya está en ESTA lista
-        if (editAssignments.some(a => a.agenteId === newAgentId)) {
+        const agentName = agentes.find(a => a.id === newAgentId)?.nombre || "";
+        if (!agentName.startsWith("Prosegur") && editAssignments.some(a => a.agenteId === newAgentId)) {
             setToast({ type: "error", message: "El agente ya está asignado a este puesto." });
             return;
         }
@@ -643,6 +651,31 @@ export default function ProgramacionPuestos() {
 
         executeAddAgent(newAgentId);
     };
+
+    const handleAssignProsegur = async (variant: "12h" | "24h") => {
+        const prosegurName = `Prosegur ${variant}`;
+        let prosegurAgent = agentes.find(a => a.nombre === prosegurName);
+
+        if (!prosegurAgent) {
+            try {
+                // Auto-create if not exists
+                await upsertAgente({
+                    nombre: prosegurName,
+                    activo: true
+                });
+                // Find agent again after creation implies store update via listener
+                setToast({ type: "info", message: `Creando agente ${prosegurName}... Inténtelo de nuevo.` });
+                return;
+            } catch (e) {
+                console.error(e);
+                setToast({ type: "error", message: `Error al crear agente ${prosegurName}` });
+                return;
+            }
+        }
+        executeAddAgent(prosegurAgent.id);
+    };
+
+
 
     const handleConfirmAdd = async () => {
         if (agentModalOpen) {
@@ -818,6 +851,26 @@ export default function ProgramacionPuestos() {
             <div className="flex flex-col flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">
                 <Toast toast={toast} onClose={() => setToast(null)} />
 
+                {/* Bulk Modal */}
+                <BulkAssignmentModal
+                    open={bulkModalOpen}
+                    onClose={() => setBulkModalOpen(false)}
+                    agentes={agentes}
+                    sedes={sedes}
+                    puestos={puestos}
+                    assignments={assignments}
+                    onSave={async (inputs) => {
+                        try {
+                            setToast({ type: "info", message: "Procesando programación masiva..." });
+                            await bulkUpsertProgramacion(inputs);
+                            setToast({ type: "success", message: "Programación masiva completada." });
+                            setBulkModalOpen(false);
+                        } catch (err: any) {
+                            setToast({ type: "error", message: err.message || "Error en programación masiva" });
+                        }
+                    }}
+                />
+
                 {/* Toolbar "Inside" Table Header */}
                 <div className="flex flex-col xl:flex-row items-center justify-between p-4 border-b border-gray-200 gap-4 bg-white">
 
@@ -901,6 +954,15 @@ export default function ProgramacionPuestos() {
                         >
                             <Camera className="h-4 w-4" />
                             <span className="hidden xl:inline">Capturar</span>
+                        </button>
+
+                        <button
+                            onClick={() => setBulkModalOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
+                            title="Programación Masiva"
+                        >
+                            <Calendar className="h-4 w-4" />
+                            <span className="hidden xl:inline">Masivo</span>
                         </button>
                     </div>
                 </div>
@@ -1022,12 +1084,12 @@ export default function ProgramacionPuestos() {
 
                                                                             return (
                                                                                 <div
-                                                                                    key={assign.agenteId}
+                                                                                    key={assign.id || assign.agenteId}
                                                                                     className={`flex-1 ${badgeClass} rounded flex items-center justify-center border text-[9px] font-bold leading-none w-full min-h-0 relative group/item`}
                                                                                     title={agent?.nombre}
                                                                                 >
                                                                                     <span className="truncate px-1">
-                                                                                        {assign.status === "FALTA" ? "FALTA" : name}
+                                                                                        {assign.status === "FALTA" ? "FALTA" : (agent?.nombre.startsWith("Prosegur") ? agent?.nombre.toUpperCase() : name)}
                                                                                     </span>
                                                                                 </div>
                                                                             );
@@ -1198,8 +1260,8 @@ export default function ProgramacionPuestos() {
                                 </div>
                             ) : (
                                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-1">
-                                    {editAssignments.map((assign) => (
-                                        <div key={assign.agenteId} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:border-blue-300 transition-colors">
+                                    {editAssignments.map((assign, idx) => (
+                                        <div key={assign.id || `temp-${idx}`} className="p-3 bg-white border border-gray-200 rounded-lg shadow-sm hover:border-blue-300 transition-colors">
                                             {/* Header con nombre y botón eliminar */}
                                             <div className="flex items-center justify-between mb-3">
                                                 <div className="flex items-center gap-3">
@@ -1344,7 +1406,10 @@ export default function ProgramacionPuestos() {
                                     agents={
                                         // Filtramos agentes que YA están en la lista provisional (editAssignments)
                                         // O que ya están asignados en otro lugar ese mismo día (isAgentAssignedElsewhere)
+                                        // EXCEPTION: "Prosegur" can be anywhere and duplicated.
                                         activeAgents.filter(agent => {
+                                            if (agent.nombre.startsWith("Prosegur")) return true;
+
                                             const alreadyInList = editAssignments.some(ea => ea.agenteId === agent.id);
                                             if (alreadyInList) return false;
 
@@ -1369,6 +1434,24 @@ export default function ProgramacionPuestos() {
                                     Agregar
                                 </button>
                             </div>
+                        </div>
+
+                        {/* Quick Add Prosegur */}
+                        <div className="pt-2 border-t border-gray-100 flex justify-end gap-2">
+                            <button
+                                onClick={() => handleAssignProsegur("12h")}
+                                className="text-xs flex items-center gap-1.5 px-3 py-2 bg-slate-700 text-white rounded-md hover:bg-slate-600 transition"
+                            >
+                                <ShieldCheck className="h-3 w-3" />
+                                Prosegur 12h
+                            </button>
+                            <button
+                                onClick={() => handleAssignProsegur("24h")}
+                                className="text-xs flex items-center gap-1.5 px-3 py-2 bg-slate-900 text-white rounded-md hover:bg-slate-800 transition"
+                            >
+                                <ShieldCheck className="h-3 w-3" />
+                                Prosegur 24h
+                            </button>
                         </div>
 
                         {/* Footer Actions */}
@@ -1836,5 +1919,422 @@ export default function ProgramacionPuestos() {
                 </Modal>
             </div>
         </div>
+    );
+}
+
+// --- Bulk Assignment Modal Component ---
+function BulkAssignmentModal({
+    open,
+    onClose,
+    agentes,
+    sedes,
+    puestos,
+    assignments,
+    onSave
+}: {
+    open: boolean;
+    onClose: () => void;
+    agentes: { id: string; nombre: string }[];
+    sedes: { id: string; nombre: string }[];
+    puestos: { id: string; nombre: string; sede_id: string }[];
+    assignments: Record<string, Assignment[]>;
+    onSave: (inputs: any[]) => void;
+}) {
+    // Local State
+    const [selectedAgentId, setSelectedAgentId] = useState("");
+    const [selectedSedeId, setSelectedSedeId] = useState("");
+    const [selectedPuestoId, setSelectedPuestoId] = useState("");
+    const [selectedTurno, setSelectedTurno] = useState<Turno>("DIA");
+
+    // Dates
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+
+    // Days of Week (0=Sun, 1=Mon, ..., 6=Sat) - Default Mon-Fri (1,2,3,4,5)
+    // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri
+    const [selectedDays, setSelectedDays] = useState<number[]>([1, 2, 3, 4, 5]);
+
+    // Confirm Modal State
+    const [confirmModal, setConfirmModal] = useState<{
+        open: boolean;
+        title: string;
+        message: React.ReactNode;
+        type: 'ERROR' | 'WARNING';
+        onConfirm?: () => void;
+    }>({
+        open: false,
+        title: "",
+        message: "",
+        type: 'ERROR'
+    });
+
+    // Reset on open
+    useEffect(() => {
+        if (open) {
+            // Try to auto-select "Prosegur"
+            // Try to auto-select "Prosegur 12h"
+            const prosegur = agentes.find(a => a.nombre === "Prosegur 12h") || agentes.find(a => a.nombre === "Prosegur 24h");
+            if (prosegur) {
+                setSelectedAgentId(prosegur.id);
+            } else {
+                setSelectedAgentId("");
+            }
+            setSelectedSedeId("");
+            setSelectedPuestoId("");
+            setStartDate("");
+            setEndDate("");
+            setSelectedDays([1, 2, 3, 4, 5]);
+            setConfirmModal({ open: false, title: "", message: "", type: 'ERROR' });
+        }
+    }, [open, agentes]);
+
+    const filteredPuestos = useMemo(() => {
+        if (!selectedSedeId) return [];
+        return puestos.filter(p => p.sede_id === selectedSedeId);
+    }, [selectedSedeId, puestos]);
+
+    const handleToggleDay = (day: number) => {
+        setSelectedDays(prev =>
+            prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day]
+        );
+    };
+
+    const getWeekNumber = (d: Date) => {
+        // Copy date so don't modify original
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        // Set to nearest Thursday: current date + 4 - current day number
+        // Make Sunday's day number 7
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
+        // Get first day of year
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+        // Calculate full weeks to nearest Thursday
+        const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+        return `${d.getUTCFullYear()}-W${weekNo}`;
+    }
+
+    const isAgentAssignedOnDate = (agentId: string, dateStr: string): boolean => {
+        // Check all assignments for this date
+        return Object.entries(assignments).some(([key, valArray]) => {
+            const [kDate] = key.split("|");
+            if (kDate !== dateStr) return false;
+
+            // If any assignment for this date has this agent
+            return valArray?.some(a => a.agenteId === agentId);
+        });
+    };
+
+    const handleSave = () => {
+        if (!selectedAgentId || !selectedPuestoId || !startDate || !endDate || selectedDays.length === 0) {
+            setConfirmModal({
+                open: true,
+                title: "Campos Incompletos",
+                message: "Por favor complete todos los campos requeridos.",
+                type: 'ERROR'
+            });
+            return;
+        }
+
+        const agentName = agentes.find(a => a.id === selectedAgentId)?.nombre || "";
+        const isProsegur = agentName.startsWith("Prosegur");
+        const isProsegur24h = agentName === "Prosegur 24h";
+
+        // Parse dates
+        const sParts = startDate.split('-').map(Number);
+        const sDate = new Date(sParts[0], sParts[1] - 1, sParts[2]);
+        const eParts = endDate.split('-').map(Number);
+        const eDate = new Date(eParts[0], eParts[1] - 1, eParts[2]);
+
+        const newAssignments: any[] = [];
+        const conflicts: string[] = [];
+
+        // Validation: Track work days per week
+        // Map: WeekStr -> Set<DateStr>
+        const workDaysPerWeek: Record<string, Set<string>> = {};
+
+        // 1. Populate with EXISTING assignments for this agent
+        if (!isProsegur) {
+            Object.entries(assignments).forEach(([key, valArray]) => {
+                const [dateStr] = key.split("|");
+                // Check if agent is in this cell
+                if (valArray.some(a => a.agenteId === selectedAgentId)) {
+                    const [y, m, d] = dateStr.split('-').map(Number);
+                    const dateObj = new Date(y, m - 1, d);
+                    const weekKey = getWeekNumber(dateObj);
+
+                    if (!workDaysPerWeek[weekKey]) workDaysPerWeek[weekKey] = new Set();
+                    workDaysPerWeek[weekKey].add(dateStr);
+                }
+            });
+        }
+
+        // 2. Iterate requested range
+        for (let d = new Date(sDate); d <= eDate; d.setDate(d.getDate() + 1)) {
+            if (selectedDays.includes(d.getDay())) {
+                const y = d.getFullYear();
+                const m = String(d.getMonth() + 1).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const dateStr = `${y}-${m}-${day}`;
+                const weekKey = getWeekNumber(d);
+
+                // --- DUPLICATE CHECK ---
+                // If not Prosegur, check if already assigned TODAY
+                if (!isProsegur) {
+                    if (isAgentAssignedOnDate(selectedAgentId, dateStr)) {
+                        conflicts.push(dateStr);
+                    }
+
+                    // Add to week count (even if conflict, to show full picture logic)
+                    if (!workDaysPerWeek[weekKey]) workDaysPerWeek[weekKey] = new Set();
+                    workDaysPerWeek[weekKey].add(dateStr);
+                }
+
+                // Prepare Payload
+                if (isProsegur24h) {
+                    newAssignments.push({
+                        fecha: dateStr,
+                        puesto_id: selectedPuestoId,
+                        turno: 'DIA',
+                        agente_id: selectedAgentId,
+                        status: 'PENDING'
+                    });
+                    newAssignments.push({
+                        fecha: dateStr,
+                        puesto_id: selectedPuestoId,
+                        turno: 'NOCHE',
+                        agente_id: selectedAgentId,
+                        status: 'PENDING'
+                    });
+                } else {
+                    newAssignments.push({
+                        fecha: dateStr,
+                        puesto_id: selectedPuestoId,
+                        turno: selectedTurno,
+                        agente_id: selectedAgentId,
+                        status: 'PENDING'
+                    });
+                }
+            }
+        }
+
+        // --- BLOCK: Duplicates ---
+        if (conflicts.length > 0) {
+            const conflictMsg = (
+                <div className="text-sm text-gray-700">
+                    <p className="mb-2">El agente ya tiene asignaciones en los siguientes días:</p>
+                    <ul className="list-disc list-inside mb-4 font-mono bg-gray-50 p-2 rounded border border-gray-200 h-32 overflow-y-auto">
+                        {conflicts.map(c => <li key={c}>{c}</li>)}
+                    </ul>
+                    <p className="font-bold text-red-600">No se puede programar doble turno para agentes regulares.</p>
+                </div>
+            );
+
+            setConfirmModal({
+                open: true,
+                title: "Conflicto de Horario",
+                message: conflictMsg,
+                type: 'ERROR'
+            });
+            return;
+        }
+
+        // --- WARNING: 6+ Days Rule ---
+        if (!isProsegur) {
+            const weeksExceedingLimit = Object.entries(workDaysPerWeek)
+                .filter(([_, days]) => days.size > 5)
+                .map(([week]) => week);
+
+            if (weeksExceedingLimit.length > 0) {
+                const fatigueMsg = (
+                    <div className="text-sm text-gray-700">
+                        <p className="mb-2">El agente excederá los 5 días de trabajo en las siguientes semanas:</p>
+                        <ul className="list-disc list-inside mb-4 font-mono bg-amber-50 p-2 rounded border border-amber-200">
+                            {weeksExceedingLimit.map(w => <li key={w}>{w}</li>)}
+                        </ul>
+                        <p className="font-bold text-amber-700">¿Desea proceder de todos modos?</p>
+                    </div>
+                );
+
+                setConfirmModal({
+                    open: true,
+                    title: "Advertencia de Fatiga",
+                    message: fatigueMsg,
+                    type: 'WARNING',
+                    onConfirm: () => {
+                        setConfirmModal(prev => ({ ...prev, open: false }));
+                        onSave(newAssignments);
+                    }
+                });
+                return;
+            }
+        }
+
+        onSave(newAssignments);
+    };
+
+    const daysMap = [
+        { val: 1, label: "Lun" },
+        { val: 2, label: "Mar" },
+        { val: 3, label: "Mie" },
+        { val: 4, label: "Jue" },
+        { val: 5, label: "Vie" },
+        { val: 6, label: "Sab" },
+        { val: 0, label: "Dom" },
+    ];
+
+    return (
+        <Modal open={open} onClose={onClose} title="Programación Masiva" size="md">
+            <div className="mt-4 space-y-5">
+                {/* 1. Agente */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Agente</label>
+                    <AgentSelect agents={agentes} value={selectedAgentId} onChange={setSelectedAgentId} />
+                </div>
+
+                {/* 2. Sede & Puesto & Turno */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Sede</label>
+                        <select
+                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            value={selectedSedeId}
+                            onChange={(e) => { setSelectedSedeId(e.target.value); setSelectedPuestoId(""); }}
+                        >
+                            <option value="">Seleccione Sede</option>
+                            {sedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Puesto</label>
+                        <select
+                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            value={selectedPuestoId}
+                            onChange={(e) => setSelectedPuestoId(e.target.value)}
+                            disabled={!selectedSedeId}
+                        >
+                            <option value="">Seleccione Puesto</option>
+                            {filteredPuestos.map(p => <option key={p.id} value={p.id}>{p.nombre}</option>)}
+                        </select>
+                    </div>
+                </div>
+
+                {/* Turno - Hidden if Prosegur 24h selected */}
+                {agentes.find(a => a.id === selectedAgentId)?.nombre !== "Prosegur 24h" && (
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Turno</label>
+                        <div className="flex gap-4">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="bulkTurno" checked={selectedTurno === 'DIA'} onChange={() => setSelectedTurno('DIA')} />
+                                <span className="text-sm">Día</span>
+                            </label>
+                            <label className="flex items-center gap-2 cursor-pointer">
+                                <input type="radio" name="bulkTurno" checked={selectedTurno === 'NOCHE'} onChange={() => setSelectedTurno('NOCHE')} />
+                                <span className="text-sm">Noche</span>
+                            </label>
+                        </div>
+                    </div>
+                )}
+
+                {/* 3. Fechas */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Fecha Inicio</label>
+                        <input
+                            type="date"
+                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-1.5">Fecha Fin</label>
+                        <input
+                            type="date"
+                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                {/* 4. Días de la semana */}
+                <div>
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide mb-2">Días Aplicables</label>
+                    <div className="flex flex-wrap gap-2">
+                        {daysMap.map((d) => (
+                            <button
+                                key={d.val}
+                                onClick={() => handleToggleDay(d.val)}
+                                className={`px-3 py-1.5 text-xs font-medium rounded border transition-colors ${selectedDays.includes(d.val)
+                                    ? 'bg-blue-600 text-white border-blue-600'
+                                    : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                                    }`}
+                            >
+                                {d.label}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleSave}
+                        className="px-4 py-2 text-sm font-medium text-white bg-slate-900 hover:bg-slate-800 rounded-lg transition-colors"
+                    >
+                        Procesar Programación
+                    </button>
+                </div>
+            </div>
+
+            {/* Custom Confirm/Alert Modal */}
+            <Modal
+                open={confirmModal.open}
+                onClose={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                title={confirmModal.title}
+                size="sm"
+            >
+                <div className="mt-4">
+                    <div className={`p-4 rounded-lg flex gap-3 ${confirmModal.type === 'WARNING' ? 'bg-amber-50 border border-amber-200' : 'bg-red-50 border border-red-200'
+                        }`}>
+                        <div className={`p-2 rounded-full h-fit ${confirmModal.type === 'WARNING' ? 'bg-amber-100 text-amber-600' : 'bg-red-100 text-red-600'
+                            }`}>
+                            <ShieldCheck className="h-5 w-5" />
+                        </div>
+                        <div>
+                            {confirmModal.message}
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 mt-6">
+                        {confirmModal.type === 'WARNING' && (
+                            <button
+                                onClick={() => setConfirmModal(prev => ({ ...prev, open: false }))}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                            >
+                                Cancelar
+                            </button>
+                        )}
+                        <button
+                            onClick={() => {
+                                if (confirmModal.type === 'WARNING' && confirmModal.onConfirm) {
+                                    confirmModal.onConfirm();
+                                } else {
+                                    setConfirmModal(prev => ({ ...prev, open: false }));
+                                }
+                            }}
+                            className={`px-4 py-2 text-sm font-medium text-white rounded-lg transition-colors ${confirmModal.type === 'WARNING' ? 'bg-amber-600 hover:bg-amber-700' : 'bg-red-600 hover:bg-red-700'
+                                }`}
+                        >
+                            {confirmModal.type === 'WARNING' ? 'Confirmar' : 'Entendido'}
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </Modal>
     );
 }

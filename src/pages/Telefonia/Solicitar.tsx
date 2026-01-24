@@ -65,7 +65,7 @@ export default function SolicitarTelefonia() {
     const [previousDevice, setPreviousDevice] = useState<string>("");
 
     // New State for Beneficiaries
-    const [beneficiaries, setBeneficiaries] = useState<{ dni: string, nombre: string, area: string, puesto: string }[]>([]);
+    const [beneficiaries, setBeneficiaries] = useState<{ dni: string, nombre: string, area: string, puesto: string, sede: string }[]>([]);
     const [skipBeneficiaries, setSkipBeneficiaries] = useState(false);
     const [verifyingNumber, setVerifyingNumber] = useState(false);
     const [renewalCalculated, setRenewalCalculated] = useState<{
@@ -159,7 +159,7 @@ export default function SolicitarTelefonia() {
         setBeneficiaries(prev => {
             if (prev.length === count) return prev;
             if (count > prev.length) {
-                const newItems = Array(count - prev.length).fill(null).map(() => ({ dni: "", nombre: "", area: "", puesto: "" }));
+                const newItems = Array(count - prev.length).fill(null).map(() => ({ dni: "", nombre: "", area: "", puesto: "", sede: "" }));
                 return [...prev, ...newItems];
             }
             return prev.slice(0, count);
@@ -213,7 +213,7 @@ export default function SolicitarTelefonia() {
     // Filter mis tickets
     const myTickets = useMemo(() => {
         if (!user?.id) return [];
-        return telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
+        return telefoniaStore.solicitudes.filter(s => s.usuario_creador_id === user.id);
     }, [user?.id, telefoniaStore.solicitudes]);
 
     const [viewMode, setViewMode] = useState<"active" | "history">("active");
@@ -448,8 +448,8 @@ export default function SolicitarTelefonia() {
                 }
             } else if (!skipBeneficiaries) {
                 if (formData.cantidad_lineas > 0) {
-                    const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre);
-                    if (invalid) return { general: "Complete todos los datos de los beneficiarios (DNI 8 dígitos y Nombre)." };
+                    const invalid = beneficiaries.find(b => !b.dni || b.dni.length !== 8 || !b.nombre || !b.sede);
+                    if (invalid) return { general: "Complete todos los datos de los beneficiarios (DNI, Nombre y Sede)." };
                 }
             }
         }
@@ -494,7 +494,7 @@ export default function SolicitarTelefonia() {
                     for (let i = 0; i < toAdd; i++) {
                         // First one defaults to Responsable if empty? Maybe optional.
                         // Lets just add empty but with Puesto pre-filled
-                        newArr.push({ dni: "", nombre: "", area: "", puesto: puestoName });
+                        newArr.push({ dni: "", nombre: "", area: "", puesto: puestoName, sede: "" });
                     }
                 } else if (newArr.length > formData.cantidad_lineas) {
                     newArr.splice(formData.cantidad_lineas);
@@ -622,7 +622,8 @@ export default function SolicitarTelefonia() {
                 dni: a.usuario_final_dni || "",
                 nombre: a.usuario_final_nombre || "",
                 area: a.usuario_final_area || "",
-                puesto: a.usuario_final_puesto || ""
+                puesto: a.usuario_final_puesto || "",
+                sede: a.usuario_final_sede || ""
             })));
         } else {
             setBeneficiaries([]);
@@ -660,6 +661,8 @@ export default function SolicitarTelefonia() {
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (submitting) return;
+
         const validationErrors = validateStep(4);
         if (validationErrors) {
             setErrors(validationErrors);
@@ -726,7 +729,7 @@ export default function SolicitarTelefonia() {
                 // Let's reset to "Revisión Admin" / "Pendiente Gerencia" to be safe.
 
                 estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.n_linea === "Línea Nueva (SOLO CHIP)" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
-                created_by: user?.id,
+                // created_by: user?.id, deprecated
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
                 proyecto: formData.proyecto, // NEW (Renamed from descripcion_categoria)
@@ -757,6 +760,7 @@ export default function SolicitarTelefonia() {
                         usuario_final_nombre: b.nombre,
                         usuario_final_area: b.area,
                         usuario_final_puesto: b.puesto,
+                        usuario_final_sede: b.sede,
                         estado: "Pendiente"
                     }));
                 }
@@ -1546,7 +1550,8 @@ export default function SolicitarTelefonia() {
                                                             dni: formData.dni,
                                                             nombre: formData.nombre,
                                                             area: formData.area,
-                                                            puesto: currentPuesto // Keep the checked Puesto
+                                                            puesto: currentPuesto, // Keep the checked Puesto
+                                                            sede: newArr[0].sede || "" // Keep existing or reset? 
                                                         };
                                                         // However, if the user manually typed something else we might want to overwrite.
                                                         // But effectively "Copiar datos" copies form data. Form data has "puesto" string.
@@ -1559,6 +1564,10 @@ export default function SolicitarTelefonia() {
                                                         if (!formData.perfil_puesto) {
                                                             newArr[0].puesto = formData.puesto;
                                                         }
+                                                        // Copy Sede from Fundo/Planta if available
+                                                        if (formData.fundo_planta) {
+                                                            newArr[0].sede = formData.fundo_planta;
+                                                        }
                                                         setBeneficiaries(newArr);
                                                     }}
                                                     className="text-[10px] font-medium text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-1 rounded hover:bg-indigo-100 transition-colors"
@@ -1567,7 +1576,7 @@ export default function SolicitarTelefonia() {
                                                 </button>
                                             )}
                                         </div>
-                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">DNI <span className="text-red-500">*</span></label>
                                                 <input
@@ -1594,6 +1603,23 @@ export default function SolicitarTelefonia() {
                                                         setBeneficiaries(newArr);
                                                     }}
                                                 />
+                                            </div>
+                                            <div>
+                                                <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sede <span className="text-red-500">*</span></label>
+                                                <select
+                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 bg-white"
+                                                    value={b.sede}
+                                                    onChange={e => {
+                                                        const newArr = [...beneficiaries];
+                                                        newArr[index].sede = e.target.value;
+                                                        setBeneficiaries(newArr);
+                                                    }}
+                                                >
+                                                    <option value="">Seleccione...</option>
+                                                    {sedes.map(s => (
+                                                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                                    ))}
+                                                </select>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Área</label>

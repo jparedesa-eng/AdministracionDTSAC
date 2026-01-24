@@ -220,6 +220,45 @@ export const TicketDetailContent: React.FC<TicketDetailContentProps> = ({ ticket
                     </div>
                 </div>
             </div>
+
+            {/* ASSIGNED USERS (New) */}
+            {ticket.asignaciones && ticket.asignaciones.length > 0 && (
+                <div className="space-y-3 pt-2 border-t border-gray-100">
+                    <span className="text-xs text-gray-400 font-medium uppercase tracking-wider block mb-2 flex items-center gap-1">
+                        <Briefcase className="w-3 h-3" /> Detalle de Usuarios Asignados
+                    </span>
+                    <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+                        <table className="min-w-full text-xs text-left">
+                            <thead className="bg-gray-50 text-gray-500 font-semibold border-b border-gray-200">
+                                <tr>
+                                    <th className="px-3 py-2">Usuario Final</th>
+                                    <th className="px-3 py-2">DNI</th>
+                                    <th className="px-3 py-2">Puesto</th>
+                                    <th className="px-3 py-2">Sede</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-gray-100">
+                                {ticket.asignaciones.map((asig) => (
+                                    <tr key={asig.id}>
+                                        <td className="px-3 py-2 font-medium text-gray-900">
+                                            {asig.usuario_final_nombre || asig.responsable_nombre || ticket.beneficiario_nombre || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                            {asig.usuario_final_dni || asig.responsable_dni || ticket.beneficiario_dni || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                            {asig.usuario_final_puesto || asig.usuario_final_area || asig.responsable_puesto || ticket.beneficiario_puesto || "-"}
+                                        </td>
+                                        <td className="px-3 py-2 text-gray-600">
+                                            {asig.usuario_final_sede || ticket.fundo_planta || "-"}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
             {/* DETAIL REPOSICION */}
             {ticket.detalle_reposicion && (
                 <div className="bg-orange-50 border border-orange-100 rounded-xl p-4 space-y-4">

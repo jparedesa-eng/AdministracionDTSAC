@@ -3,7 +3,7 @@ import { telefoniaStore } from "../../store/telefoniaStore";
 import { useAuth } from "../../auth/AuthContext";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu, RefreshCw } from "lucide-react";
+import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu, RefreshCw, CornerUpLeft, AlertTriangle } from "lucide-react";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 
 interface AsignacionUI {
@@ -34,6 +34,7 @@ interface AsignacionUI {
     isSoloChip: boolean;
     tipo_equipo_destino?: string;
     codigo_equipo_destino?: string;
+    estado: string; // New
 }
 
 export default function MisEquipos() {
@@ -43,6 +44,8 @@ export default function MisEquipos() {
     const [assignments, setAssignments] = useState<AsignacionUI[]>([]);
     const [q, setQ] = useState("");
     const { sedes } = getSedesState();
+    const [returnModalOpen, setReturnModalOpen] = useState(false);
+    const [selectedReturn, setSelectedReturn] = useState<AsignacionUI | null>(null);
 
     const loadMisEquipos = async () => {
         if (!user?.id) return;
@@ -51,52 +54,16 @@ export default function MisEquipos() {
             const allMyAssignments: AsignacionUI[] = [];
             const processedIds = new Set<string>(); // Avoid duplicates if filters overlap
 
-            // 1. Fetch from Tickets (Created by me)
-            await telefoniaStore.fetchSolicitudes(); // Ensure we have tickets
-            const myTickets = telefoniaStore.solicitudes.filter(s => s.created_by === user.id);
+            // 1. Fetch from Tickets (Created by me) - REMOVED (Deprecated created_by logic)
+            // Logic moved to Direct Assignments check only for 'Mis Equipos' concept.
+            /* 
+            await telefoniaStore.fetchSolicitudes(); 
+            const myTickets = telefoniaStore.solicitudes.filter(s => s.usuario_creador_id === user.id);
 
             myTickets.forEach(ticket => {
-                if (ticket.asignaciones && ticket.asignaciones.length > 0) {
-                    ticket.asignaciones.forEach(asig => {
-                        // Only active assignments (no return date)
-                        if (!asig.fecha_devolucion && asig.estado === 'Entregado') {
-                            if (!processedIds.has(asig.id)) {
-                                allMyAssignments.push({
-                                    id: asig.id,
-                                    equipo_id: asig.equipo_id || "",
-                                    equipo_marca: asig.equipo?.marca || "Desconocido",
-                                    equipo_modelo: asig.equipo?.modelo || "",
-                                    equipo_imei: asig.equipo?.imei || "",
-                                    equipo_categoria: asig.equipo?.categoria || "TELEFONIA",
-                                    equipo_ubicacion: asig.equipo?.ubicacion || "BASE",
-                                    usuario_final_dni: asig.usuario_final_dni || "",
-                                    usuario_final_nombre: asig.usuario_final_nombre || "",
-                                    usuario_final_area: asig.usuario_final_area || "",
-                                    usuario_final_puesto: asig.usuario_final_puesto || "",
-                                    fecha_entrega: asig.fecha_entrega || "",
-                                    solicitud_id: asig.solicitud_id,
-                                    fecha_entrega_final: asig.fecha_entrega_final || "",
-                                    editMode: false,
-                                    temp_dni: asig.usuario_final_dni || "",
-                                    temp_nombre: asig.usuario_final_nombre || "",
-                                    temp_area: asig.usuario_final_area || "",
-                                    temp_puesto: asig.usuario_final_puesto || "",
-                                    temp_fecha_entrega_final: asig.fecha_entrega_final || "",
-
-                                    isSoloChip: !asig.equipo_id && !!asig.chip_id,
-                                    // Fallback to ticket data if assignment data is missing
-                                    tipo_equipo_destino: asig.tipo_equipo_destino || ticket.tipo_equipo_destino || "",
-                                    codigo_equipo_destino: asig.codigo_equipo_destino || ticket.codigo_equipo_destino || "",
-                                    // Fallback Sede to Ticket Fundo/Planta if missing
-                                    temp_sede: asig.usuario_final_sede || ticket.fundo_planta || "",
-                                    usuario_final_sede: asig.usuario_final_sede || ticket.fundo_planta || "" // Ensure it's set in main obj too
-                                });
-                                processedIds.add(asig.id);
-                            }
-                        }
-                    });
-                }
-            });
+                // ... (Logic removed to rely on responsible check)
+            }); 
+            */
 
             // 2. Fetch from Direct Assignments (Where I am Responsable)
             if (profile?.dni) {
@@ -130,7 +97,8 @@ export default function MisEquipos() {
 
                                 isSoloChip: !asig.equipo_id && !!asig.chip_id,
                                 tipo_equipo_destino: asig.tipo_equipo_destino || "",
-                                codigo_equipo_destino: asig.codigo_equipo_destino || ""
+                                codigo_equipo_destino: asig.codigo_equipo_destino || "",
+                                estado: asig.estado || "Asignado"
                             });
                             processedIds.add(asig.id);
                         }
@@ -276,6 +244,36 @@ export default function MisEquipos() {
 
     const handleChange = (id: string, field: 'temp_dni' | 'temp_nombre' | 'temp_area' | 'temp_puesto' | 'temp_sede' | 'temp_fecha_entrega_final', value: string) => {
         setAssignments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
+    };
+
+    const handleOpenReturn = (item: AsignacionUI) => {
+        setSelectedReturn(item);
+        setReturnModalOpen(true);
+    };
+
+    const confirmReturn = async () => {
+        if (!selectedReturn) return;
+        try {
+            await telefoniaStore.marcarParaDevolucion(
+                selectedReturn.id,
+                selectedReturn.equipo_id || undefined,
+                selectedReturn.isSoloChip ? undefined : undefined // Todo: verify if chipId is needed. 
+                // For now, only passing equipoId as store logic primarily handles equipment or chip logic could be added if needed.
+                // Since MisEquipos deals mainly with the assignment, passing ID is key.
+            );
+
+            // Update local state
+            setAssignments(prev => prev.map(a =>
+                a.id === selectedReturn.id ? { ...a, estado: "PARA DEVOLUCION" } : a
+            ));
+
+            setToast({ type: "success", message: "Equipo marcado para devolución" });
+            setReturnModalOpen(false);
+            setSelectedReturn(null);
+        } catch (error) {
+            console.error(error);
+            setToast({ type: "error", message: "Error al registrar devolución" });
+        }
     };
 
     const filtered = assignments.filter(a =>
@@ -525,22 +523,90 @@ export default function MisEquipos() {
                                         </button>
                                     ) : (
                                         <div className="flex gap-2">
-                                            <div className="flex-1 py-2.5 text-center text-sm text-gray-400 font-medium bg-gray-50 rounded-lg border border-gray-100 cursor-default flex items-center justify-center">
-                                                Asignado
-                                            </div>
-                                            <button
-                                                onClick={() => handleReassign(item.id)}
-                                                className="flex-1 py-2.5 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
-                                                title="Reasignar a otro usuario"
-                                            >
-                                                <RefreshCw className="h-4 w-4" />
-                                                Reasignar
-                                            </button>
+                                            {item.estado === "PARA DEVOLUCION" ? (
+                                                <div className="flex-1 py-2.5 text-center text-sm font-bold text-amber-600 bg-amber-50 rounded-lg border border-amber-200 cursor-default flex items-center justify-center gap-2">
+                                                    <RefreshCw className="h-4 w-4 animate-spin-slow" />
+                                                    En Devolución
+                                                </div>
+                                            ) : (
+                                                <>
+                                                    <button
+                                                        onClick={() => handleReassign(item.id)}
+                                                        className="flex-1 py-2.5 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+                                                        title="Reasignar a otro usuario"
+                                                    >
+                                                        <RefreshCw className="h-4 w-4" />
+                                                        Reasignar
+                                                    </button>
+                                                    <button
+                                                        onClick={() => handleOpenReturn(item)}
+                                                        className="flex-1 py-2.5 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+                                                        title="Devolver equipo"
+                                                    >
+                                                        <CornerUpLeft className="h-4 w-4" />
+                                                        Devolver
+                                                    </button>
+                                                </>
+                                            )}
                                         </div>
                                     )}
                                 </div>
                             </div>
                         ))}
+                    </div>
+                )
+            }
+
+            {/* Return Confirmation Modal */}
+            {
+                returnModalOpen && selectedReturn && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+                            <div className="p-6">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                                        <AlertTriangle className="h-6 w-6 text-red-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-900">Confirmar Devolución</h3>
+                                        <p className="text-sm text-gray-500">¿Estás seguro de devolver este equipo?</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-3 mb-6 border border-gray-100 text-sm">
+                                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2">
+                                        <span className="font-semibold text-gray-500">Equipo:</span>
+                                        <span className="font-medium text-gray-900">
+                                            {selectedReturn.isSoloChip
+                                                ? selectedReturn.tipo_equipo_destino
+                                                : `${selectedReturn.equipo_marca} ${selectedReturn.equipo_modelo}`}
+                                        </span>
+
+                                        <span className="font-semibold text-gray-500">Usuario Actual:</span>
+                                        <span className="font-medium text-gray-900">{selectedReturn.usuario_final_nombre || "Sin asignar"}</span>
+                                    </div>
+                                    <p className="mt-3 text-xs text-gray-500 italic">
+                                        Al confirmar, el estado cambiará a "PARA DEVOLUCIÓN" y deberás entregar el equipo en la base.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => setReturnModalOpen(false)}
+                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={confirmReturn}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 flex items-center gap-2"
+                                    >
+                                        <CornerUpLeft className="h-4 w-4" />
+                                        Confirmar Devolución
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 )
             }

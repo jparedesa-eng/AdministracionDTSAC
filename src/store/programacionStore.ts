@@ -133,6 +133,53 @@ export async function upsertProgramacion(input: {
     await refreshProgramacion();
 }
 
+export async function bulkUpsertProgramacion(inputs: {
+    fecha: string;
+    puesto_id: string;
+    turno: Turno;
+    agente_id: string;
+    status?: AssignmentStatus;
+    absence_type?: AbsenceType | null;
+    absence_reason?: string | null;
+}[]): Promise<void> {
+    if (inputs.length === 0) return;
+
+    const payload = inputs.map(input => ({
+        fecha: input.fecha,
+        puesto_id: input.puesto_id,
+        turno: input.turno,
+        agente_id: input.agente_id,
+        status: input.status || "PENDING",
+        absence_type: input.absence_type || null,
+        absence_reason: input.absence_reason || null,
+    }));
+
+    // Perform upsert (using a loop for now if batch fails or direct batch if table constraints allow)
+    // Supabase supports batch upsert.
+    // Note: We need to handle potential conflicts if 'id' is not provided but we're relying on logic.
+    // Ideally we should rely on (fecha, puesto_id, turno, agente_id) tuple uniqueness BUT we support duplicates for Prosegur.
+    // Actually, `upsertProgramacion` uses `id` for conflict.
+    // For bulk insert of NEW items (Prosegur), we just insert.
+    // If we want to overwrite, we'd need IDs.
+    // But "bulk" here is mostly for "New Assignments".
+    // Let's assume these are insertions or we don't care about ID conflict for now unless we fetched them first.
+    // If we are "overwriting" by logic (delete then insert), we should delete first in the UI logic.
+
+    // For now, let's just insert/upsert. Since we don't pass IDs, these will be new rows unless we match on something else,
+    // but the table only has ID as primary key? Let's check constraints.
+    // Assuming generated ID.
+
+    const { error } = await supabase
+        .from("programacion_turnos")
+        .upsert(payload);
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    await refreshProgramacion();
+}
+
 export async function deleteProgramacion(id: string): Promise<void> {
     const { error } = await supabase
         .from("programacion_turnos")

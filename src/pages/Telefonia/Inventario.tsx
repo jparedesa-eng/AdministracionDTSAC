@@ -31,7 +31,9 @@ import {
     Building2,
     ChevronDown,
     Activity,
-    Signal
+    Signal,
+    Inbox,
+    ClipboardCheck
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -43,6 +45,7 @@ export default function InventarioTelefonia() {
     const [activeTab, setActiveTab] = useState<"equipos" | "chips" | "planes">("equipos");
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
+    const [submitting, setSubmitting] = useState(false);
 
     // Search
     const [q, setQ] = useState("");
@@ -139,6 +142,10 @@ export default function InventarioTelefonia() {
         sms: "Ilimitados"
     });
 
+    // Revision Logic
+    const [openRevision, setOpenRevision] = useState(false);
+    const [revisionData, setRevisionData] = useState<{ estado: "Disponible" | "Mantenimiento", obs: string }>({ estado: "Disponible", obs: "" });
+
     // History View
     const [showHistory, setShowHistory] = useState(false);
     const [historyData, setHistoryData] = useState<any[]>([]);
@@ -231,6 +238,7 @@ export default function InventarioTelefonia() {
     const submitDevolucion = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!modalActionItem?.asignacion_activa) return;
+        setSubmitting(true);
         try {
             await telefoniaStore.registrarDevolucion(
                 modalActionItem.asignacion_activa.id,
@@ -242,6 +250,8 @@ export default function InventarioTelefonia() {
             setOpenDevolucion(false);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al registrar devolución" });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -285,6 +295,12 @@ export default function InventarioTelefonia() {
             return;
         }
 
+        if (Object.keys(errors).length > 0) {
+            setFormErrors(errors);
+            return;
+        }
+
+        setSubmitting(true);
         try {
             // Find Puesto Name
             const puestoObj = telefoniaStore.puestos.find(p => p.id === asignacionTicketData.perfil_puesto);
@@ -326,6 +342,8 @@ export default function InventarioTelefonia() {
             setOpenAsignacion(false);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al asignar equipo" });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -367,6 +385,56 @@ export default function InventarioTelefonia() {
                 }
             }
         });
+    };
+
+
+    // --- RECEPTION & REVISION FLOW ---
+    const handleRecepcionar = (eq: Equipo) => {
+        setConfirmation({
+            open: true,
+            title: "Recepcionar Equipo",
+            message: `¿Confirmar que el equipo ${eq.marca} ${eq.modelo} ha llegado a base? Pasará a estado "Para Revisión".`,
+            variant: "info",
+            onConfirm: async () => {
+                setConfirmation(prev => ({ ...prev, loading: true }));
+                try {
+                    if (!eq.asignacion_activa) throw new Error("No hay asignación activa para este equipo");
+                    await telefoniaStore.recepcionarEquipo(eq.asignacion_activa.id, eq.id);
+                    setToast({ type: "success", message: "Equipo recepcionado. Listo para revisión." });
+                    await loadData(true);
+                    closeConfirmation();
+                } catch (e: any) {
+                    setToast({ type: "error", message: e.message || "Error al recepcionar" });
+                    setConfirmation(prev => ({ ...prev, loading: false }));
+                }
+            }
+        });
+    };
+
+    const handleOpenRevision = (eq: Equipo) => {
+        setModalActionItem(eq);
+        setRevisionData({ estado: "Disponible", obs: "" });
+        setOpenRevision(true);
+    };
+
+    const submitRevision = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!modalActionItem?.asignacion_activa) return;
+        setSubmitting(true);
+        try {
+            await telefoniaStore.finalizarRevision(
+                modalActionItem.asignacion_activa.id,
+                modalActionItem.id,
+                revisionData.estado
+            );
+            setToast({ type: "success", message: "Revisión finalizada. Equipo actualizado." });
+            setOpenRevision(false);
+            loadData(true);
+        } catch (error: any) {
+            setToast({ type: "error", message: error.message || "Error al finalizar revisión" });
+        } finally {
+            setSubmitting(false);
+        }
     };
 
 
@@ -650,6 +718,7 @@ export default function InventarioTelefonia() {
         }
 
         try {
+            setSubmitting(true);
             await telefoniaStore.asignarChipDirectamente(
                 modalActionChip.id,
                 responsableData,
@@ -675,6 +744,8 @@ export default function InventarioTelefonia() {
             loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al asignar chip" });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -707,6 +778,8 @@ export default function InventarioTelefonia() {
         if (estado === "Asignado") color = "bg-blue-100 text-blue-800";
         if (estado === "Mantenimiento") color = "bg-amber-100 text-amber-800";
         if (estado === "Baja") color = "bg-rose-100 text-rose-800";
+        if (estado === "Para Devolucion") color = "bg-orange-100 text-orange-800 border-orange-200 animate-pulse";
+        if (estado === "Para Revisión") color = "bg-purple-100 text-purple-800 border-purple-200";
 
         return (
             <span className={`px-2 py-0.5 rounded-full text-xs font-semibold ${color}`}>
@@ -1309,6 +1382,27 @@ export default function InventarioTelefonia() {
                                                         <History className="h-4 w-4" />
                                                     </button>
 
+
+                                                    {item.estado === "Para Devolucion" && (
+                                                        <button
+                                                            onClick={() => handleRecepcionar(item)}
+                                                            className="p-1.5 rounded-md bg-orange-100 text-orange-700 hover:bg-orange-200 transition-colors"
+                                                            title="Recepcionar en Base"
+                                                        >
+                                                            <Inbox className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+
+                                                    {item.estado === "Para Revisión" && (
+                                                        <button
+                                                            onClick={() => handleOpenRevision(item)}
+                                                            className="p-1.5 rounded-md bg-purple-100 text-purple-700 hover:bg-purple-200 transition-colors"
+                                                            title="Realizar Revisión Técnica"
+                                                        >
+                                                            <ClipboardCheck className="h-4 w-4" />
+                                                        </button>
+                                                    )}
+
                                                     {!item.chip ? (
                                                         <button onClick={() => handleOpenLink('equipo', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Línea">
                                                             <Link className="h-4 w-4" />
@@ -1575,7 +1669,12 @@ export default function InventarioTelefonia() {
                         </div>
                     )}
                     <div className="flex justify-end pt-2">
-                        <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             Confirmar Devolución
                         </button>
                     </div>
@@ -1920,7 +2019,12 @@ export default function InventarioTelefonia() {
                     </div>
 
                     <div className="flex justify-end pt-2">
-                        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium">
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             Asignar y Entregar
                         </button>
                     </div>
@@ -2867,7 +2971,12 @@ export default function InventarioTelefonia() {
                     </div>
 
                     <div className="flex justify-end pt-2">
-                        <button type="submit" className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium">
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
                             Asignar Chip
                         </button>
                     </div>
@@ -2899,6 +3008,89 @@ export default function InventarioTelefonia() {
                     <div className="flex justify-end pt-2">
                         <button type="submit" className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium">
                             Confirmar Devolución
+                        </button>
+                    </div>
+                </form>
+            </Modal>
+
+            {/* Modal de Revision (Added) */}
+            <Modal
+                open={openRevision}
+                onClose={() => setOpenRevision(false)}
+                title="Revisión Técnica de Equipo"
+            >
+                <form onSubmit={submitRevision} className="space-y-4">
+                    <div className="bg-purple-50 p-3 rounded-lg border border-purple-100 text-sm mb-4">
+                        <p className="font-semibold text-purple-900">Equipo en Revisión</p>
+                        <p className="text-purple-700">{modalActionItem?.marca} {modalActionItem?.modelo}</p>
+                        <p className="text-xs text-purple-600 mt-1">IMEI: {modalActionItem?.imei}</p>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Resultado de la Revisión
+                        </label>
+                        <div className="grid grid-cols-2 gap-3">
+                            <button
+                                type="button"
+                                onClick={() => setRevisionData({ ...revisionData, estado: "Disponible" })}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${revisionData.estado === "Disponible"
+                                    ? "bg-green-50 border-green-200 text-green-700 ring-1 ring-green-500"
+                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <div className="flex flex-col items-center gap-1">
+                                    <CheckCircle className="h-5 w-5" />
+                                    <span>Equipo Bueno</span>
+                                    <span className="text-[10px] text-gray-400 font-normal">Pasa a Disponibles</span>
+                                </div>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setRevisionData({ ...revisionData, estado: "Mantenimiento" })}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${revisionData.estado === "Mantenimiento"
+                                    ? "bg-amber-50 border-amber-200 text-amber-700 ring-1 ring-amber-500"
+                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                                    }`}
+                            >
+                                <div className="flex flex-col items-center gap-1">
+                                    <Activity className="h-5 w-5" />
+                                    <span>Requiere Reparación</span>
+                                    <span className="text-[10px] text-gray-400 font-normal">Pasa a Mantenimiento</span>
+                                </div>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                            Observaciones Técnicas (Opcional)
+                        </label>
+                        <textarea
+                            className="w-full rounded-md border border-gray-300 p-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                            rows={3}
+                            placeholder="Detalle el estado del equipo, fallas encontradas o reparaciones necesarias..."
+                            value={revisionData.obs}
+                            onChange={(e) => setRevisionData({ ...revisionData, obs: e.target.value })}
+                        />
+                    </div>
+
+                    <div className="flex gap-3 justify-end pt-2 border-t border-gray-100">
+                        <button
+                            type="button"
+                            onClick={() => setOpenRevision(false)}
+                            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            type="submit"
+                            disabled={submitting}
+                            className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                        >
+                            {submitting && <Loader2 className="h-4 w-4 animate-spin" />}
+                            Finalizar Revisión
                         </button>
                     </div>
                 </form>

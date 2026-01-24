@@ -96,6 +96,7 @@ export default function GestionTelefonia() {
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
+    const [submitting, setSubmitting] = useState(false); // Prevents double click
     // Multi-assignment state
     const [selectedItems, setSelectedItems] = useState<{ index: number; equipoId: string; chipId?: string; type: "EQUIPO" | "CHIP"; asignacionId?: string }[]>([]);
 
@@ -218,14 +219,14 @@ export default function GestionTelefonia() {
     };
 
     // Legacy support or extra fields
-    const [entregaData, setEntregaData] = useState({ recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" });
+    const [entregaData, setEntregaData] = useState({ recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "", gr: "" });
     const sig = useSignaturePad();
 
     // Clear signature when modal opens
     useEffect(() => {
         if (selectedTicket) {
             // Reset state when opening a ticket
-            setEntregaData(prev => ({ ...prev, recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "" }));
+            setEntregaData(prev => ({ ...prev, recibidoPor: "", costoEquipo: 0, montoDescuento: 0, cuotaMensual: 0, suggestedModel: "", gr: "" }));
             setSelectedItems([]);
 
             if (selectedTicket.estado === "Programar Entrega") {
@@ -276,6 +277,8 @@ export default function GestionTelefonia() {
 
     const submitEntrega = async () => {
         if (!selectedTicket) return;
+        if (submitting) return; // Prevent double click
+
         const firma = sig.toDataURL();
 
         if (!firma) {
@@ -293,6 +296,23 @@ export default function GestionTelefonia() {
         }
 
         try {
+            // Check for devices without chips
+            const devicesWithoutChip = filled.filter(i => {
+                if (i.type === "EQUIPO" && i.equipoId) {
+                    const eq = telefoniaStore.equipos.find(e => e.id === i.equipoId);
+                    return !eq?.chip_id;
+                }
+                return false;
+            });
+
+            if (devicesWithoutChip.length > 0) {
+                const confirmed = window.confirm(
+                    `Advertencia: Hay ${devicesWithoutChip.length} equipo(s) seleccionados sin chip vinculado.\n\n¿Estás seguro de que deseas continuar con la entrega sin chip?`
+                );
+                if (!confirmed) return;
+            }
+
+            setSubmitting(true);
             // Map to store format
             const itemsToAssign = filled.map(i => {
                 let eqId = i.equipoId;
@@ -314,13 +334,15 @@ export default function GestionTelefonia() {
                 };
             });
 
-            await telefoniaStore.asignarEquipos(selectedTicket.id, itemsToAssign, firma);
+            await telefoniaStore.asignarEquipos(selectedTicket.id, itemsToAssign, firma, entregaData.gr);
 
             setToast({ type: "success", message: "Entrega registrada correctamente" });
             setSelectedTicket(null);
             loadData();
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error al registrar entrega" });
+        } finally {
+            setSubmitting(false);
         }
     };
 
@@ -576,7 +598,15 @@ export default function GestionTelefonia() {
                                                         ) : (
                                                             <div>
                                                                 <p className="text-sm font-bold text-gray-800">{opt.marca} {opt.modelo}</p>
-                                                                <p className="text-xs text-gray-500">IMEI: <span className="font-mono text-gray-700">{opt.imei}</span></p>
+                                                                <p className="text-xs text-gray-500">
+                                                                    IMEI: <span className="font-mono text-gray-700">{opt.imei}</span>
+                                                                    <span className="ml-2 px-1.5 py-0.5 bg-gray-100 rounded text-[10px] text-gray-600 border border-gray-200">
+                                                                        {(() => {
+                                                                            const linkedChip = telefoniaStore.chips.find(c => c.id === opt.chip_id);
+                                                                            return linkedChip ? `Chip: ${linkedChip.numero_linea}` : "Sin Chip";
+                                                                        })()}
+                                                                    </span>
+                                                                </p>
                                                             </div>
                                                         )}
 
@@ -679,6 +709,17 @@ export default function GestionTelefonia() {
                                 </div>
 
                                 <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">Guía de Remisión (Opcional)</label>
+                                    <input
+                                        type="text"
+                                        placeholder="Ingrese el Nro de Guía"
+                                        className="w-full border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 shadow-sm p-2 mb-3 border"
+                                        value={entregaData.gr}
+                                        onChange={(e) => setEntregaData({ ...entregaData, gr: e.target.value })}
+                                    />
+                                </div>
+
+                                <div>
                                     <label className="block text-sm font-medium text-gray-700 mb-1">Firma de Recepción</label>
                                     <div className="border border-gray-300 rounded-lg bg-white overflow-hidden relative touch-none">
                                         <canvas
@@ -708,10 +749,10 @@ export default function GestionTelefonia() {
                                 <div className="flex flex-col gap-2">
                                     <button
                                         onClick={submitEntrega}
-                                        disabled={selectedItems.some(i => !i.equipoId && !i.chipId)}
-                                        className="w-full bg-green-600 text-white rounded-lg py-2.5 font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all"
+                                        disabled={selectedItems.some(i => !i.equipoId && !i.chipId) || submitting}
+                                        className="w-full bg-green-600 text-white rounded-lg py-2.5 font-medium hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed shadow-sm transition-all flex items-center justify-center gap-2"
                                     >
-                                        Confirmar Entrega
+                                        {submitting ? "Procesando..." : "Confirmar Entrega"}
                                     </button>
                                     <button
                                         onClick={() => setSelectedTicket(null)}
