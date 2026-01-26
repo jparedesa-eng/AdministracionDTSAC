@@ -87,7 +87,7 @@ export default function ChecklistCamaras() {
     const [currentChecklistId, setCurrentChecklistId] = useState<string | null>(null);
     const [supervisorName, setSupervisorName] = useState("");
     const [viewMode, setViewMode] = useState<'CARDS' | 'TABLE'>('CARDS'); // Nuevo: Selector de vista
-    const [localDetalles, setLocalDetalles] = useState<Record<string, { operativa: boolean, calidad: number }>>({});
+    const [localDetalles, setLocalDetalles] = useState<Record<string, { operativa: boolean, calidad: number | null }>>({});
 
     // UI State
     const [toast, setToast] = useState<ToastState>(null);
@@ -221,7 +221,9 @@ export default function ChecklistCamaras() {
             [camaraId]: {
                 ...prev[camaraId],
                 operativa: nextState,
-                calidad: prev[camaraId]?.calidad || getDetalleForCamara(camaraId)?.calidad_imagen || 5
+                // If switching to FAIL (false), quality becomes null.
+                // If switching to OK (true), default to 5 if previous was null/undefined
+                calidad: !nextState ? null : (prev[camaraId]?.calidad || getDetalleForCamara(camaraId)?.calidad_imagen || 5)
             }
         }));
 
@@ -234,7 +236,8 @@ export default function ChecklistCamaras() {
                     checklist_id: currentChecklistId,
                     camara_id: camaraId,
                     operativa: nextState,
-                    calidad_imagen: existing?.calidad_imagen || 5,
+                    // If FAIL, quality null. If OK, use existing or default 5
+                    calidad_imagen: !nextState ? null : (existing?.calidad_imagen || 5),
                 });
             } catch (error: any) {
                 setToast({ type: "error", message: "Error al actualizar estado." });
@@ -319,10 +322,18 @@ export default function ChecklistCamaras() {
 
                 if (localState) {
                     finalOperativa = localState.operativa;
-                    finalCalidad = localState.calidad;
+                    finalCalidad = localState.calidad ?? 5; // Default for saving if null and operative? Check rule below.
                 } else if (dbState) {
                     finalOperativa = dbState.operativa;
-                    finalCalidad = dbState.calidad_imagen || 5;
+                    finalCalidad = dbState.calidad_imagen ?? 5;
+                }
+
+                // RULE: If NOT operative, quality MUST be null
+                if (!finalOperativa) {
+                    finalCalidad = null as any; // Cast to any to satisfy the strict number check if implicit, but upsert allows null.
+                } else {
+                    // If operative and quality is null/undefined, default to 5
+                    if (finalCalidad === null || finalCalidad === undefined) finalCalidad = 5;
                 }
 
                 await upsertChecklistDetalle({
@@ -588,6 +599,8 @@ export default function ChecklistCamaras() {
         }, 100);
     };
 
+
+
     const SignalMeter = ({ quality, active = true, forceInactive = false }: { quality: number, active?: boolean, forceInactive?: boolean }) => {
         const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
         return (
@@ -703,8 +716,9 @@ export default function ChecklistCamaras() {
                             {cams.map(cam => {
                                 const d = getDetalleForCamara(cam.id);
                                 const isOperativa = d?.operativa !== false;
-                                const quality = d?.calidad_imagen ?? 5;
-                                const meta = QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5];
+                                const quality = d?.calidad_imagen; // Can be null
+                                const displayQuality = quality !== null && quality !== undefined;
+                                const meta = displayQuality ? (QUALITY_LABELS[quality as QualityValue] || QUALITY_LABELS[5]) : null;
 
                                 const incidentCount = reportes.filter(r => r.camara_id === cam.id && r.fecha_reporte.startsWith(selectedDate)).length;
 
@@ -734,10 +748,14 @@ export default function ChecklistCamaras() {
                                             </span>
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-500">
-                                            <div className="flex items-center justify-center gap-2">
-                                                <SignalMeter quality={quality} active={isOperativa} />
-                                                <span className={`text-[10px] font-black uppercase ${meta.color}`}>{meta.label}</span>
-                                            </div>
+                                            {displayQuality && isOperativa && meta ? (
+                                                <div className="flex items-center justify-center gap-2">
+                                                    <SignalMeter quality={quality!} active={isOperativa} />
+                                                    <span className={`text-[10px] font-black uppercase ${meta.color}`}>{meta.label}</span>
+                                                </div>
+                                            ) : (
+                                                <span className="text-slate-300 text-[10px] uppercase font-bold">-</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4 whitespace-nowrap text-center text-sm text-slate-500">
                                             {incidentCount > 0 ? (
@@ -777,7 +795,7 @@ export default function ChecklistCamaras() {
                         {data.map(cam => {
                             const d = getDetalleForCamara(cam.id);
                             const isOperativa = d?.operativa !== false;
-                            const quality = d?.calidad_imagen ?? 5;
+                            const quality = d?.calidad_imagen; // Can be null
 
                             return (
                                 <tr key={cam.id} className={`hover:bg-slate-50/50 transition-colors ${!isOperativa ? 'bg-rose-50/30' : ''}`}>

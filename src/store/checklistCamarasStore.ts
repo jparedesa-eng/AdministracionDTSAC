@@ -344,3 +344,67 @@ export async function deleteReporte(id: string): Promise<void> {
 export function getReportesPendientes(): ReporteCamara[] {
     return state.reportes.filter(r => !r.resuelto);
 }
+
+// ===== BULK DATA OPERATIONS FOR REPORTS =====
+
+export async function getChecklistDataRange(startDate: string, endDate: string, centralId: string) {
+    // 1. Get Checklists in range
+    const { data: checklists, error: checklistError } = await supabase
+        .from("checklist_camaras")
+        .select("*")
+        .eq("central_id", centralId)
+        .gte("fecha", startDate)
+        .lte("fecha", endDate)
+        .order("fecha", { ascending: true });
+
+    if (checklistError) throw new Error(checklistError.message);
+
+    const checklistIds = checklists.map(c => c.id);
+
+    // 2. Get Details for those checklists
+    let detalles: any[] = [];
+    if (checklistIds.length > 0) {
+        const { data: detailsData, error: detailsError } = await supabase
+            .from("checklist_camaras_detalle")
+            .select("*")
+            .in("checklist_id", checklistIds);
+
+        if (detailsError) throw new Error(detailsError.message);
+        detalles = detailsData;
+    }
+
+    // 3. Get Reports in range
+    // Note: Reports are linked to date via 'fecha_reporte'
+    // We filter by date string comparison (assuming YYYY-MM-DD format in start/end matches database text or date)
+    // Actually fecha_reporte is likely timestampz or similar, but stored as string in local type?
+    // Let's check type definition above: fecha_reporte: string.
+    // In DB it might be timestamp. We should be careful.
+    // Assuming string comparison works if strict ISO.
+
+    // Better to use filter on the day part if it's a timestamp
+    const { data: reports, error: reportError } = await supabase
+        .from("reportes_camaras")
+        .select("*")
+        .gte("fecha_reporte", startDate)
+        .lte("fecha_reporte", endDate + "T23:59:59"); // Ensure we cover the full end day
+
+    if (reportError) throw new Error(reportError.message);
+
+    // 4. Get Major Events (Eventos Mayores) in range for this central
+    const { data: majorEvents, error: majorError } = await supabase
+        .from("cctv_eventos_mayores")
+        .select("*")
+        .eq("cctv_id", centralId)
+        .gte("fecha_evento", startDate)
+        .lte("fecha_evento", endDate)
+        .order("fecha_hora_inicio", { ascending: true });
+
+    if (majorError) throw new Error(majorError.message);
+
+    return {
+        checklists: checklists as ChecklistCamara[],
+        detalles: detalles as ChecklistDetalle[],
+        reportes: reports as ReporteCamara[],
+        eventosMayores: (majorEvents || []) as any[] // Using any[] to avoid circular dependency or import complexity, casting in component is fine
+    };
+}

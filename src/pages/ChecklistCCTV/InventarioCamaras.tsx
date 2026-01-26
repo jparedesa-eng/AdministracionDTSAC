@@ -17,6 +17,10 @@ import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
 import { getCamarasState, subscribeCamaras, upsertCamara, type Camara } from "../../store/camarasStore";
+import { getChecklistDataRange } from "../../store/checklistCamarasStore";
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
+import { FileDown } from "lucide-react";
 
 export default function InventarioCamaras() {
     const [, setSedesVersion] = useState(0);
@@ -53,6 +57,7 @@ export default function InventarioCamaras() {
                     sedes={sedes}
                     centrales={centrales}
                     camaras={camaras}
+                    setToast={setToast}
                     onAdd={async (data) => {
                         try {
                             await upsertCamara(data);
@@ -88,13 +93,15 @@ function TabCamaras({
     centrales,
     camaras,
     onAdd,
-    onUpdate
+    onUpdate,
+    setToast
 }: {
     sedes: { id: string, nombre: string }[];
     centrales: any[];
     camaras: Camara[];
     onAdd: (data: any) => void;
     onUpdate: (id: string, data: Partial<Camara>) => void;
+    setToast: (toast: ToastState) => void;
 }) {
     const [search, setSearch] = useState("");
     const [filterSede, setFilterSede] = useState("");
@@ -112,6 +119,321 @@ function TabCamaras({
     // Pagination State
     const [page, setPage] = useState(1);
     const [pageSize, setPageSize] = useState(10);
+
+    // Report State
+    const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [reportWeek, setReportWeek] = useState(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const onejan = new Date(year, 0, 1);
+        const week = Math.ceil((((now.getTime() - onejan.getTime()) / 86400000) + onejan.getDay() + 1) / 7);
+        return `${year}-W${week.toString().padStart(2, '0')}`;
+    });
+    const [reportCentralId, setReportCentralId] = useState("");
+
+    const handleDownloadWeeklyReport = async () => {
+        if (!reportWeek || !reportCentralId) return;
+
+        try {
+            setToast({ type: "success", message: "Generando reporte PDF, por favor espere..." });
+
+            // 1. Calculate Date Range
+            const [yearStr, weekStr] = reportWeek.split("-W");
+            const year = parseInt(yearStr);
+            const week = parseInt(weekStr);
+
+            const simple = new Date(year, 0, 1 + (week - 1) * 7);
+            const dow = simple.getDay();
+            const ISOweekStart = simple;
+            if (dow <= 4) ISOweekStart.setDate(simple.getDate() - simple.getDay() + 1);
+            else ISOweekStart.setDate(simple.getDate() + 8 - simple.getDay());
+
+            const startDate = ISOweekStart.toISOString().split('T')[0];
+            const endObj = new Date(ISOweekStart);
+            endObj.setDate(endObj.getDate() + 6);
+            const endDate = endObj.toISOString().split('T')[0];
+
+            // 2. Fetch Data
+            const data = await getChecklistDataRange(startDate, endDate, reportCentralId);
+
+            // 3. Prepare PDF
+            const doc = new jsPDF('l', 'mm', 'a4');
+            const centralName = centrales.find(c => c.id === reportCentralId)?.nombre || "CENTRAL";
+
+            // Load Logo
+            try {
+                const getImageData = (url: string) => {
+                    return new Promise<HTMLImageElement>((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous";
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = url;
+                    });
+                };
+
+                // Using PNG for better PDF compatibility
+                const logoImg = await getImageData('/logo-danper-rojo.png');
+                const logoWidth = 20;
+                const logoHeight = logoWidth * (logoImg.height / logoImg.width);
+                doc.addImage(logoImg, 'PNG', 14, 15, logoWidth, logoHeight);
+            } catch (e) {
+                console.warn("No se pudo cargar el logo", e);
+            }
+            // Header Text (Shifted right to avoid logo)
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(22);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`REPORTE SEMANAL CCTV - ${centralName}`, 42, 22);
+
+            doc.setFontSize(14);
+            doc.text(`SEMANA: ${reportWeek}`, 42, 29);
+
+            doc.setFont("helvetica", "normal");
+            doc.setFontSize(11);
+            doc.text(`Período: ${startDate} al ${endDate}`, 42, 35);
+
+            doc.setFontSize(9);
+            doc.setTextColor(100);
+            doc.text(`Generado: ${new Date().toLocaleString()}`, 280, 15, { align: 'right' });
+            doc.setTextColor(0);
+
+
+
+            // Matriz Operativa
+            const days: string[] = [];
+            const cur = new Date(ISOweekStart);
+
+            // Header Row 1: Grouped Headers
+            const headRow1: any[] = [
+                { content: 'DATOS DE LA CÁMARA', colSpan: 3, styles: { halign: 'center', fillColor: [15, 23, 42] } }
+            ];
+
+            // Header Row 2: Sub Headers
+            const headRow2: any[] = ["CÁMARA", "ÁREA", "NAVE"];
+
+            for (let i = 0; i < 7; i++) {
+                days.push(new Date(cur).toISOString().split('T')[0]);
+                const dayName = cur.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+
+                // Add Day Header spanning 2 cols
+                headRow1.push({ content: dayName.toUpperCase(), colSpan: 2, styles: { halign: 'center', fillColor: [51, 65, 85] } });
+
+                // Add Sub Headers
+                headRow2.push("ESTADO\n(M / T)");
+                headRow2.push("CALIDAD\n(M / T)");
+
+                cur.setDate(cur.getDate() + 1);
+            }
+
+            const detailsMap: Record<string, Record<string, Record<string, any>>> = {};
+            data.checklists.forEach(cl => {
+                const clDetails = data.detalles.filter(d => d.checklist_id === cl.id);
+                clDetails.forEach(d => {
+                    if (!detailsMap[d.camara_id]) detailsMap[d.camara_id] = {};
+                    if (!detailsMap[d.camara_id][cl.fecha]) detailsMap[d.camara_id][cl.fecha] = {};
+                    detailsMap[d.camara_id][cl.fecha][cl.turno!] = {
+                        operativa: d.operativa,
+                        calidad: d.calidad_imagen
+                    };
+                });
+            });
+
+            const rows: any[] = [];
+            const allCentralCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa);
+
+            const getQualityLabel = (q: number | null) => {
+                if (q === null) return "-";
+                if (q >= 4) return "Good";
+                if (q === 3) return "Fair";
+                return "Poor";
+            };
+
+            allCentralCameras.forEach(cam => {
+                const row = [cam.nombre, cam.area || "-", cam.nave_fundo || "-"];
+                days.forEach(d => {
+                    const mInfo = detailsMap[cam.id]?.[d]?.["MAÑANA"];
+                    const tInfo = detailsMap[cam.id]?.[d]?.["TARDE"];
+
+                    // Col 1: Estado (M / T)
+                    const mOp = mInfo ? (mInfo.operativa ? "OK" : "F") : "-";
+                    const tOp = tInfo ? (tInfo.operativa ? "OK" : "F") : "-";
+                    row.push(`${mOp} / ${tOp}`);
+
+                    // Col 2: Calidad (M / T)
+                    const mCal = mInfo ? getQualityLabel(mInfo.calidad) : "-";
+                    const tCal = tInfo ? getQualityLabel(tInfo.calidad) : "-";
+                    row.push(`${mCal}\n${tCal}`);
+                });
+                rows.push(row);
+            });
+
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: 45,
+                head: [headRow1, headRow2],
+                body: rows,
+                theme: 'grid',
+                styles: { fontSize: 5, cellPadding: 1, halign: 'center', valign: 'middle', lineWidth: 0.1 },
+                headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 6 },
+                columnStyles: {
+                    0: { halign: 'left', cellWidth: 25, fontStyle: 'bold' }, // Camara
+                    1: { halign: 'left', cellWidth: 15 }, // Area
+                    2: { halign: 'left', cellWidth: 15 }, // Nave
+                },
+                didParseCell: function (data: any) {
+                    if (data.section === 'body' && data.column.index > 2) {
+                        const text = data.cell.raw as string;
+
+                        // Check if it's an OP column (index 3, 5, 7...)
+                        const isOpCol = (data.column.index - 3) % 2 === 0;
+
+                        if (isOpCol) {
+                            if (text.includes("F")) {
+                                data.cell.styles.fillColor = [254, 202, 202]; // Light Red Bg
+                                data.cell.styles.textColor = [185, 28, 28];
+                                data.cell.styles.fontStyle = 'bold';
+                            } else if (text.includes("OK")) {
+                                data.cell.styles.fillColor = [220, 252, 231]; // Light Green Bg
+                                data.cell.styles.textColor = [21, 128, 61];
+                            }
+                        } else {
+                            // Quality Column
+                            if (text.includes("Poor")) {
+                                data.cell.styles.fillColor = [254, 202, 202]; // Light Red Bg
+                                data.cell.styles.textColor = [185, 28, 28];
+                                data.cell.styles.fontStyle = 'bold';
+                            } else if (text.includes("Fair")) {
+                                data.cell.styles.fillColor = [254, 249, 195]; // Light Yellow Bg
+                                data.cell.styles.textColor = [161, 98, 7];
+                            } else if (text.includes("Good")) {
+                                data.cell.styles.fillColor = [220, 252, 231]; // Light Green Bg
+                                data.cell.styles.textColor = [21, 128, 61];
+                            }
+                        }
+                    }
+                }
+
+            });
+
+            // Resumen Gerencial
+            doc.addPage();
+            doc.setFontSize(14);
+            doc.text("Resumen Gerencial y Estadísticas", 14, 15);
+
+            let totalChecks = 0;
+            let totalFails = 0;
+            data.checklists.forEach(cl => {
+                const dets = data.detalles.filter(d => d.checklist_id === cl.id);
+                totalChecks += dets.length;
+                totalFails += dets.filter(d => !d.operativa).length;
+            });
+            const operability = totalChecks > 0 ? ((1 - (totalFails / totalChecks)) * 100).toFixed(2) + "%" : "0%";
+
+            /* @ts-ignore */
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: 20,
+                head: [["INDICADOR", "VALOR"]],
+                body: [
+                    ["Total Revisiones Puntos de Control", totalChecks],
+                    ["Total Fallas Detectadas", totalFails],
+                    ["Operatividad Promedio Semanal", operability],
+                    ["Total Incidentes Reportados", data.reportes.length],
+                ],
+                theme: 'striped',
+                headStyles: { fillColor: [51, 65, 85] },
+                tableWidth: 120
+            });
+
+            // Incidentes
+            /* @ts-ignore */
+            const finalY = (doc as any).lastAutoTable.finalY + 15;
+            doc.setFontSize(12);
+            doc.text("Historial de Incidencias", 14, finalY);
+
+            const incidentRows = data.reportes
+                .filter(rep => allCentralCameras.some(c => c.id === rep.camara_id))
+                .map(rep => {
+                    const cam = camaras.find(c => c.id === rep.camara_id);
+                    return [
+                        rep.fecha_reporte.split('T')[0],
+                        new Date(rep.fecha_reporte).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                        cam ? cam.nombre : "Desconocida",
+                        rep.tipo_incidente,
+                        rep.descripcion || ""
+                    ];
+                });
+
+            /* @ts-ignore */
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: finalY + 5,
+                head: [["FECHA", "HORA", "CÁMARA", "TIPO", "DESCRIPCIÓN"]],
+                body: incidentRows.length > 0 ? incidentRows : [["-", "-", "-", "Sin incidentes", "-"]],
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [180, 83, 9], textColor: 255 },
+                columnStyles: { 4: { cellWidth: 'auto' } }
+            });
+
+            // Reportes Mayores (Eventos CCTV)
+            /* @ts-ignore */
+            const majorY = (doc as any).lastAutoTable.finalY + 15;
+
+            // Check if we need new page
+            let nextStart: number;
+            if (majorY > 180) {
+                doc.addPage();
+                doc.text("Registro de Eventos Mayores", 14, 15);
+                nextStart = 20;
+            } else {
+                doc.text("Registro de Eventos Mayores", 14, majorY);
+                nextStart = majorY + 5;
+            }
+
+            const majorRows = (data.eventosMayores || []).map((ev: any) => {
+                const sede = sedes.find(s => s.id === ev.sede_id)?.nombre || "---";
+                return [
+                    ev.fecha_evento,
+                    new Date(ev.fecha_hora_inicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    sede,
+                    ev.tipo_evento,
+                    ev.descripcion || "",
+                    ev.estado
+                ];
+            });
+
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: nextStart,
+                head: [["FECHA", "HORA", "SEDE", "EVENTO", "DETALLE", "ESTADO"]],
+                body: majorRows.length > 0 ? majorRows : [["-", "-", "-", "Sin eventos mayores", "-", "-"]],
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 28, 28] },
+            });
+
+            /* @ts-ignore */
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: nextStart,
+                head: [["FECHA", "CÁMARA", "TIPO", "DETALLE"]],
+                body: majorRows.length > 0 ? majorRows : [["-", "-", "Sin reportes mayores", "-"]],
+                theme: 'grid',
+                styles: { fontSize: 8 },
+                headStyles: { fillColor: [185, 28, 28] },
+            });
+
+            doc.save(`Reporte_Semanal_${reportWeek}_${centralName}.pdf`);
+            setToast({ type: "success", message: "Reporte PDF descargado correctamente." });
+            setReportModalOpen(false);
+
+        } catch (error: any) {
+            console.error(error);
+            setToast({ type: "error", message: "Error al generar reporte: " + (error.message || "Error desconocido") });
+        }
+    };
 
     const [formData, setFormData] = useState({
         codigo: "",
@@ -339,13 +661,22 @@ function TabCamaras({
                         Gestión técnica de infraestructura de video vigilancia
                     </p>
                 </div>
-                <button
-                    onClick={() => handleOpen()}
-                    className="flex items-center gap-2 bg-[#ff0000] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
-                >
-                    <Plus className="h-4 w-4" />
-                    Nueva cámara
-                </button>
+                <div className="flex gap-3">
+                    <button
+                        onClick={() => setReportModalOpen(true)}
+                        className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
+                    >
+                        <FileDown className="h-4 w-4" />
+                        Reporte Semanal
+                    </button>
+                    <button
+                        onClick={() => handleOpen()}
+                        className="flex items-center gap-2 bg-[#ff0000] text-white px-4 py-2 rounded-xl text-sm font-semibold hover:bg-red-700 transition-colors"
+                    >
+                        <Plus className="h-4 w-4" />
+                        Nueva cámara
+                    </button>
+                </div>
             </div>
 
             {/* Filters Container */}
@@ -743,7 +1074,65 @@ function TabCamaras({
                     </div>
                 </div>
             </Modal>
-        </div>
+
+            {/* Report Modal */}
+            <Modal
+                open={reportModalOpen}
+                onClose={() => setReportModalOpen(false)}
+                title="Generar Reporte Semanal PDF"
+                size="md"
+            >
+                <div className="space-y-6 mt-4">
+                    <div className="bg-blue-50 p-4 rounded-xl border border-blue-100 flex gap-3">
+                        <FileDown className="text-blue-600 shrink-0" size={24} />
+                        <div>
+                            <p className="text-sm font-bold text-blue-900">Configuración del Reporte</p>
+                            <p className="text-xs text-blue-700 mt-1">Seleccione la semana y la central CCTV para generar el informe de operatividad y fallas.</p>
+                        </div>
+                    </div>
+
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Semana del Reporte</label>
+                            <input
+                                type="week"
+                                value={reportWeek}
+                                onChange={(e) => setReportWeek(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
+
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-1.5">Central CCTV</label>
+                            <select
+                                value={reportCentralId}
+                                onChange={e => setReportCentralId(e.target.value)}
+                                className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                            >
+                                <option value="">-- Seleccionar Central --</option>
+                                {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                        <button
+                            onClick={() => setReportModalOpen(false)}
+                            className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={handleDownloadWeeklyReport}
+                            disabled={!reportWeek || !reportCentralId}
+                            className="px-6 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                        >
+                            <FileDown size={16} /> Descargar Reporte
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+        </div >
     );
 }
 
