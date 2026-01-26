@@ -216,6 +216,22 @@ export interface Proyecto {
     created_at?: string;
 }
 
+export interface Baja {
+    id: string;
+    created_at: string;
+    equipo_id: string;
+    motivo: string;
+    usuario_solicitante_id?: string;
+    dni_solicitante?: string;
+    nombre_solicitante?: string;
+    usuario_aprobador_id?: string;
+    dni_aprobador?: string;
+    nombre_aprobador?: string;
+    estado: 'Pendiente' | 'Aprobado' | 'Rechazado';
+    fecha_aprobacion?: string;
+    equipo?: Equipo;
+}
+
 /* =========================
  * Store
  * ========================= */
@@ -227,6 +243,7 @@ export const telefoniaStore = {
     puestos: [] as Puesto[],
     proyectos: [] as Proyecto[],
     solicitudes: [] as Solicitud[],
+    bajas: [] as Baja[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
 
     // --- VALIDATION ---
@@ -1465,56 +1482,96 @@ export const telefoniaStore = {
         await this.fetchChips();
     },
 
-    async solicitarBajaDirecta(equipoId: string, motivo: string, usuarioId?: string) {
-        const payload: Partial<Solicitud> = {
-            tipo_servicio: "BAJA_INTERNA",
-            justificacion: motivo,
-            estado: "Pendiente Admin",
-            beneficiario_nombre: "INTERNAL_SYSTEM",
-            usuario_creador_id: usuarioId
+    // --- BAJAS (Decommissioning) ---
+    async fetchBajas() {
+        // Fetch Bajas
+        const { data, error } = await supabase
+            .from("telefonia_bajas")
+            .select(`
+                *,
+                equipo:telefonia_equipos(*)
+            `)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+        this.bajas = data as Baja[];
+    },
+
+    async solicitarBajaDirecta(equipoId: string, motivo: string, solicitante: { id: string, dni: string, nombre: string }) {
+        const payload = {
+            equipo_id: equipoId,
+            motivo: motivo,
+            usuario_solicitante_id: solicitante.id,
+            dni_solicitante: solicitante.dni,
+            nombre_solicitante: solicitante.nombre,
+            estado: 'Pendiente'
         };
 
-        const { data: ticket, error } = await supabase
-            .from("telefonia_solicitudes")
-            .insert([payload])
-            .select()
-            .single();
+        const { error } = await supabase
+            .from("telefonia_bajas")
+            .insert([payload]);
 
         if (error) throw error;
 
-        // Link equipment via assignments table
-        if (ticket) {
-            await supabase.from("telefonia_solicitud_asignaciones").insert([{
-                solicitud_id: ticket.id,
-                equipo_id: equipoId,
-                estado: "Pendiente"
-            }]);
-        }
-        if (error) throw error;
-
+        // Update Equipment to "Mantenimiento" (Pending Decommission) so it can't be assigned
         await supabase
             .from("telefonia_equipos")
-            .update({ estado: "Mantenimiento" }) // Pendiente de baja
+            .update({ estado: "Mantenimiento", estado_actual: "Proceso de Baja" }) // estado_actual info
             .eq("id", equipoId);
 
         await this.fetchEquipos();
     },
 
-    async procesarBaja(equipoId: string, accion: 'APROBAR' | 'REPARADO') {
+    async procesarBaja(bajaId: string, equipoId: string, accion: 'APROBAR' | 'RECHAZAR', aprobador: { id: string, dni: string, nombre: string }) {
+        const fecha = new Date().toISOString();
+
         if (accion === 'APROBAR') {
-            await supabase
+            // 1. Update Baja Request
+            const { error: bajaErr } = await supabase
+                .from("telefonia_bajas")
+                .update({
+                    estado: 'Aprobado',
+                    fecha_aprobacion: fecha,
+                    usuario_aprobador_id: aprobador.id,
+                    dni_aprobador: aprobador.dni,
+                    nombre_aprobador: aprobador.nombre
+                })
+                .eq("id", bajaId);
+            if (bajaErr) throw bajaErr;
+
+            // 2. Update Equipment -> Baja Definitiva
+            const { error: eqErr } = await supabase
                 .from("telefonia_equipos")
-                .update({ estado: "Baja" })
+                .update({ estado: "Baja", ubicacion: "BAJA" })
                 .eq("id", equipoId);
+            if (eqErr) throw eqErr;
+
         } else {
-            await supabase
+            // RECHAZAR / CANCELAR
+            // 1. Update Baja Request
+            const { error: bajaErr } = await supabase
+                .from("telefonia_bajas")
+                .update({
+                    estado: 'Rechazado',
+                    fecha_aprobacion: fecha,
+                    usuario_aprobador_id: aprobador.id,
+                    dni_aprobador: aprobador.dni,
+                    nombre_aprobador: aprobador.nombre
+                })
+                .eq("id", bajaId);
+            if (bajaErr) throw bajaErr;
+
+            // 2. Restore Equipment -> Disponible / Segundo Uso (Assuming it was in checks)
+            // Or "Mantenimiento" if it needs repair? Usually rejection means "Don't throw away", so maybe "Disponible" or "Mantenimiento"?
+            // Let's set to "Disponible" "Segundo Uso" as default fallback check.
+            const { error: eqErr } = await supabase
                 .from("telefonia_equipos")
-                .update({ estado: "Disponible", condicion: "Segundo Uso" })
+                .update({ estado: "Disponible", condicion: "Segundo Uso", estado_actual: "Bueno" })
                 .eq("id", equipoId);
+            if (eqErr) throw eqErr;
         }
 
-        // Aquí deberíamos buscar la solicitud de BAJA_INTERNA pendiente y cerrarla
-        // pero por ahora simplificamos solo actualizando el equipo.
+        await this.fetchBajas();
         await this.fetchEquipos();
     },
 

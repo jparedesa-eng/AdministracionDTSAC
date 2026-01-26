@@ -4,17 +4,18 @@ import type { Solicitud } from "../../store/telefoniaStore";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { CheckCircle2, ShoppingCart, X, FileDown, Calendar } from "lucide-react";
+import { CheckCircle2, ShoppingCart, X, FileDown, Calendar, AlertTriangle } from "lucide-react";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
 
 import { useAuth } from "../../auth/AuthContext";
 
 export default function AprobacionAdmin() {
-    const { profile } = useAuth();
+    const { profile, user } = useAuth();
     const [toast, setToast] = useState<ToastState>(null);
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
-    const [viewMode, setViewMode] = useState<"pending" | "history">("pending");
+    const [selectedBaja, setSelectedBaja] = useState<any | null>(null); // Type 'Baja' if imported
+    const [viewMode, setViewMode] = useState<"pending" | "history" | "bajas">("pending");
     const [startDate, setStartDate] = useState("");
     const [endDate, setEndDate] = useState("");
     const [showHistory, setShowHistory] = useState(false);
@@ -24,6 +25,7 @@ export default function AprobacionAdmin() {
         setLoading(true);
         try {
             await telefoniaStore.fetchSolicitudes();
+            await telefoniaStore.fetchBajas();
         } catch (e: any) {
             setToast({ type: "error", message: "Error cargando datos" });
         } finally {
@@ -39,6 +41,9 @@ export default function AprobacionAdmin() {
     const getDisplayedTickets = () => {
         if (viewMode === "pending") {
             return telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Admin");
+        }
+        if (viewMode === "bajas") {
+            return []; // Handled separately
         }
 
         // History Mode
@@ -60,6 +65,9 @@ export default function AprobacionAdmin() {
     };
 
     const displayedTickets = getDisplayedTickets();
+    const displayedBajas = viewMode === "bajas"
+        ? telefoniaStore.bajas.filter(b => b.estado === 'Pendiente')
+        : [];
 
     const handleFilter = () => {
         if (!startDate || !endDate) {
@@ -92,19 +100,41 @@ export default function AprobacionAdmin() {
         }
     };
 
+    const handleBajaDecision = async (approved: boolean) => {
+        if (!selectedBaja) return;
+        try {
+            if (!user?.id) throw new Error("Usuario no identificado");
+
+            await telefoniaStore.procesarBaja(
+                selectedBaja.id,
+                selectedBaja.equipo_id,
+                approved ? 'APROBAR' : 'RECHAZAR',
+                {
+                    id: user.id,
+                    dni: profile?.dni || "",
+                    nombre: profile?.nombre || "Admin"
+                }
+            );
+            setToast({ type: "success", message: approved ? "Baja Aprobada" : "Solicitud Rechazada" });
+            setSelectedBaja(null);
+            await loadData();
+        } catch (error: any) {
+            setToast({ type: "error", message: error.message || "Error al procesar baja" });
+        }
+    };
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Aprobación Gerencia Administración</h1>
-                    <p className="text-gray-500 text-sm">Validación final y autorización de despacho</p>
+                    <p className="text-gray-500 text-sm">Validación final y autorización de despacho / bajas</p>
                 </div>
                 <div className="bg-amber-100 text-amber-800 px-4 py-2 rounded-lg font-medium text-sm flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4" />
-                    {viewMode === "pending"
-                        ? `${displayedTickets.length} Pendientes`
-                        : "Historial de Aprobaciones"
-                    }
+                    {viewMode === "pending" ? `${displayedTickets.length} Solicitudes Pendientes` :
+                        viewMode === "bajas" ? `${displayedBajas.length} Bajas Pendientes` :
+                            "Historial de Aprobaciones"}
                 </div>
             </div>
 
@@ -118,7 +148,16 @@ export default function AprobacionAdmin() {
                             : "text-gray-500 hover:text-gray-700"
                             }`}
                     >
-                        Pendientes
+                        Solicitudes
+                    </button>
+                    <button
+                        onClick={() => { setViewMode("bajas"); setShowHistory(false); }}
+                        className={`px-4 py-2 rounded-md text-sm font-medium transition-all ${viewMode === "bajas"
+                            ? "bg-white text-gray-900 shadow-sm"
+                            : "text-gray-500 hover:text-gray-700"
+                            }`}
+                    >
+                        Bajas
                     </button>
                     <button
                         onClick={() => setViewMode("history")}
@@ -176,14 +215,51 @@ export default function AprobacionAdmin() {
                     <div className="bg-gray-50 border border-dashed border-gray-300 rounded-xl p-12 text-center text-gray-500">
                         <p>Seleccione un rango de fechas y haga clic en "Filtrar" para ver el historial.</p>
                     </div>
-                ) : displayedTickets.length === 0 ? (
+                ) : (viewMode === 'bajas' ? displayedBajas.length === 0 : displayedTickets.length === 0) ? (
                     <div className="bg-white border border-gray-200 rounded-xl p-12 text-center text-gray-500">
                         <div className="flex flex-col items-center justify-center">
                             <ShoppingCart className="w-12 h-12 text-gray-200 mb-2" />
-                            <p>No se encontraron registros {viewMode === "pending" ? "pendientes" : "en este periodo"}</p>
+                            <p>No se encontraron registros {viewMode === "pending" || viewMode === 'bajas' ? "pendientes" : "en este periodo"}</p>
                         </div>
                     </div>
+                ) : viewMode === 'bajas' ? (
+                    // BAJAS LIST
+                    displayedBajas.map(b => (
+                        <div key={b.id} className="bg-white border border-red-100 rounded-xl p-4 hover:border-red-300 transition-colors shadow-sm">
+                            <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
+                                <div className="flex-1">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <span className="text-xs font-bold text-red-700 bg-red-50 border border-red-100 px-2 py-0.5 rounded">
+                                            BAJA DE EQUIPO
+                                        </span>
+                                        <span className="text-xs text-gray-500">
+                                            {new Date(b.created_at).toLocaleDateString()}
+                                        </span>
+                                    </div>
+                                    <h3 className="text-base font-bold text-gray-900">{b.equipo?.marca} {b.equipo?.modelo}</h3>
+                                    <p className="text-sm text-gray-500">IMEI: {b.equipo?.imei}</p>
+
+                                    <div className="mt-2 text-sm bg-gray-50 p-2 rounded-lg border border-gray-100">
+                                        <span className="font-semibold text-gray-700 block text-xs mb-1">MOTIVO:</span>
+                                        {b.motivo}
+                                    </div>
+                                    <div className="mt-2 text-xs text-gray-400">
+                                        Solicitado por: <b>{b.nombre_solicitante || "Usuario"}</b> (DNI: {b.dni_solicitante || "-"})
+                                    </div>
+                                </div>
+                                <div className="w-full md:w-auto">
+                                    <button
+                                        onClick={() => setSelectedBaja(b)}
+                                        className="w-full md:w-auto px-6 py-2.5 bg-red-50 text-red-700 font-medium text-sm rounded-lg border border-red-200 hover:bg-red-100 transition-colors"
+                                    >
+                                        Revisar Baja
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    ))
                 ) : (
+                    // SOLICITUDES LIST
                     displayedTickets.map(t => (
                         <div
                             key={t.id}
@@ -306,6 +382,44 @@ export default function AprobacionAdmin() {
                                     </button>
                                 </div>
                             )}
+                        </div>
+                    </div>
+                </Modal>
+            )}
+
+            {selectedBaja && (
+                <Modal
+                    open={!!selectedBaja}
+                    onClose={() => setSelectedBaja(null)}
+                    title="Aprobar Baja de Equipo"
+                    size="md"
+                >
+                    <div className="space-y-4">
+                        <div className="p-4 bg-red-50 rounded-lg border border-red-100 text-red-800">
+                            <AlertTriangle className="w-8 h-8 mb-2 mx-auto" />
+                            <p className="text-center font-medium">¿Está seguro de aprobar la baja definitiva?</p>
+                            <p className="text-center text-sm mt-1">El equipo pasará a estado <b>BAJA</b> y saldrà del inventario activo.</p>
+                        </div>
+
+                        <div className="bg-gray-50 p-4 rounded-lg">
+                            <h4 className="font-bold text-gray-900 mb-2">{selectedBaja.equipo?.marca} {selectedBaja.equipo?.modelo}</h4>
+                            <p className="text-sm"><b>IMEI:</b> {selectedBaja.equipo?.imei}</p>
+                            <p className="text-sm mt-2"><b>Motivo:</b> {selectedBaja.motivo}</p>
+                        </div>
+
+                        <div className="flex gap-4 pt-4">
+                            <button
+                                onClick={() => handleBajaDecision(false)}
+                                className="flex-1 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg hover:bg-gray-50"
+                            >
+                                Rechazar (Restaurar)
+                            </button>
+                            <button
+                                onClick={() => handleBajaDecision(true)}
+                                className="flex-1 bg-red-600 text-white py-2 rounded-lg hover:bg-red-700 font-bold shadow-lg"
+                            >
+                                APROBAR BAJA
+                            </button>
                         </div>
                     </div>
                 </Modal>

@@ -26,7 +26,10 @@ import {
   User,
   Activity,
   LayoutDashboard,
-  Folder
+  Folder,
+  Database,
+  Layers,
+  TabletSmartphone
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -180,11 +183,11 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     const telefoniaSubItems: NavItem[] = [];
     if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-mis-equipos', label: 'Mis Equipos', path: '/telefonia/mis-equipos', icon: User });
     if (canSeeTel_Solicitar) telefoniaSubItems.push({ id: 'tel-sol', label: 'Solicitar', path: '/telefonia/solicitar', icon: FilePlus2 });
-    if (canSeeTel_Inventario) telefoniaSubItems.push({ id: 'tel-inv', label: 'Inventario', path: '/telefonia/inventario', icon: Wrench });
-    if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ListChecks });
-    if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: DollarSign });
-    if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-ges', label: 'Gestión', path: '/telefonia/gestion', icon: ListChecks });
-    if (canSeeTel_Historial) telefoniaSubItems.push({ id: 'tel-hist', label: 'Historial', path: '/telefonia/historial', icon: ClipboardList });
+    if (canSeeTel_Inventario) telefoniaSubItems.push({ id: 'tel-inv', label: 'Inventario', path: '/telefonia/inventario', icon: TabletSmartphone });
+    if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ShieldCheck });
+    if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: ShieldCheck });
+    if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-ges', label: 'Panel Gestión', path: '/telefonia/gestion', icon: Layers });
+    if (canSeeTel_Historial) telefoniaSubItems.push({ id: 'tel-hist', label: 'Historial', path: '/telefonia/historial', icon: Database });
 
     // Catalogos (Using AprobAdmin permission for now as likely only admins should see this)
     if (canSeeTel_AprobAdmin) {

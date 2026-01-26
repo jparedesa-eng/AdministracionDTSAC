@@ -7,7 +7,6 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import {
     Smartphone,
-    Cpu,
     Plus,
     Pencil,
     Loader2,
@@ -33,7 +32,9 @@ import {
     Activity,
     Signal,
     Inbox,
-    ClipboardCheck
+    ClipboardCheck,
+    Clock,
+    CardSim
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -41,7 +42,7 @@ import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStor
 import { useAuth } from "../../auth/AuthContext";
 
 export default function InventarioTelefonia() {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [activeTab, setActiveTab] = useState<"equipos" | "chips" | "planes">("equipos");
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
@@ -360,6 +361,14 @@ export default function InventarioTelefonia() {
     };
 
     const handleOpenBaja = (eq: Equipo) => {
+        if (eq.chip_id) {
+            setToast({ type: "error", message: "El equipo tiene línea asignada. Desvincule la línea primero." });
+            return;
+        }
+        if (eq.asignacion_activa) {
+            setToast({ type: "error", message: "El equipo está asignado. Debe registrar la devolución primero." });
+            return;
+        }
         setModalActionItem(eq);
         setBajaData({ motivo: "" });
         setOpenBaja(true);
@@ -369,7 +378,18 @@ export default function InventarioTelefonia() {
         e.preventDefault();
         if (!modalActionItem) return;
         try {
-            await telefoniaStore.solicitarBajaDirecta(modalActionItem.id, bajaData.motivo);
+            if (!user?.id) throw new Error("Usuario no identificado");
+
+            await telefoniaStore.solicitarBajaDirecta(
+                modalActionItem.id,
+                bajaData.motivo,
+                {
+                    id: user.id,
+                    dni: profile?.dni || "",
+                    nombre: profile?.nombre || "Usuario"
+                }
+            );
+            // We need profile access here. Inventario used `useAuth` but destructured `user`. Let's check imports.
             setToast({ type: "success", message: "Solicitud de baja creada. Equipo en Mantenimiento." });
             setOpenBaja(false);
         } catch (error: any) {
@@ -377,27 +397,7 @@ export default function InventarioTelefonia() {
         }
     };
 
-    const handleProcesarBaja = (eq: Equipo, accion: 'APROBAR' | 'REPARADO') => {
-        setConfirmation({
-            open: true,
-            title: accion === 'APROBAR' ? "Confirmar Baja Definitiva" : "Confirmar Reparación",
-            message: accion === 'APROBAR'
-                ? "¿Estás seguro de dar de baja definitiva este equipo? Esta acción no se puede deshacer."
-                : "¿Confirmar que el equipo ha sido reparado y está listo para ser asignado nuevamente?",
-            variant: accion === 'APROBAR' ? "danger" : "info",
-            onConfirm: async () => {
-                setConfirmation(prev => ({ ...prev, loading: true }));
-                try {
-                    await telefoniaStore.procesarBaja(eq.id, accion);
-                    setToast({ type: "success", message: "Estado actualizado correctly" });
-                    closeConfirmation();
-                } catch (error: any) {
-                    setToast({ type: "error", message: "Error al procesar baja" });
-                    setConfirmation(prev => ({ ...prev, loading: false }));
-                }
-            }
-        });
-    };
+    // Removed handleProcesarBaja as approval is now in Admin View
 
 
     // --- RECEPTION & REVISION FLOW ---
@@ -990,7 +990,7 @@ export default function InventarioTelefonia() {
                     {/* Chips */}
                     <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px]">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
-                            <Cpu className="h-5 w-5" />
+                            <CardSim className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-xs font-medium text-gray-500 uppercase">Chips</p>
@@ -1021,7 +1021,7 @@ export default function InventarioTelefonia() {
                         onClick={() => setActiveTab("chips")}
                         className={`${activeTab === "chips" ? "border-indigo-500 text-indigo-600" : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"} whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
                     >
-                        <Cpu className="h-5 w-5" />
+                        <CardSim className="h-5 w-5" />
                         Chips
                     </button>
                     <button
@@ -1303,7 +1303,7 @@ export default function InventarioTelefonia() {
                                             <td className="px-6 py-4">
                                                 {item.chip ? (
                                                     <div className="flex items-center gap-1 text-indigo-700 bg-indigo-50 px-2 py-1 rounded-md border border-indigo-100 w-fit">
-                                                        <Cpu className="w-3 h-3" />
+                                                        <CardSim className="w-3 h-3" />
                                                         <span className="font-mono font-medium">{item.chip.numero_linea}</span>
                                                     </div>
                                                 ) : (
@@ -1397,29 +1397,24 @@ export default function InventarioTelefonia() {
 
                                                     {item.estado === "Mantenimiento" && (
                                                         <div className="flex gap-1">
-                                                            <button
-                                                                onClick={() => handleProcesarBaja(item, 'APROBAR')}
-                                                                className="p-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
-                                                                title="Confirmar Baja Definitiva"
-                                                            >
-                                                                <Trash2 className="h-4 w-4" />
-                                                            </button>
-                                                            <button
-                                                                onClick={() => handleProcesarBaja(item, 'REPARADO')}
-                                                                className="p-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
-                                                                title="Marcar como Reparado (Disponible)"
-                                                            >
-                                                                <CheckCircle className="h-4 w-4" />
-                                                            </button>
+                                                            <span className="p-1.5 rounded-md bg-amber-50 text-amber-700 text-xs flex items-center gap-1" title="Pendiente de Aprobación">
+                                                                <Clock className="h-3 w-3" /> En Proceso de Baja
+                                                            </span>
                                                         </div>
                                                     )}
 
                                                     {/* Tools */}
                                                     <div className="h-4 w-px bg-gray-200 mx-1"></div>
 
-                                                    <button onClick={() => handleEditEquipo(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar">
-                                                        <Pencil className="h-4 w-4" />
-                                                    </button>
+                                                    {(item.estado === "Baja" || (item.estado === 'Mantenimiento' && item.estado_actual === 'Proceso de Baja')) ? (
+                                                        <span className="p-1.5 rounded-md text-gray-300 cursor-not-allowed" title="Equipo en Baja - No editable">
+                                                            <Pencil className="h-4 w-4" />
+                                                        </span>
+                                                    ) : (
+                                                        <button onClick={() => handleEditEquipo(item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Editar">
+                                                            <Pencil className="h-4 w-4" />
+                                                        </button>
+                                                    )}
 
                                                     <button onClick={() => handleViewHistory(item.id)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Historial">
                                                         <History className="h-4 w-4" />
@@ -1446,7 +1441,11 @@ export default function InventarioTelefonia() {
                                                         </button>
                                                     )}
 
-                                                    {!item.chip ? (
+                                                    {(item.estado === "Baja" || (item.estado === 'Mantenimiento' && item.estado_actual === 'Proceso de Baja')) ? (
+                                                        <span className="p-1.5 rounded-md text-gray-300 cursor-not-allowed" title="Equipo en Baja - No editable">
+                                                            <Link className="h-4 w-4" />
+                                                        </span>
+                                                    ) : !item.chip ? (
                                                         <button onClick={() => handleOpenLink('equipo', item)} className="p-1.5 rounded-md hover:bg-gray-100 text-gray-500" title="Vincular Línea">
                                                             <Link className="h-4 w-4" />
                                                         </button>
@@ -2786,6 +2785,7 @@ export default function InventarioTelefonia() {
                                     ))
                                 : telefoniaStore.equipos
                                     .filter(e => !e.chip_id) // Only available equipos
+                                    .filter(e => e.estado !== 'Baja' && !(e.estado === 'Mantenimiento' && e.estado_actual === 'Proceso de Baja')) // Exclude Baja
                                     .filter(e => {
                                         const term = linkSearchTerm.toLowerCase().replace(/[\s-]/g, "");
                                         const modelo = e.modelo.toLowerCase().replace(/[\s-]/g, "");
