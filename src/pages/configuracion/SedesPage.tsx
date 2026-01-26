@@ -30,6 +30,10 @@ export default function SedesPage() {
 
     // Formulario (para modal)
     const [nombre, setNombre] = useState<string>("");
+    const [tipo, setTipo] = useState<"AGRICOLA" | "INDUSTRIAL" | null>(null);
+    const [cultivos, setCultivos] = useState<string[]>([]);
+    const [cultivoInput, setCultivoInput] = useState<string>("");
+
     const [editingId, setEditingId] = useState<string | null>(null);
     const [saving, setSaving] = useState<boolean>(false);
     const [localError, setLocalError] = useState<string | null>(null);
@@ -73,6 +77,9 @@ export default function SedesPage() {
 
     const resetForm = () => {
         setNombre("");
+        setTipo(null);
+        setCultivos([]);
+        setCultivoInput("");
         setEditingId(null);
         setLocalError(null);
         setFormOpen(false);
@@ -80,6 +87,9 @@ export default function SedesPage() {
 
     const openCreate = () => {
         setNombre("");
+        setTipo(null);
+        setCultivos([]);
+        setCultivoInput("");
         setEditingId(null);
         setLocalError(null);
         setFormOpen(true);
@@ -87,6 +97,9 @@ export default function SedesPage() {
 
     const openEdit = (s: Sede) => {
         setNombre(s.nombre.toUpperCase());
+        setTipo(s.tipo || null);
+        setCultivos(s.cultivos || []);
+        setCultivoInput("");
         setEditingId(s.id);
         setLocalError(null);
         setFormOpen(true);
@@ -105,10 +118,19 @@ export default function SedesPage() {
         setSaving(true);
         setLocalError(null);
 
+        // If user has typed a crop but hasn't pressed Enter, add it to the list
+        let finalCultivos = [...cultivos];
+        const pending = cultivoInput.trim();
+        if (pending && !finalCultivos.includes(pending)) {
+            finalCultivos.push(pending);
+        }
+
         try {
             await upsertSede({
                 id: editingId ?? undefined,
                 nombre: trimmed,
+                tipo: tipo,
+                cultivos: finalCultivos,
             });
 
             showToast(
@@ -259,6 +281,8 @@ export default function SedesPage() {
                             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                                 <tr>
                                     <th className="px-4 py-3">Sede</th>
+                                    <th className="px-4 py-3">Tipo</th>
+                                    <th className="px-4 py-3">Cultivos</th>
                                     <th className="px-4 py-3 text-right">Acciones</th>
                                 </tr>
                             </thead>
@@ -290,6 +314,31 @@ export default function SedesPage() {
                                     currentRows.map((s: Sede) => (
                                         <tr key={s.id} className="hover:bg-gray-50">
                                             <td className="px-4 py-3">{s.nombre}</td>
+                                            <td className="px-4 py-3">
+                                                {s.tipo ? (
+                                                    <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${s.tipo === 'AGRICOLA'
+                                                        ? 'bg-green-50 text-green-700'
+                                                        : 'bg-orange-50 text-orange-700'
+                                                        }`}>
+                                                        {s.tipo}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">--</span>
+                                                )}
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {s.cultivos && s.cultivos.length > 0 ? (
+                                                    <div className="flex flex-wrap gap-1">
+                                                        {s.cultivos.map((cult, i) => (
+                                                            <span key={i} className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] bg-gray-100 text-gray-600 border border-gray-200">
+                                                                {cult}
+                                                            </span>
+                                                        ))}
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">--</span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3 text-right">
                                                 <button
                                                     type="button"
@@ -333,6 +382,66 @@ export default function SedesPage() {
                             placeholder="SEDE TRUJILLO"
                             className="w-full rounded-lg border bg-white px-3 py-2 text-sm uppercase outline-none ring-1 ring-transparent focus:ring-gray-300"
                         />
+                        {(localError || error) && (
+                            <p className="mt-1 text-xs text-rose-600">
+                                {localError || error}
+                            </p>
+                        )}
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-600">
+                                Tipo
+                            </label>
+                            <select
+                                value={tipo || ""}
+                                onChange={(e) => setTipo((e.target.value as "AGRICOLA" | "INDUSTRIAL") || null)}
+                                className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                            >
+                                <option value="">Seleccionar...</option>
+                                <option value="AGRICOLA">AGRICOLA</option>
+                                <option value="INDUSTRIAL">INDUSTRIAL</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="mb-1 block text-xs font-medium text-gray-600">
+                            Cultivos
+                        </label>
+                        <div className="flex flex-wrap gap-2 mb-2 p-2 border rounded-lg bg-gray-50 min-h-[40px]">
+                            {cultivos.length === 0 && <span className="text-gray-400 text-xs self-center">Sin cultivos</span>}
+                            {cultivos.map((cult, idx) => (
+                                <div key={idx} className="inline-flex items-center gap-1 bg-white border border-gray-200 rounded px-2 py-1 text-xs">
+                                    <span>{cult}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => setCultivos(prev => prev.filter((_, i) => i !== idx))}
+                                        className="text-gray-400 hover:text-red-500"
+                                    >
+                                        &times;
+                                    </button>
+                                </div>
+                            ))}
+                        </div>
+                        <input
+                            value={cultivoInput}
+                            onChange={(e) => setCultivoInput(e.target.value.toUpperCase())}
+                            onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                    e.preventDefault();
+                                    const val = cultivoInput.trim();
+                                    if (val && !cultivos.includes(val)) {
+                                        setCultivos([...cultivos, val]);
+                                        setCultivoInput("");
+                                    }
+                                }
+                            }}
+                            placeholder="Escribe y presiona Enter..."
+                            className="w-full rounded-lg border bg-white px-3 py-2 text-sm uppercase outline-none ring-1 ring-transparent focus:ring-gray-300"
+                        />
+                        <p className="mt-1 text-[10px] text-gray-500">Presiona Enter para agregar un cultivo.</p>
                         {(localError || error) && (
                             <p className="mt-1 text-xs text-rose-600">
                                 {localError || error}

@@ -6,6 +6,8 @@ export type Sede = {
     nombre: string;
     created_at?: string | null;
     operadores?: string[]; // ["CLARO", "ENTEL", ...]
+    tipo?: 'AGRICOLA' | 'INDUSTRIAL' | null;
+    cultivos?: string[];
 };
 
 type SedesState = {
@@ -51,7 +53,7 @@ export async function refreshSedes(): Promise<void> {
     // 1. Fetch Sedes
     const { data: sedesData, error: sedesError } = await supabase
         .from("sedes")
-        .select("id, nombre, created_at")
+        .select("id, nombre, created_at, tipo, cultivos")
         .order("nombre", { ascending: true });
 
     if (sedesError) {
@@ -86,6 +88,8 @@ export async function refreshSedes(): Promise<void> {
         nombre: row.nombre as string,
         created_at: row.created_at,
         operadores: coverageMap.get(row.id) || [],
+        tipo: row.tipo,
+        cultivos: row.cultivos || [],
     }));
 
     state.loading = false;
@@ -96,9 +100,13 @@ export async function upsertSede(input: {
     id?: string;
     nombre: string;
     operadores?: string[]; // Optional: update coverage too
+    tipo?: 'AGRICOLA' | 'INDUSTRIAL' | null;
+    cultivos?: string[];
 }): Promise<void> {
     const payload = {
         nombre: input.nombre,
+        tipo: input.tipo,
+        cultivos: input.cultivos,
     };
 
     // 1. Upsert Sede
