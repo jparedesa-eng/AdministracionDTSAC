@@ -3,7 +3,7 @@ import { telefoniaStore } from "../../store/telefoniaStore";
 import { useAuth } from "../../auth/AuthContext";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu, RefreshCw, CornerUpLeft, AlertTriangle } from "lucide-react";
+import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu, RefreshCw, CornerUpLeft, AlertTriangle, ClipboardCheck } from "lucide-react";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 
 interface AsignacionUI {
@@ -527,6 +527,11 @@ export default function MisEquipos() {
                                                 <div className="flex-1 py-2.5 text-center text-sm font-bold text-amber-600 bg-amber-50 rounded-lg border border-amber-200 cursor-default flex items-center justify-center gap-2">
                                                     <RefreshCw className="h-4 w-4 animate-spin-slow" />
                                                     En Devolución
+                                                </div>
+                                            ) : item.estado === "PARA REVISION" ? (
+                                                <div className="flex-1 py-2.5 text-center text-sm font-bold text-purple-600 bg-purple-50 rounded-lg border border-purple-200 cursor-default flex items-center justify-center gap-2">
+                                                    <ClipboardCheck className="h-4 w-4" />
+                                                    En Revisión
                                                 </div>
                                             ) : (
                                                 <>

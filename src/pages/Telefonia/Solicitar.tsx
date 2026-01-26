@@ -2017,17 +2017,7 @@ export default function SolicitarTelefonia() {
                     size="lg"
                     footer={
                         <div className="flex gap-2">
-                            {selectedDetail?.estado === "Entregado" && (
-                                <button
-                                    onClick={() => {
-                                        setRedistributionTicket(selectedDetail);
-                                        setSelectedDetail(null);
-                                    }}
-                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors flex items-center gap-2"
-                                >
-                                    <span className="text-lg">👥</span> Asignar Responsables
-                                </button>
-                            )}
+
                             <button
                                 onClick={() => setSelectedDetail(null)}
                                 className="bg-gray-100 text-gray-600 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-200 transition-colors"

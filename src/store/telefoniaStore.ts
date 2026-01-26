@@ -144,6 +144,7 @@ export interface Solicitud {
 
     // Asignaciones
     alternativa_modelo?: string | null;
+    asignacion_id?: string | null; // ID of the specific assignment record
 
     // DEPRECATED COLUMNS (Legacy Data)
     // DEPRECATED / REMOVED COLUMNS
@@ -514,12 +515,13 @@ export const telefoniaStore = {
 
                         activeMap.set(a.equipo_id, {
                             id: a.solicitud_id,
+                            asignacion_id: a.id, // Pass Assignment ID
                             beneficiario_nombre: nombre,
                             beneficiario_area: area,
                             fecha_entrega: a.fecha_entrega,
                             tipo_servicio: "Asignación Múltiple",
                             fundo_planta: fundo,
-                            periodo_uso: periodo, // Add to summary object
+                            periodo_uso: periodo,
                             fecha_fin_uso: fechaFin
                         });
                     }

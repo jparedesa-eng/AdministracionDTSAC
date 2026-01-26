@@ -399,7 +399,9 @@ export default function InventarioTelefonia() {
                 setConfirmation(prev => ({ ...prev, loading: true }));
                 try {
                     if (!eq.asignacion_activa) throw new Error("No hay asignación activa para este equipo");
-                    await telefoniaStore.recepcionarEquipo(eq.asignacion_activa.id, eq.id);
+                    // Use asignacion_id (mapped in store) or fallback to id if not present (legacy)
+                    const asigId = eq.asignacion_activa.asignacion_id || eq.asignacion_activa.id;
+                    await telefoniaStore.recepcionarEquipo(asigId, eq.id);
                     setToast({ type: "success", message: "Equipo recepcionado. Listo para revisión." });
                     await loadData(true);
                     closeConfirmation();
@@ -422,8 +424,9 @@ export default function InventarioTelefonia() {
         if (!modalActionItem?.asignacion_activa) return;
         setSubmitting(true);
         try {
+            const asigId = modalActionItem.asignacion_activa.asignacion_id || modalActionItem.asignacion_activa.id;
             await telefoniaStore.finalizarRevision(
-                modalActionItem.asignacion_activa.id,
+                asigId,
                 modalActionItem.id,
                 revisionData.estado
             );
@@ -455,6 +458,11 @@ export default function InventarioTelefonia() {
         e.preventDefault();
         try {
             let newChipId = null;
+
+            // Ensure IMEI has no spaces
+            if (draftEquipo.imei) {
+                draftEquipo.imei = draftEquipo.imei.replace(/\s/g, "");
+            }
 
             if (!draftEquipo.id && includeEsim) {
                 if (!esimData.numero || !esimData.operador) {
@@ -946,7 +954,12 @@ export default function InventarioTelefonia() {
                         </div>
                         <div>
                             <p className="text-xs font-medium text-gray-500 uppercase">Equipos</p>
-                            <p className="text-xl font-bold text-gray-900">{telefoniaStore.equipos.length}</p>
+                            <div className="flex items-baseline gap-1">
+                                <p className="text-xl font-bold text-gray-900">{telefoniaStore.equipos.length}</p>
+                                <span className="text-xs text-gray-500 font-medium">
+                                    ({telefoniaStore.equipos.filter(e => e.estado === "Asignado").length} asig.)
+                                </span>
+                            </div>
                         </div>
                     </div>
                     {/* Chips */}
@@ -956,7 +969,12 @@ export default function InventarioTelefonia() {
                         </div>
                         <div>
                             <p className="text-xs font-medium text-gray-500 uppercase">Chips</p>
-                            <p className="text-xl font-bold text-gray-900">{telefoniaStore.chips.length}</p>
+                            <div className="flex items-baseline gap-1">
+                                <p className="text-xl font-bold text-gray-900">{telefoniaStore.chips.length}</p>
+                                <span className="text-xs text-gray-500 font-medium">
+                                    ({telefoniaStore.chips.filter(c => c.estado === "Asignado").length} asig.)
+                                </span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1288,7 +1306,7 @@ export default function InventarioTelefonia() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                {item.estado === "Asignado" && item.asignacion_activa ? (
+                                                {(item.estado === "Asignado" || item.estado === "Para Devolucion" || item.estado === "Para Revisión") && item.asignacion_activa ? (
                                                     <div>
                                                         <div className="font-medium text-gray-900">{item.asignacion_activa.beneficiario_nombre}</div>
                                                         <div className="text-xs text-gray-500">{item.asignacion_activa.beneficiario_area}</div>
@@ -1302,7 +1320,7 @@ export default function InventarioTelefonia() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4">
-                                                {item.estado === "Asignado" && item.asignacion_activa ? (
+                                                {(item.estado === "Asignado" || item.estado === "Para Devolucion" || item.estado === "Para Revisión") && item.asignacion_activa ? (
                                                     <div className="text-xs">
                                                         {item.asignacion_activa.periodo_uso === "PERMANENTE" ? (
                                                             <span className="font-bold text-gray-600">PERMANENTE</span>
@@ -1359,14 +1377,14 @@ export default function InventarioTelefonia() {
                                                                 className="p-1.5 rounded-md bg-red-100 text-red-700 hover:bg-red-200 transition-colors"
                                                                 title="Confirmar Baja Definitiva"
                                                             >
-                                                                <CheckCircle className="h-4 w-4" />
+                                                                <Trash2 className="h-4 w-4" />
                                                             </button>
                                                             <button
                                                                 onClick={() => handleProcesarBaja(item, 'REPARADO')}
-                                                                className="p-1.5 rounded-md bg-blue-100 text-blue-700 hover:bg-blue-200 transition-colors"
+                                                                className="p-1.5 rounded-md bg-green-100 text-green-700 hover:bg-green-200 transition-colors"
                                                                 title="Marcar como Reparado (Disponible)"
                                                             >
-                                                                <div className="text-[10px] font-bold">R</div>
+                                                                <CheckCircle className="h-4 w-4" />
                                                             </button>
                                                         </div>
                                                     )}
@@ -2160,7 +2178,7 @@ export default function InventarioTelefonia() {
                             required
                             className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
                             value={draftEquipo.imei || ""}
-                            onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value })}
+                            onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value.replace(/\s/g, "") })}
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
