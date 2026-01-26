@@ -229,6 +229,39 @@ export const telefoniaStore = {
     solicitudes: [] as Solicitud[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
 
+    // --- VALIDATION ---
+    async checkActiveAssignment(dni: string): Promise<{ exists: boolean; message?: string; detail?: any }> {
+        if (!dni) return { exists: false };
+
+        const { data, error } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                *,
+                equipo:telefonia_equipos(*),
+                chip:telefonia_chips(*),
+                solicitud:telefonia_solicitudes(*)
+            `)
+            .eq("usuario_final_dni", dni)
+            .eq("estado", "Entregado");
+
+        if (error) {
+            console.error("Error checking active assignment:", error);
+            // Fail safe: return false but log error. Or throw? Warning is safer.
+            return { exists: false };
+        }
+
+        if (data && data.length > 0) {
+            const active = data[0];
+            return {
+                exists: true,
+                message: `El usuario con DNI ${dni} ya cuenta con un celular asignado`,
+                detail: active
+            };
+        }
+
+        return { exists: false };
+    },
+
     // --- DEVOLUCIONES ---
     async marcarParaDevolucion(asignacionId: string, equipoId?: string, _chipId?: string) {
         // 1. Update Asignacion Status
@@ -294,7 +327,7 @@ export const telefoniaStore = {
         const { error: asigError } = await supabase
             .from("telefonia_solicitud_asignaciones")
             .update({
-                estado: "DEVUELTO",
+                estado: "Devuelto",
                 fecha_devolucion: new Date().toISOString() // Set return date now
             })
             .eq("id", asignacionId);
@@ -934,7 +967,6 @@ export const telefoniaStore = {
             .eq("id", chipId);
         if (errCh) throw errCh;
 
-        // 3. Update Active Assignment if exists (Fix for desvincular post-delivery)
         // ONLY if status is 'Entregado' (not Devuelto)
         const { data: activeAssignments } = await supabase
             .from("telefonia_solicitud_asignaciones")

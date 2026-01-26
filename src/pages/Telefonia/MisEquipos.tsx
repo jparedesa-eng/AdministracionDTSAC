@@ -46,6 +46,7 @@ export default function MisEquipos() {
     const { sedes } = getSedesState();
     const [returnModalOpen, setReturnModalOpen] = useState(false);
     const [selectedReturn, setSelectedReturn] = useState<AsignacionUI | null>(null);
+    const [itemErrors, setItemErrors] = useState<Record<string, string>>({}); // ID -> Error mapping
 
     const loadMisEquipos = async () => {
         if (!user?.id) return;
@@ -209,6 +210,24 @@ export default function MisEquipos() {
                     return;
                 }
             }
+
+            // --- BLOCKING VALIDATION (Only if DNI changed) ---
+            if (item.temp_dni && item.temp_dni.length === 8 && item.temp_dni !== item.usuario_final_dni) {
+                const check = await telefoniaStore.checkActiveAssignment(item.temp_dni);
+                if (check.exists) {
+                    setToast({ type: 'error', message: check.message || "Usuario ya tiene asignación." });
+                    setItemErrors(prev => ({ ...prev, [item.id]: "Usuario ya tiene equipo asignado" }));
+                    return;
+                }
+            }
+            // -------------------------------------------------
+
+            // Clear error if valid
+            setItemErrors(prev => {
+                const n = { ...prev };
+                delete n[item.id];
+                return n;
+            });
 
             await telefoniaStore.updateAsignacionResponsable(item.id, {
                 dni: item.temp_dni,
@@ -379,11 +398,32 @@ export default function MisEquipos() {
                                                             <div>
                                                                 <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">DNI</label>
                                                                 <input
-                                                                    className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                                    className={`w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2 ${itemErrors[item.id] ? 'border-red-500 bg-red-50' : ''}`}
                                                                     placeholder="Ingrese DNI"
                                                                     value={item.temp_dni}
-                                                                    onChange={e => handleChange(item.id, 'temp_dni', e.target.value)}
+                                                                    onChange={async (e) => {
+                                                                        const val = e.target.value;
+                                                                        handleChange(item.id, 'temp_dni', val);
+
+                                                                        // Clear previous error
+                                                                        if (itemErrors[item.id]) {
+                                                                            setItemErrors(prev => {
+                                                                                const n = { ...prev };
+                                                                                delete n[item.id];
+                                                                                return n;
+                                                                            });
+                                                                        }
+
+                                                                        // Real-time Check
+                                                                        if (val && val.length === 8 && val !== item.usuario_final_dni) {
+                                                                            const check = await telefoniaStore.checkActiveAssignment(val);
+                                                                            if (check.exists) {
+                                                                                setItemErrors(prev => ({ ...prev, [item.id]: check.message || "Usuario ya tiene asignación." }));
+                                                                            }
+                                                                        }
+                                                                    }}
                                                                 />
+                                                                {itemErrors[item.id] && <p className="text-xs text-red-600 mt-1">{itemErrors[item.id]}</p>}
                                                             </div>
                                                             <div>
                                                                 <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Nombre Completo</label>

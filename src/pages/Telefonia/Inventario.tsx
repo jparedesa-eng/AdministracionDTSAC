@@ -314,6 +314,18 @@ export default function InventarioTelefonia() {
                 ? { ...responsableData, sede: asignacionTicketData.fundo_planta }
                 : asignacionData;
 
+            // --- BLOCKING VALIDATION ---
+            if (usuarioFinal.dni && usuarioFinal.dni.length === 8) {
+                const check = await telefoniaStore.checkActiveAssignment(usuarioFinal.dni);
+                if (check.exists) {
+                    setToast({ type: 'error', message: check.message || "Usuario ya tiene asignación." });
+                    setFormErrors({ dni: "Usuario ya con equipo asignado." });
+                    setSubmitting(false);
+                    return;
+                }
+            }
+            // ---------------------------
+
             await telefoniaStore.asignarDirectamente(
                 modalActionItem.id,
                 usuarioFinal,
@@ -727,6 +739,19 @@ export default function InventarioTelefonia() {
 
         try {
             setSubmitting(true);
+
+            // --- BLOCKING VALIDATION ---
+            if (responsableData.dni && responsableData.dni.length === 8) {
+                const check = await telefoniaStore.checkActiveAssignment(responsableData.dni);
+                if (check.exists) {
+                    setToast({ type: 'error', message: check.message || "Usuario ya tiene asignación." });
+                    setFormErrors({ dni: "Usuario ya con equipo asignado." });
+                    setSubmitting(false);
+                    return;
+                }
+            }
+            // ---------------------------
+
             await telefoniaStore.asignarChipDirectamente(
                 modalActionChip.id,
                 responsableData,
@@ -1716,11 +1741,40 @@ export default function InventarioTelefonia() {
                         <div className="grid grid-cols-2 gap-3">
                             <input
                                 required
-                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                className={`block w-full rounded-md sm:text-sm border p-2 ${formErrors.responsable_dni_error ? "border-red-500 bg-red-50" : "border-gray-300"}`}
                                 value={responsableData.dni}
-                                onChange={(e) => setResponsableData({ ...responsableData, dni: e.target.value })}
+                                maxLength={8}
+                                onChange={async (e) => {
+                                    const val = e.target.value.replace(/\D/g, '');
+                                    setResponsableData({ ...responsableData, dni: val });
+
+                                    // Real-time Check
+                                    // Logic: If sameAsResponsable is unchecked, we still might want to warn if the Responsable himself has an assignment?
+                                    // Usually "Responsable" can have multiple devices if they are for his team.
+                                    // BUT, the initial request was "Beneficiary cannot have more than one".
+                                    // If "sameAsResponsable" is true, then Responsable == Beneficiary, so we MUST check.
+                                    // If "sameAsResponsable" is false, Responsable is just the holder (e.g. Manager), 
+                                    // and the actual user is someone else (checked in Usuario Final input).
+                                    // So we primarily check validation here if (sameAsResponsable).
+                                    // HOWEVER, the user asked for validation on THIS field.
+                                    // If I type a DNI here and sameAsResponsable is TRUE, it should validate.
+
+                                    if (sameAsResponsable && val.length === 8) {
+                                        const check = await telefoniaStore.checkActiveAssignment(val);
+                                        if (check.exists) {
+                                            setFormErrors(prev => ({ ...prev, responsable_dni_error: check.message || "Usuario ya tiene asignación." }));
+                                        } else {
+                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
+                                        }
+                                    } else {
+                                        if (formErrors.responsable_dni_error) {
+                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
+                                        }
+                                    }
+                                }}
                                 placeholder="DNI Responsable"
                             />
+                            {formErrors.responsable_dni_error && <p className="text-xs text-red-600 mt-1 col-span-2">{formErrors.responsable_dni_error}</p>}
                             <input
                                 required
                                 className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
@@ -1767,11 +1821,29 @@ export default function InventarioTelefonia() {
                             <div className="grid grid-cols-2 gap-3">
                                 <input
 
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                    className={`block w-full rounded-md sm:text-sm border p-2 ${formErrors.dni ? "border-red-500 bg-red-50" : "border-gray-300"}`}
                                     value={asignacionData.dni}
-                                    onChange={(e) => setAsignacionData({ ...asignacionData, dni: e.target.value })}
+                                    maxLength={8}
+                                    onChange={async (e) => {
+                                        const val = e.target.value.replace(/\D/g, '');
+                                        setAsignacionData({ ...asignacionData, dni: val });
+
+                                        if (val.length === 8) {
+                                            const check = await telefoniaStore.checkActiveAssignment(val);
+                                            if (check.exists) {
+                                                setFormErrors(prev => ({ ...prev, dni: check.message || "Usuario ya tiene asignación." }));
+                                            } else {
+                                                setFormErrors(prev => { const n = { ...prev }; delete n.dni; return n; });
+                                            }
+                                        } else {
+                                            if (formErrors.dni) {
+                                                setFormErrors(prev => { const n = { ...prev }; delete n.dni; return n; });
+                                            }
+                                        }
+                                    }}
                                     placeholder="DNI Usuario"
                                 />
+                                {formErrors.dni && <p className="text-xs text-red-600 mt-1 col-span-2">{formErrors.dni}</p>}
                                 <input
 
                                     className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
@@ -2809,9 +2881,26 @@ export default function InventarioTelefonia() {
                         <div className="grid grid-cols-2 gap-3">
                             <input
                                 required
-                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
+                                className={`block w-full rounded-md sm:text-sm border p-2 ${formErrors.responsable_dni_error ? "border-red-500 bg-red-50" : "border-gray-300"}`}
                                 value={responsableData.dni}
-                                onChange={(e) => setResponsableData({ ...responsableData, dni: e.target.value })}
+                                maxLength={8}
+                                onChange={async (e) => {
+                                    const val = e.target.value.replace(/\D/g, '');
+                                    setResponsableData({ ...responsableData, dni: val });
+
+                                    if (val.length === 8) {
+                                        const check = await telefoniaStore.checkActiveAssignment(val);
+                                        if (check.exists) {
+                                            setFormErrors(prev => ({ ...prev, responsable_dni_error: check.message || "Usuario ya tiene asignación." }));
+                                        } else {
+                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
+                                        }
+                                    } else {
+                                        if (formErrors.responsable_dni_error) {
+                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
+                                        }
+                                    }
+                                }}
                                 placeholder="DNI Responsable"
                             />
                             <input

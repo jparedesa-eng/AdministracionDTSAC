@@ -77,6 +77,7 @@ export default function SolicitarTelefonia() {
 
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
+    const [beneficiaryErrors, setBeneficiaryErrors] = useState<Record<number, string>>({}); // Index -> Error Message
 
     const [formData, setFormData] = useState({
         dni: "",
@@ -461,7 +462,7 @@ export default function SolicitarTelefonia() {
         return Object.keys(newErrors).length > 0 ? newErrors : null;
     };
 
-    const nextStep = () => {
+    const nextStep = async () => {
         const validationErrors = validateStep(currentStep);
         if (validationErrors) {
             // Updated: Set errors state
@@ -478,6 +479,37 @@ export default function SolicitarTelefonia() {
         }
         // Clear errors if valid
         setErrors({});
+
+        // --- STEP 3: BLOCKING VALIDATION (Active Assignment Check) ---
+        if (currentStep === 3 && !skipBeneficiaries && formData.n_linea !== "Línea Nueva (SOLO CHIP)") {
+            // Validate all beneficiaries
+            // Validate all beneficiaries
+            setSubmitting(true);
+            setBeneficiaryErrors({}); // Reset previous errors
+
+            let hasActive = false;
+            const newBeneficiaryErrors: Record<number, string> = {};
+
+            for (let i = 0; i < beneficiaries.length; i++) {
+                const b = beneficiaries[i];
+                if (b.dni && b.dni.length === 8) {
+                    const check = await telefoniaStore.checkActiveAssignment(b.dni);
+                    if (check.exists) {
+                        hasActive = true;
+                        newBeneficiaryErrors[i] = check.message || "Usuario ya tiene asignación activa.";
+                    }
+                }
+            }
+
+            setSubmitting(false);
+
+            if (hasActive) {
+                setBeneficiaryErrors(newBeneficiaryErrors);
+                setToast({ type: 'error', message: "Existen beneficiarios con asignaciones activas. Revise los campos marcados." });
+                return; // Block
+            }
+        }
+        // -----------------------------------------------------------
 
         // Prepare Beneficiaries State when moving to Step 2 (Beneficiaries)
         if (currentStep === 2 && formData.cantidad_lineas > 0) {
@@ -1584,12 +1616,36 @@ export default function SolicitarTelefonia() {
                                                     placeholder="00000000"
                                                     maxLength={8}
                                                     value={b.dni}
-                                                    onChange={e => {
+                                                    onChange={async (e) => {
+                                                        const val = e.target.value.replace(/\D/g, '');
                                                         const newArr = [...beneficiaries];
-                                                        newArr[index].dni = e.target.value.replace(/\D/g, '');
+                                                        newArr[index].dni = val;
                                                         setBeneficiaries(newArr);
+
+                                                        // Clear error initially
+                                                        if (beneficiaryErrors[index]) {
+                                                            const newErrors = { ...beneficiaryErrors };
+                                                            delete newErrors[index];
+                                                            setBeneficiaryErrors(newErrors);
+                                                        }
+
+                                                        // Real-time Check
+                                                        if (val.length === 8) {
+                                                            const check = await telefoniaStore.checkActiveAssignment(val);
+                                                            if (check.exists) {
+                                                                setBeneficiaryErrors(prev => ({
+                                                                    ...prev,
+                                                                    [index]: check.message || "Usuario ya tiene asignación."
+                                                                }));
+                                                            }
+                                                        }
                                                     }}
                                                 />
+                                                {beneficiaryErrors[index] && (
+                                                    <p className="text-[10px] text-red-600 font-bold mt-1 animate-in slide-in-from-top-1">
+                                                        {beneficiaryErrors[index]}
+                                                    </p>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo <span className="text-red-500">*</span></label>
