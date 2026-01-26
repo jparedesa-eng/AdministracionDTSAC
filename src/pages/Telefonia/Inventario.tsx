@@ -2283,7 +2283,7 @@ export default function InventarioTelefonia() {
                                         <input
                                             className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 bg-white"
                                             value={esimData.numero}
-                                            onChange={(e) => setEsimData({ ...esimData, numero: e.target.value })}
+                                            onChange={(e) => setEsimData({ ...esimData, numero: e.target.value.replace(/\s/g, "") })}
                                             placeholder="999..."
                                         />
                                     </div>
@@ -2329,7 +2329,7 @@ export default function InventarioTelefonia() {
                             required
                             className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                             value={draftChip.numero_linea || ""}
-                            onChange={(e) => setDraftChip({ ...draftChip, numero_linea: e.target.value })}
+                            onChange={(e) => setDraftChip({ ...draftChip, numero_linea: e.target.value.replace(/\s/g, "") })}
                         />
                     </div>
                     <div>
