@@ -1896,7 +1896,7 @@ export default function InventarioTelefonia() {
                                 <select
                                     className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
                                     value={asignacionTicketData.fundo_planta}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value })}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value, cultivo: "" })}
                                 >
                                     <option value="">Seleccione Fundo/Planta...</option>
                                     <option value="BASE">BASE</option>
@@ -1913,13 +1913,17 @@ export default function InventarioTelefonia() {
                                     onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, cultivo: e.target.value })}
                                 >
                                     <option value="">Seleccione Cultivo...</option>
-                                    <option value="ARANDANO">ARANDANO</option>
-                                    <option value="PALTA">PALTA</option>
-                                    <option value="ESPARRAGO">ESPARRAGO</option>
-                                    <option value="UVA">UVA</option>
-                                    <option value="MANGO">MANGO</option>
-                                    <option value="PIMIENTO">PIMIENTO</option>
-                                    <option value="OTROS">OTROS</option>
+                                    {(() => {
+                                        const activeSede = sedes.find(s => s.nombre === asignacionTicketData.fundo_planta);
+                                        const availableCultivos = activeSede?.cultivos || [];
+
+                                        if (availableCultivos.length > 0) {
+                                            return availableCultivos.map(c => (
+                                                <option key={c} value={c}>{c}</option>
+                                            ));
+                                        }
+                                        return null;
+                                    })()}
                                 </select>
                             </div>
                         </div>
@@ -2974,7 +2978,7 @@ export default function InventarioTelefonia() {
                                 <select
                                     className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
                                     value={asignacionTicketData.fundo_planta}
-                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value })}
+                                    onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, fundo_planta: e.target.value, cultivo: "" })}
                                 >
                                     <option value="">Seleccione Fundo/Planta...</option>
                                     <option value="BASE">BASE</option>
@@ -2991,13 +2995,17 @@ export default function InventarioTelefonia() {
                                     onChange={(e) => setAsignacionTicketData({ ...asignacionTicketData, cultivo: e.target.value })}
                                 >
                                     <option value="">Seleccione Cultivo...</option>
-                                    <option value="ARANDANO">ARANDANO</option>
-                                    <option value="PALTA">PALTA</option>
-                                    <option value="ESPARRAGO">ESPARRAGO</option>
-                                    <option value="UVA">UVA</option>
-                                    <option value="MANGO">MANGO</option>
-                                    <option value="PIMIENTO">PIMIENTO</option>
-                                    <option value="OTROS">OTROS</option>
+                                    {(() => {
+                                        const activeSede = sedes.find(s => s.nombre === asignacionTicketData.fundo_planta);
+                                        const availableCultivos = activeSede?.cultivos || [];
+
+                                        if (availableCultivos.length > 0) {
+                                            return availableCultivos.map(c => (
+                                                <option key={c} value={c}>{c}</option>
+                                            ));
+                                        }
+                                        return null;
+                                    })()}
                                 </select>
                             </div>
                         </div>

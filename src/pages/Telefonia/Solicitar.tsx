@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore, type Solicitud } from "../../store/telefoniaStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
+import { getCecosState, subscribeCecos } from "../../store/cecosStore";
 
 import type { ValidationResult } from "../../store/telefoniaStore";
 import { aplicativosStore } from "../../store/aplicativosStore";
@@ -149,8 +150,10 @@ export default function SolicitarTelefonia() {
     useEffect(() => {
         loadHistory();
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
+        const unsubCecos = subscribeCecos(() => { /* triggers re-render via store hook in component body if used or we can force update */ });
         return () => {
             unsubSedes();
+            unsubCecos();
         };
     }, []);
 
@@ -207,6 +210,7 @@ export default function SolicitarTelefonia() {
 
     const [, setSedesVersion] = useState(0);
     const { sedes } = getSedesState();
+    const { cecos } = getCecosState();
 
 
 
@@ -262,6 +266,11 @@ export default function SolicitarTelefonia() {
                 newState.condicion_equipo = "";
                 newState.tipo_equipo_destino = "";
                 newState.codigo_equipo_destino = "";
+            }
+
+            // Reset cultivo if fundo_planta changes
+            if (field === "fundo_planta") {
+                newState.cultivo = "";
             }
 
             return newState;
@@ -398,6 +407,12 @@ export default function SolicitarTelefonia() {
                 newErrors.ceco = "Ingrese el CECO (Centro de Costo).";
             } else if (formData.ceco.length !== 10) {
                 newErrors.ceco = "El CECO debe tener 10 dígitos.";
+            } else {
+                // Check if exists in valid list
+                const found = cecos.find(c => c.codigo === formData.ceco);
+                if (!found) {
+                    newErrors.ceco = "El CECO ingresado no es válido.";
+                }
             }
 
             if (!formData.categoria) newErrors.categoria = "Seleccione la Categoría (Proyecto/Telefonia).";
@@ -881,13 +896,23 @@ export default function SolicitarTelefonia() {
                                 onChange={(e) => handleChange("cultivo", e.target.value)}
                             >
                                 <option value="">Seleccione...</option>
-                                <option value="ARANDANO">ARANDANO</option>
-                                <option value="PALTA">PALTA</option>
-                                <option value="ESPARRAGO">ESPARRAGO</option>
-                                <option value="UVA">UVA</option>
-                                <option value="MANGO">MANGO</option>
-                                <option value="PIMIENTO">PIMIENTO</option>
-                                <option value="OTROS">OTROS</option>
+                                {(() => {
+                                    const activeSede = sedes.find(s => s.nombre === formData.fundo_planta);
+                                    const availableCultivos = activeSede?.cultivos || [];
+
+                                    if (availableCultivos.length > 0) {
+                                        return availableCultivos.map(c => (
+                                            <option key={c} value={c}>{c}</option>
+                                        ));
+                                    }
+
+                                    // Fallback only if no sede selected or no crops defined (and maybe we shouldn't show hardcoded list if strict, but let's be safe against empty DB data by showing at least 'OTROS' or empty?) 
+                                    // User said "segun la tabla de sedes". If table is empty, list is empty.
+                                    return null;
+                                })()}
+                                {formData.cultivo && !sedes.find(s => s.nombre === formData.fundo_planta)?.cultivos?.includes(formData.cultivo) && (
+                                    <option value={formData.cultivo}>{formData.cultivo} (Legacy)</option>
+                                )}
                             </select>
                         </div>
 

@@ -52,6 +52,8 @@ import CctvCentralesPage from "./pages/configuracion/CctvCentralesPage";
 import CoberturaOperadores from "./pages/configuracion/CoberturaOperadores";
 import SupervisorST from "./pages/configuracion/SupervisorST";
 import AplicativosCelular from "./pages/configuracion/AplicativosCelular";
+import CecosPage from "./pages/configuracion/CecosPage";
+
 
 /* Seguridad */
 /* Seguridad Refactored Routes */
@@ -451,6 +453,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/configuracion/aplicativos-celular">
                 <AplicativosCelular />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/configuracion/cecos"
+            element={
+              <ProtectedRoute path="/configuracion/cecos">
+                <CecosPage />
               </ProtectedRoute>
             }
           />
