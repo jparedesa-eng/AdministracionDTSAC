@@ -264,7 +264,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     if (canSeeConfigPersonal) configSubItems.push({ id: 'conf-pers', label: 'Personal', path: '/configuracion/personal', icon: Users });
     if (canSeeConfigGerencias) configSubItems.push({ id: 'conf-ger', label: 'Gerencias', path: '/configuracion/gerencias', icon: ClipboardList });
     if (canSeeConfigSedes) configSubItems.push({ id: 'conf-sedes', label: 'Sedes', path: '/configuracion/sedes', icon: MapPin });
-    if (canSeeConfigCecos) configSubItems.push({ id: 'conf-cecos', label: 'CECO (NUMERICO)', path: '/configuracion/cecos', icon: FilePlus2 });
+    if (canSeeConfigCecos) configSubItems.push({ id: 'conf-cecos', label: 'CECO', path: '/configuracion/cecos', icon: FilePlus2 });
     if (canSeeConfigCentrales) configSubItems.push({ id: 'conf-cctv', label: 'Centrales CCTV', path: '/configuracion/centrales-cctv', icon: Building2 });
     const canSeeConfigSupervisores = hasAccess("/configuracion/supervisores");
     if (canSeeConfigSupervisores) configSubItems.push({ id: 'conf-sup', label: 'Supervisores ST', path: '/configuracion/supervisores', icon: Briefcase });

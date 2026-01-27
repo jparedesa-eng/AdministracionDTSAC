@@ -39,6 +39,7 @@ import {
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore";
+import { getPersonalState, subscribePersonal } from "../../store/personalStore"; // NEW: Import Personal Store
 import { useAuth } from "../../auth/AuthContext";
 
 export default function InventarioTelefonia() {
@@ -64,6 +65,10 @@ export default function InventarioTelefonia() {
     // New Filter
     const [filterVencimiento, setFilterVencimiento] = useState("");
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+
+    // Autocomplete State
+    const [responsableSuggestions, setResponsableSuggestions] = useState<any[]>([]);
+    const [usuarioFinalSuggestions, setUsuarioFinalSuggestions] = useState<any[]>([]);
 
 
     // Reset filters on tab change
@@ -143,7 +148,13 @@ export default function InventarioTelefonia() {
         sms: "Ilimitados"
     });
 
-    // Revision Logic
+    // Revision Logic (Unchanged for now, keeping place holders)
+
+    useEffect(() => {
+        loadData();
+        const unsub = subscribePersonal(() => { /* Force Update */ });
+        return () => unsub();
+    }, []);
     const [openRevision, setOpenRevision] = useState(false);
     const [revisionData, setRevisionData] = useState<{ estado: "Disponible" | "Mantenimiento", obs: string }>({ estado: "Disponible", obs: "" });
 
@@ -1745,19 +1756,25 @@ export default function InventarioTelefonia() {
                                 maxLength={8}
                                 onChange={async (e) => {
                                     const val = e.target.value.replace(/\D/g, '');
-                                    setResponsableData({ ...responsableData, dni: val });
+
+                                    // Local update
+                                    let newData = { ...responsableData, dni: val };
+
+                                    // Auto-fill Logic
+                                    if (val.length === 8) {
+                                        const person = getPersonalState().personal.find(p => p.dni === val);
+                                        if (person) {
+                                            newData.nombre = person.nombre;
+                                            // newData.area = person.gerenciaNombre || ""; // Removed
+                                        }
+                                    } else {
+                                        // If DNI is incomplete/edited, clear the name (reset)
+                                        newData.nombre = "";
+                                    }
+
+                                    setResponsableData(newData);
 
                                     // Real-time Check
-                                    // Logic: If sameAsResponsable is unchecked, we still might want to warn if the Responsable himself has an assignment?
-                                    // Usually "Responsable" can have multiple devices if they are for his team.
-                                    // BUT, the initial request was "Beneficiary cannot have more than one".
-                                    // If "sameAsResponsable" is true, then Responsable == Beneficiary, so we MUST check.
-                                    // If "sameAsResponsable" is false, Responsable is just the holder (e.g. Manager), 
-                                    // and the actual user is someone else (checked in Usuario Final input).
-                                    // So we primarily check validation here if (sameAsResponsable).
-                                    // HOWEVER, the user asked for validation on THIS field.
-                                    // If I type a DNI here and sameAsResponsable is TRUE, it should validate.
-
                                     if (sameAsResponsable && val.length === 8) {
                                         const check = await telefoniaStore.checkActiveAssignment(val);
                                         if (check.exists) {
@@ -1774,13 +1791,47 @@ export default function InventarioTelefonia() {
                                 placeholder="DNI Responsable"
                             />
                             {formErrors.responsable_dni_error && <p className="text-xs text-red-600 mt-1 col-span-2">{formErrors.responsable_dni_error}</p>}
-                            <input
-                                required
-                                className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
-                                value={responsableData.nombre}
-                                onChange={(e) => setResponsableData({ ...responsableData, nombre: e.target.value })}
-                                placeholder="Nombre Responsable"
-                            />
+                            <div className="relative">
+                                <input
+                                    required
+                                    className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${getPersonalState().personal.some(p => p.dni === responsableData.dni && responsableData.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                        }`}
+                                    value={responsableData.nombre}
+                                    placeholder="Nombre Responsable"
+                                    disabled={getPersonalState().personal.some(p => p.dni === responsableData.dni && responsableData.dni.length === 8)}
+                                    onChange={(e) => {
+                                        const val = e.target.value.toUpperCase();
+                                        setResponsableData({ ...responsableData, nombre: val });
+
+                                        // Autocomplete
+                                        if (val.length > 2) {
+                                            const matches = getPersonalState().personal.filter(p => p.nombre.toUpperCase().includes(val)).slice(0, 5);
+                                            setResponsableSuggestions(matches);
+                                        } else {
+                                            setResponsableSuggestions([]);
+                                        }
+                                    }}
+                                    onBlur={() => setTimeout(() => setResponsableSuggestions([]), 200)}
+                                />
+                                {responsableSuggestions.length > 0 && (
+                                    <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-40 overflow-y-auto">
+                                        {responsableSuggestions.map((p) => (
+                                            <button
+                                                key={p.id}
+                                                type="button"
+                                                className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-gray-700 transition-colors border-b border-gray-50 last:border-0"
+                                                onClick={() => {
+                                                    setResponsableData(prev => ({ ...prev, dni: p.dni || prev.dni, nombre: p.nombre }));
+                                                    setResponsableSuggestions([]);
+                                                }}
+                                            >
+                                                <div className="font-bold">{p.nombre}</div>
+                                                <div className="text-[9px] text-gray-400">DNI: {p.dni}</div>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
                         </div>
                         <div className="grid grid-cols-1 gap-3">
                             <select
@@ -1825,7 +1876,23 @@ export default function InventarioTelefonia() {
                                     maxLength={8}
                                     onChange={async (e) => {
                                         const val = e.target.value.replace(/\D/g, '');
-                                        setAsignacionData({ ...asignacionData, dni: val });
+
+                                        // Local Update
+                                        let newData = { ...asignacionData, dni: val };
+
+                                        // Auto-fill Logic
+                                        if (val.length === 8) {
+                                            const person = getPersonalState().personal.find(p => p.dni === val);
+                                            if (person) {
+                                                newData.nombre = person.nombre;
+                                                // newData.area = person.gerenciaNombre || ""; // Removed
+                                            }
+                                        } else {
+                                            // If DNI is incomplete/edited, clear the name (reset)
+                                            newData.nombre = "";
+                                        }
+
+                                        setAsignacionData(newData);
 
                                         if (val.length === 8) {
                                             const check = await telefoniaStore.checkActiveAssignment(val);
@@ -1843,13 +1910,46 @@ export default function InventarioTelefonia() {
                                     placeholder="DNI Usuario"
                                 />
                                 {formErrors.dni && <p className="text-xs text-red-600 mt-1 col-span-2">{formErrors.dni}</p>}
-                                <input
+                                <div className="relative">
+                                    <input
+                                        className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${getPersonalState().personal.some(p => p.dni === asignacionData.dni && asignacionData.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                            }`}
+                                        value={asignacionData.nombre}
+                                        placeholder="Nombre Usuario"
+                                        disabled={getPersonalState().personal.some(p => p.dni === asignacionData.dni && asignacionData.dni.length === 8)}
+                                        onChange={(e) => {
+                                            const val = e.target.value.toUpperCase();
+                                            setAsignacionData({ ...asignacionData, nombre: val });
 
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2"
-                                    value={asignacionData.nombre}
-                                    onChange={(e) => setAsignacionData({ ...asignacionData, nombre: e.target.value })}
-                                    placeholder="Nombre Usuario"
-                                />
+                                            // Autocomplete
+                                            if (val.length > 2) {
+                                                const matches = getPersonalState().personal.filter(p => p.nombre.toUpperCase().includes(val)).slice(0, 5);
+                                                setUsuarioFinalSuggestions(matches);
+                                            } else {
+                                                setUsuarioFinalSuggestions([]);
+                                            }
+                                        }}
+                                        onBlur={() => setTimeout(() => setUsuarioFinalSuggestions([]), 200)}
+                                    />
+                                    {usuarioFinalSuggestions.length > 0 && (
+                                        <div className="absolute z-50 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-40 overflow-y-auto">
+                                            {usuarioFinalSuggestions.map((p) => (
+                                                <button
+                                                    key={p.id}
+                                                    type="button"
+                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-gray-700 transition-colors border-b border-gray-50 last:border-0"
+                                                    onClick={() => {
+                                                        setAsignacionData(prev => ({ ...prev, dni: p.dni || prev.dni, nombre: p.nombre }));
+                                                        setUsuarioFinalSuggestions([]);
+                                                    }}
+                                                >
+                                                    <div className="font-bold">{p.nombre}</div>
+                                                    <div className="text-[9px] text-gray-400">DNI: {p.dni}</div>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
                                 <input

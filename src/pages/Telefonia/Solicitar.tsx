@@ -3,6 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore, type Solicitud } from "../../store/telefoniaStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCecosState, subscribeCecos } from "../../store/cecosStore";
+import { getPersonalState, subscribePersonal } from "../../store/personalStore"; // NEW: Import Personal Store
 
 import type { ValidationResult } from "../../store/telefoniaStore";
 import { aplicativosStore } from "../../store/aplicativosStore";
@@ -79,6 +80,8 @@ export default function SolicitarTelefonia() {
     // Form State
     const [editingId, setEditingId] = useState<string | null>(null);
     const [beneficiaryErrors, setBeneficiaryErrors] = useState<Record<number, string>>({}); // Index -> Error Message
+    // New: Suggestions state for each beneficiary index
+    const [beneficiarySuggestions, setBeneficiarySuggestions] = useState<Record<number, any[]>>({});
 
     const [formData, setFormData] = useState({
         dni: "",
@@ -151,9 +154,11 @@ export default function SolicitarTelefonia() {
         loadHistory();
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
         const unsubCecos = subscribeCecos(() => { /* triggers re-render via store hook in component body if used or we can force update */ });
+        const unsubPersonal = subscribePersonal(() => { /* Force re-render if needed, but getPersonalState is usually enough if we just read it */ });
         return () => {
             unsubSedes();
             unsubCecos();
+            unsubPersonal();
         };
     }, []);
 
@@ -1645,6 +1650,19 @@ export default function SolicitarTelefonia() {
                                                         const val = e.target.value.replace(/\D/g, '');
                                                         const newArr = [...beneficiaries];
                                                         newArr[index].dni = val;
+
+                                                        // Auto-fill Logic by DNI
+                                                        if (val.length === 8) {
+                                                            const person = getPersonalState().personal.find(p => p.dni === val);
+                                                            if (person) {
+                                                                newArr[index].nombre = person.nombre;
+                                                                // newArr[index].area = person.gerenciaNombre || ""; // Removed
+                                                            }
+                                                        } else {
+                                                            // If DNI is incomplete/edited, clear the name (reset)
+                                                            newArr[index].nombre = "";
+                                                        }
+
                                                         setBeneficiaries(newArr);
 
                                                         // Clear error initially
@@ -1674,16 +1692,77 @@ export default function SolicitarTelefonia() {
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo <span className="text-red-500">*</span></label>
-                                                <input
-                                                    className="block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper"
-                                                    placeholder="Apellidos y Nombres"
-                                                    value={b.nombre}
-                                                    onChange={e => {
-                                                        const newArr = [...beneficiaries];
-                                                        newArr[index].nombre = e.target.value;
-                                                        setBeneficiaries(newArr);
-                                                    }}
-                                                />
+                                                <div className="relative">
+                                                    <input
+                                                        className={`block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper ${
+                                                            /* Lock if DNI matches a personal record */
+                                                            getPersonalState().personal.some(p => p.dni === b.dni && b.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                                            }`}
+                                                        placeholder="Apellidos y Nombres"
+                                                        value={b.nombre}
+                                                        disabled={getPersonalState().personal.some(p => p.dni === b.dni && b.dni.length === 8)}
+                                                        onChange={e => {
+                                                            const val = e.target.value.toUpperCase();
+                                                            const newArr = [...beneficiaries];
+                                                            newArr[index].nombre = val;
+                                                            setBeneficiaries(newArr);
+
+                                                            // Autocomplete Logic
+                                                            if (val.length > 2) {
+                                                                const allPersonal = getPersonalState().personal;
+                                                                const matches = allPersonal.filter(p =>
+                                                                    p.nombre.toUpperCase().includes(val)
+                                                                ).slice(0, 5); // Limit to top 5
+                                                                setBeneficiarySuggestions(prev => ({ ...prev, [index]: matches }));
+                                                            } else {
+                                                                setBeneficiarySuggestions(prev => {
+                                                                    const n = { ...prev };
+                                                                    delete n[index];
+                                                                    return n;
+                                                                });
+                                                            }
+                                                        }}
+                                                        onBlur={() => {
+                                                            // Delay to allow click
+                                                            setTimeout(() => {
+                                                                setBeneficiarySuggestions(prev => {
+                                                                    const n = { ...prev };
+                                                                    delete n[index];
+                                                                    return n;
+                                                                });
+                                                            }, 200);
+                                                        }}
+                                                    />
+                                                    {/* Suggestions Dropdown */}
+                                                    {beneficiarySuggestions[index] && beneficiarySuggestions[index].length > 0 && (
+                                                        <div className="absolute z-10 w-full bg-white border border-gray-200 rounded-md shadow-lg mt-1 max-h-40 overflow-y-auto">
+                                                            {beneficiarySuggestions[index].map((person) => (
+                                                                <button
+                                                                    key={person.id}
+                                                                    type="button"
+                                                                    className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-gray-700 transition-colors border-b border-gray-50 last:border-0"
+                                                                    onClick={() => {
+                                                                        const newArr = [...beneficiaries];
+                                                                        newArr[index].nombre = person.nombre;
+                                                                        if (person.dni) newArr[index].dni = person.dni;
+                                                                        // newArr[index].area = person.gerenciaNombre || ""; // Removed as per user request
+                                                                        setBeneficiaries(newArr);
+
+                                                                        // Clear suggestions
+                                                                        setBeneficiarySuggestions(prev => {
+                                                                            const n = { ...prev };
+                                                                            delete n[index];
+                                                                            return n;
+                                                                        });
+                                                                    }}
+                                                                >
+                                                                    <div className="font-bold">{person.nombre}</div>
+                                                                    <div className="text-[9px] text-gray-400">DNI: {person.dni}</div>
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    )}
+                                                </div>
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Sede <span className="text-red-500">*</span></label>
