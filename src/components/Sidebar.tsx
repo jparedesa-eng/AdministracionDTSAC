@@ -138,6 +138,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeSeg_TiemposViaje = hasAccess("/monitoreo-unidades/tiempos-viaje");
   const canSeeSeg_ReportingManager = hasAccess("/seguimiento-agentes/reporting-manager");
   const canSeeSeg_AgentReport = hasAccess("/seguimiento-agentes/agent-report");
+  const canSeeSeg_RISP = hasAccess("/risp/historial"); // New permission check
   const canSeeAyuda = hasAccess("/ayuda");
 
 
@@ -249,6 +250,14 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     if (agentesSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-agentes', label: 'Seguimiento Agentes', icon: Users, subItems: agentesSubItems }); // Changed icon to Users regarding 'Agentes'
+    }
+
+    // 5. RISP
+    const rispSubItems: NavItem[] = [];
+    if (canSeeSeg_RISP) rispSubItems.push({ id: 'risp-hist', label: 'Historial', path: '/risp/historial', icon: FilePlus2 });
+
+    if (rispSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-risp', label: 'RISP', icon: ShieldCheck, subItems: rispSubItems });
     }
 
     if (seguridadItems.length > 0) {

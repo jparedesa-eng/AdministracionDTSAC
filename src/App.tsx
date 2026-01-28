@@ -82,6 +82,9 @@ import GestionEntidades from "./pages/MonitoreoUnidades/GestionEntidades";
 import { ReportingManager } from "./pages/SeguimientoAgentes/ReportingManager";
 import { AgentReportView } from "./pages/SeguimientoAgentes/AgentReportView";
 
+/* RISP */
+import HistorialRisp from "./pages/RISP/Historial";
+
 
 
 /* Errores */
@@ -657,6 +660,16 @@ export default function App() {
                   schedules={schedules}
                   setSchedules={setSchedules}
                 />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* SEGURIDAD: RISP */}
+          <Route
+            path="/risp/historial"
+            element={
+              <ProtectedRoute path="/risp/historial">
+                <HistorialRisp />
               </ProtectedRoute>
             }
           />
