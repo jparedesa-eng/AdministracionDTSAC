@@ -76,6 +76,7 @@ import MonitoreoPT from "./pages/MonitoreoUnidades/MonitoreoPTScreen"; // Check 
 // Original import was: import MonitoreoPT from "./pages/Seguridad/MonitoreoPTScreen"; 
 import { DestinationsTable } from "./pages/MonitoreoUnidades/DestinationsTable";
 import { TravelTimesTable } from "./pages/MonitoreoUnidades/TravelTimesTable";
+import GestionEntidades from "./pages/MonitoreoUnidades/GestionEntidades";
 
 /* Seguimiento Agentes */
 import { ReportingManager } from "./pages/SeguimientoAgentes/ReportingManager";
@@ -612,6 +613,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/monitoreo-unidades/tiempos-viaje">
                 <TravelTimesTable />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/entidades"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/entidades">
+                <GestionEntidades />
               </ProtectedRoute>
             }
           />

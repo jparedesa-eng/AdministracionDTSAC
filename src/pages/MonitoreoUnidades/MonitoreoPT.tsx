@@ -4,6 +4,8 @@ import { createUnit, updateUnit, UnitStatus } from '../../store/monitoreoStore';
 import type { TransportUnit, LatLng, StopPoint } from '../../store/monitoreoStore';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
+import { getTransportEntitiesState, fetchAllEntities } from "../../store/transportEntitiesStore";
+import type { LogisticOperator, TransportProvider, TransportUnitCatalog, TransportDriver } from "../../store/transportEntitiesStore";
 import { Toast } from '../../components/ui/Toast';
 import type { ToastState } from '../../components/ui/Toast';
 import L from 'leaflet';
@@ -52,6 +54,33 @@ type FilterStatus = 'ALL' | 'TRANSIT' | 'ARRIVED' | 'CANCELLED';
 export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => {
     // Travel Times Store Integration
     const [routeMatrix, setRouteMatrix] = useState(getTravelTimesState().travelTimes);
+
+    // NEW STATE for Transport Entities
+    const [transportEntities, setTransportEntities] = useState<{
+        operators: LogisticOperator[];
+        providers: TransportProvider[];
+        units: TransportUnitCatalog[];
+        drivers: TransportDriver[];
+    }>({
+        operators: [],
+        providers: [],
+        units: [],
+        drivers: []
+    });
+
+    useEffect(() => {
+        const loadEntities = async () => {
+            await fetchAllEntities();
+            const state = getTransportEntitiesState();
+            setTransportEntities({
+                operators: state.operators,
+                providers: state.providers,
+                units: state.units,
+                drivers: state.drivers
+            });
+        };
+        loadEntities();
+    }, []);
     useEffect(() => {
         const unsubscribe = subscribeTravelTimes(() => {
             setRouteMatrix(getTravelTimesState().travelTimes);
@@ -1791,7 +1820,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        <FormInput label="Operador Logístico" placeholder="Ej: RANSA / NEPTUNIA" value={form.operador} onChange={v => setForm({ ...form, operador: v })} />
+                                        <DataFormInput
+                                            label="Operador Logístico"
+                                            placeholder="Buscar Operador..."
+                                            options={transportEntities.operators.filter(o => o.active).map(o => o.name)}
+                                            value={form.operador}
+                                            onChange={v => setForm({ ...form, operador: v, transportista: '', plateRemolque: '', plateSemi: '', conductor: '' })} // Clear dependents
+                                        />
                                         <FormInput label="Booking / Referencia" placeholder="Ej: BK-2024-001" value={form.booking} onChange={v => setForm({ ...form, booking: v })} />
                                     </div>
                                 </div>
@@ -1807,10 +1842,57 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                                        <FormInput label="Transportista" placeholder="Ej: TRANSPORTES PEREDA" value={form.transportista} onChange={v => setForm({ ...form, transportista: v })} />
-                                        <FormInput label="Placa Tracto" placeholder="Ej: ABC-123" value={form.plateRemolque} onChange={v => setForm({ ...form, plateRemolque: v })} />
-                                        <FormInput label="Placa Semi-Remolque" placeholder="Ej: DEF-456" value={form.plateSemi} onChange={v => setForm({ ...form, plateSemi: v })} />
-                                        <FormInput label="Nombre Conductor" placeholder="Ej: JUAN PEREZ" value={form.conductor} onChange={v => setForm({ ...form, conductor: v })} />
+                                        <DataFormInput
+                                            label="Transportista"
+                                            placeholder="Buscar Transportista..."
+                                            options={(() => {
+                                                const op = transportEntities.operators.find(o => o.name === form.operador);
+                                                if (!op) return transportEntities.providers.filter(p => p.active).map(p => p.name); // Show all if no operator selected (optional, or empty)
+                                                return transportEntities.providers.filter(p => p.active && p.operator_id === op.id).map(p => p.name);
+                                            })()}
+                                            value={form.transportista}
+                                            onChange={v => setForm({ ...form, transportista: v })}
+                                        />
+                                        <DataFormInput
+                                            label="Placa Tracto"
+                                            placeholder="Buscar Placa..."
+                                            options={(() => {
+                                                const prov = transportEntities.providers.find(p => p.name === form.transportista);
+                                                let relevant = transportEntities.units.filter(u => u.active && u.type === 'TRACTO');
+                                                if (prov) relevant = relevant.filter(u => u.provider_id === prov.id);
+                                                return relevant.map(u => u.plate);
+                                            })()}
+                                            value={form.plateRemolque}
+                                            onChange={v => setForm({ ...form, plateRemolque: v })}
+                                        />
+                                        <DataFormInput
+                                            label="Placa Semi-Remolque"
+                                            placeholder="Buscar Placa..."
+                                            options={(() => {
+                                                const prov = transportEntities.providers.find(p => p.name === form.transportista);
+                                                let relevant = transportEntities.units.filter(u => u.active && u.type === 'SEMIREMOLQUE');
+                                                if (prov) relevant = relevant.filter(u => u.provider_id === prov.id);
+                                                return relevant.map(u => u.plate);
+                                            })()}
+                                            value={form.plateSemi}
+                                            onChange={v => setForm({ ...form, plateSemi: v })}
+                                        />
+                                        <DataFormInput
+                                            label="Nombre Conductor"
+                                            placeholder="Buscar Conductor..."
+                                            options={(() => {
+                                                const prov = transportEntities.providers.find(p => p.name === form.transportista);
+                                                let relevant = transportEntities.drivers.filter(d => d.active);
+                                                if (prov) relevant = relevant.filter(d => d.provider_id === prov.id);
+                                                return relevant.map(d => d.name);
+                                            })()}
+                                            value={form.conductor}
+                                            onChange={v => {
+                                                // Auto-fill phone if driver selected
+                                                const driver = transportEntities.drivers.find(d => d.name === v);
+                                                setForm({ ...form, conductor: v, telefono: driver?.phone || form.telefono })
+                                            }}
+                                        />
                                         <FormInput label="Teléfono / Celular" placeholder="Ej: 999 888 777" value={form.telefono} onChange={v => setForm({ ...form, telefono: v })} />
                                     </div>
                                 </div>
@@ -1847,6 +1929,68 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
             <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .leaflet-container { font-family: 'Inter', sans-serif; background: #f8fafc !important; } .custom-leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }`}</style>
             <Toast toast={toast} onClose={() => setToast(null)} />
+        </div>
+    );
+};
+
+const DataFormInput = ({ label, value, onChange, options = [], placeholder = "" }: { label: string, value: string, onChange: (v: string) => void, options: string[], placeholder?: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter(opt =>
+        opt.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="group space-y-1 w-full relative" ref={wrapperRef}>
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
+            <div className="relative">
+                <input
+                    type="text"
+                    className="w-full p-2.5 bg-white border-2 border-slate-200 hover:border-slate-300 rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 placeholder:text-slate-300 placeholder:font-normal"
+                    value={isOpen ? search : value}
+                    onChange={e => { setSearch(e.target.value); if (!isOpen) setIsOpen(true); }}
+                    onFocus={() => { setIsOpen(true); setSearch(''); }}
+                    placeholder={placeholder}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <Search size={14} />
+                </div>
+
+                {isOpen && (
+                    <div className="absolute z-50 w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-lg max-h-60 overflow-y-auto custom-scrollbar">
+                        {filteredOptions.length === 0 ? (
+                            <div className="p-3 text-xs text-slate-400 text-center italic">No hay resultados</div>
+                        ) : (
+                            filteredOptions.map((opt, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    className="w-full text-left px-4 py-2 text-xs font-bold uppercase hover:bg-slate-50 transition-colors text-slate-700"
+                                    onClick={() => {
+                                        onChange(opt);
+                                        setIsOpen(false);
+                                        setSearch("");
+                                    }}
+                                >
+                                    {opt}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
         </div>
     );
 };

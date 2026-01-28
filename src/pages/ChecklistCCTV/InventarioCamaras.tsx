@@ -130,6 +130,23 @@ function TabCamaras({
         return `${year}-W${week.toString().padStart(2, '0')}`;
     });
     const [reportCentralId, setReportCentralId] = useState("");
+    const [reportSedeIds, setReportSedeIds] = useState<string[]>([]); // New: Filter by multiple Sedes
+    const [reportIncludeAll, setReportIncludeAll] = useState(true); // New: Filter content (All vs Failures only)
+
+    // Reset and Auto-Select Sedes when Central changes
+    useEffect(() => {
+        if (reportCentralId) {
+            const central = centrales.find(c => c.id === reportCentralId);
+            if (central && central.sedes) {
+                // Pre-select all valid sedes for this central
+                setReportSedeIds(central.sedes);
+            } else {
+                setReportSedeIds([]);
+            }
+        } else {
+            setReportSedeIds([]);
+        }
+    }, [reportCentralId, centrales]);
 
     const handleDownloadWeeklyReport = async () => {
         if (!reportWeek || !reportCentralId) return;
@@ -192,6 +209,7 @@ function TabCamaras({
             doc.setFont("helvetica", "normal");
             doc.setFontSize(11);
             doc.text(`Período: ${startDate} al ${endDate}`, 42, 35);
+            doc.text(`Tipo: ${reportIncludeAll ? "Reporte Completo" : "Solo Fallas e Incidentes"}`, 42, 41);
 
             doc.setFontSize(9);
             doc.setTextColor(100);
@@ -206,11 +224,11 @@ function TabCamaras({
 
             // Header Row 1: Grouped Headers
             const headRow1: any[] = [
-                { content: 'DATOS DE LA CÁMARA', colSpan: 3, styles: { halign: 'center', fillColor: [15, 23, 42] } }
+                { content: 'DATOS DE LA CÁMARA', colSpan: 4, styles: { halign: 'center', fillColor: [15, 23, 42] } } // Increased colspan to 4
             ];
 
             // Header Row 2: Sub Headers
-            const headRow2: any[] = ["CÁMARA", "ÁREA", "NAVE"];
+            const headRow2: any[] = ["SEDE", "NAVE", "ÁREA", "CÁMARA"];
 
             for (let i = 0; i < 7; i++) {
                 days.push(new Date(cur).toISOString().split('T')[0]);
@@ -240,7 +258,45 @@ function TabCamaras({
             });
 
             const rows: any[] = [];
-            const allCentralCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa);
+            let allCentralCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa);
+
+            // Filter by Sede Ids
+            if (reportSedeIds.length > 0) {
+                allCentralCameras = allCentralCameras.filter(c => c.sede_id && reportSedeIds.includes(c.sede_id));
+            } else {
+                // If no sede selected, arguably we should show none, or all? 
+                // Assuming if user deselects all, they want none.
+                allCentralCameras = [];
+            }
+
+            // Filter: Only failures/incidents if !reportIncludeAll
+            if (!reportIncludeAll) {
+                allCentralCameras = allCentralCameras.filter(cam => {
+                    // Check for operational failures OR Poor quality in the matrix
+                    let hasFailures = false;
+                    days.forEach(d => {
+                        const mInfo = detailsMap[cam.id]?.[d]?.["MAÑANA"];
+                        const tInfo = detailsMap[cam.id]?.[d]?.["TARDE"];
+
+                        // Check Morning
+                        if (mInfo) {
+                            if (!mInfo.operativa) hasFailures = true; // Operational Failure
+                            if (mInfo.calidad !== null && mInfo.calidad < 3) hasFailures = true; // Poor Quality
+                        }
+
+                        // Check Afternoon
+                        if (tInfo) {
+                            if (!tInfo.operativa) hasFailures = true; // Operational Failure
+                            if (tInfo.calidad !== null && tInfo.calidad < 3) hasFailures = true; // Poor Quality
+                        }
+                    });
+
+                    // Check for incidents in reportes
+                    const hasIncidents = data.reportes.some(r => r.camara_id === cam.id);
+
+                    return hasFailures || hasIncidents;
+                });
+            }
 
             const getQualityLabel = (q: number | null) => {
                 if (q === null) return "-";
@@ -250,7 +306,9 @@ function TabCamaras({
             };
 
             allCentralCameras.forEach(cam => {
-                const row = [cam.nombre, cam.area || "-", cam.nave_fundo || "-"];
+                const sedeName = sedes.find(s => s.id === cam.sede_id)?.nombre || "-";
+                // Order: SEDE, NAVE, AREA, CAMARA
+                const row = [sedeName, cam.nave_fundo || "-", cam.area || "-", cam.nombre];
                 days.forEach(d => {
                     const mInfo = detailsMap[cam.id]?.[d]?.["MAÑANA"];
                     const tInfo = detailsMap[cam.id]?.[d]?.["TARDE"];
@@ -270,23 +328,26 @@ function TabCamaras({
 
             /* @ts-ignore */
             autoTable(doc, {
-                startY: 45,
+                startY: 50,
                 head: [headRow1, headRow2],
                 body: rows,
                 theme: 'grid',
                 styles: { fontSize: 5, cellPadding: 1, halign: 'center', valign: 'middle', lineWidth: 0.1 },
                 headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 6 },
                 columnStyles: {
-                    0: { halign: 'left', cellWidth: 25, fontStyle: 'bold' }, // Camara
-                    1: { halign: 'left', cellWidth: 15 }, // Area
-                    2: { halign: 'left', cellWidth: 15 }, // Nave
+                    0: { halign: 'left', cellWidth: 20 }, // Sede
+                    1: { halign: 'left', cellWidth: 15 }, // Nave
+                    2: { halign: 'left', cellWidth: 15 }, // Area
+                    3: { halign: 'left', cellWidth: 25, fontStyle: 'bold' }, // Camara
                 },
                 didParseCell: function (data: any) {
-                    if (data.section === 'body' && data.column.index > 2) {
+                    // Columns 0,1,2,3 are data. Op columns start at index 4.
+                    if (data.section === 'body' && data.column.index > 3) {
                         const text = data.cell.raw as string;
 
-                        // Check if it's an OP column (index 3, 5, 7...)
-                        const isOpCol = (data.column.index - 3) % 2 === 0;
+                        // Check if it's an OP column (index 4, 6, 8...)
+                        // (index - 4) % 2 === 0
+                        const isOpCol = (data.column.index - 4) % 2 === 0;
 
                         if (isOpCol) {
                             if (text.includes("F")) {
@@ -316,19 +377,69 @@ function TabCamaras({
 
             });
 
+            // Leyenda (Legend)
+            /* @ts-ignore */
+            const finalMatrixY = (doc as any).lastAutoTable.finalY + 10;
+
+            doc.setFontSize(10);
+            doc.text("Leyenda de Códigos y Colores", 14, finalMatrixY);
+
+            /* @ts-ignore */
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: finalMatrixY + 3,
+                head: [["CÓDIGO", "DESCRIPCIÓN"]],
+                body: [
+                    ["OK", "Cámara Operativa (Estado)"],
+                    ["F", "Falla Operativa (Estado)"],
+                    ["Good", "Calidad Buena"],
+                    ["Fair", "Calidad Regular"],
+                    ["Poor", "Calidad Mala"],
+                ],
+                theme: 'grid',
+                styles: { fontSize: 6, cellPadding: 1 },
+                headStyles: { fillColor: [71, 85, 105], fontSize: 6, halign: 'center' },
+                columnStyles: {
+                    0: { fontStyle: 'bold', cellWidth: 15, halign: 'center' },
+                    1: { cellWidth: 50 },
+                },
+                didParseCell: function (data: any) {
+                    if (data.section === 'body' && data.column.index === 0) {
+                        const code = data.cell.raw as string;
+                        if (code === 'OK' || code === 'Good') {
+                            data.cell.styles.fillColor = [220, 252, 231];
+                            data.cell.styles.textColor = [21, 128, 61];
+                        } else if (code === 'F' || code === 'Poor') {
+                            data.cell.styles.fillColor = [254, 202, 202];
+                            data.cell.styles.textColor = [185, 28, 28];
+                        } else if (code === 'Fair') {
+                            data.cell.styles.fillColor = [254, 249, 195];
+                            data.cell.styles.textColor = [161, 98, 7];
+                        }
+                    }
+                },
+                tableWidth: 80
+            });
+
             // Resumen Gerencial
             doc.addPage();
             doc.setFontSize(14);
             doc.text("Resumen Gerencial y Estadísticas", 14, 15);
 
+            // Calculate Stats Scope: All active cameras in the selected Sedes (ignoring the "Solo Fallas" display filter)
+            const scopeCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa && (!reportSedeIds.length || (c.sede_id && reportSedeIds.includes(c.sede_id))));
+            const scopeCameraIds = scopeCameras.map(c => c.id);
+
             let totalChecks = 0;
             let totalFails = 0;
             data.checklists.forEach(cl => {
-                const dets = data.detalles.filter(d => d.checklist_id === cl.id);
+                // Filter details to only include cameras in our Scope
+                const dets = data.detalles.filter(d => d.checklist_id === cl.id && scopeCameraIds.includes(d.camara_id));
                 totalChecks += dets.length;
                 totalFails += dets.filter(d => !d.operativa).length;
             });
             const operability = totalChecks > 0 ? ((1 - (totalFails / totalChecks)) * 100).toFixed(2) + "%" : "0%";
+            const totalIncidents = data.reportes.filter(r => scopeCameraIds.includes(r.camara_id)).length;
 
             /* @ts-ignore */
             /* @ts-ignore */
@@ -339,7 +450,7 @@ function TabCamaras({
                     ["Total Revisiones Puntos de Control", totalChecks],
                     ["Total Fallas Detectadas", totalFails],
                     ["Operatividad Promedio Semanal", operability],
-                    ["Total Incidentes Reportados", data.reportes.length],
+                    ["Total Incidentes Reportados", totalIncidents],
                 ],
                 theme: 'striped',
                 headStyles: { fillColor: [51, 65, 85] },
@@ -1113,6 +1224,96 @@ function TabCamaras({
                                 {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                             </select>
                         </div>
+
+                        {/* Multi-Select Sede */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-2">Sedes a Incluir</label>
+                            <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-[150px] overflow-y-auto">
+                                {centrales.find(c => c.id === reportCentralId)?.sedes?.length ? (
+                                    <div className="space-y-2">
+                                        <label className="flex items-center gap-2 p-1 hover:bg-slate-100 rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={
+                                                    centrales.find(c => c.id === reportCentralId)?.sedes?.every((sid: string) => reportSedeIds.includes(sid)) ?? false
+                                                }
+                                                onChange={(e) => {
+                                                    const central = centrales.find(c => c.id === reportCentralId);
+                                                    if (!central?.sedes) return;
+
+                                                    if (e.target.checked) {
+                                                        setReportSedeIds(central.sedes);
+                                                    } else {
+                                                        setReportSedeIds([]);
+                                                    }
+                                                }}
+                                                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                            />
+                                            <span className="text-sm font-bold text-slate-700">Seleccionar Todas</span>
+                                        </label>
+                                        <hr className="border-slate-200 my-1" />
+                                        {sedes
+                                            .filter(s => {
+                                                if (!reportCentralId) return false;
+                                                const central = centrales.find(c => c.id === reportCentralId);
+                                                return central?.sedes?.includes(s.id);
+                                            })
+                                            .map(s => (
+                                                <label key={s.id} className="flex items-center gap-2 p-1 hover:bg-slate-100 rounded cursor-pointer">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={reportSedeIds.includes(s.id)}
+                                                        onChange={(e) => {
+                                                            if (e.target.checked) {
+                                                                setReportSedeIds(prev => [...prev, s.id]);
+                                                            } else {
+                                                                setReportSedeIds(prev => prev.filter(id => id !== s.id));
+                                                            }
+                                                        }}
+                                                        className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500"
+                                                    />
+                                                    <span className="text-sm text-slate-600">{s.nombre}</span>
+                                                </label>
+                                            ))
+                                        }
+                                    </div>
+                                ) : (
+                                    <p className="text-xs text-slate-400 italic text-center py-2">
+                                        {reportCentralId ? "No hay sedes asignadas" : "Seleccione una central primero"}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Report Filter: All vs Failures Only */}
+                        <div>
+                            <label className="block text-sm font-bold text-gray-700 mb-3">Contenido del Reporte</label>
+                            <div className="flex gap-4">
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={reportIncludeAll}
+                                        onChange={() => setReportIncludeAll(true)}
+                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700 font-medium">Reporte Completo (Todo)</span>
+                                </label>
+                                <label className="flex items-center gap-2 cursor-pointer">
+                                    <input
+                                        type="radio"
+                                        checked={!reportIncludeAll}
+                                        onChange={() => setReportIncludeAll(false)}
+                                        className="w-4 h-4 text-blue-600 focus:ring-blue-500"
+                                    />
+                                    <span className="text-sm text-gray-700 font-medium">Solo Fallas e Incidentes</span>
+                                </label>
+                            </div>
+                            {!reportIncludeAll && (
+                                <p className="text-xs text-amber-600 mt-2 font-medium">
+                                    * Se excluirán las cámaras que tengan 100% de operatividad y sin incidentes.
+                                </p>
+                            )}
+                        </div>
                     </div>
 
                     <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
@@ -1124,7 +1325,7 @@ function TabCamaras({
                         </button>
                         <button
                             onClick={handleDownloadWeeklyReport}
-                            disabled={!reportWeek || !reportCentralId}
+                            disabled={!reportWeek || !reportCentralId || reportSedeIds.length === 0}
                             className="px-6 py-2 text-sm font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                         >
                             <FileDown size={16} /> Descargar Reporte
