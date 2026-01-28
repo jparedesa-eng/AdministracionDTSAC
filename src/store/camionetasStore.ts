@@ -14,7 +14,8 @@ export type EstadoSolicitud =
   | "En uso"
   | "Rechazada"
   | "Cancelado"
-  | "Cerrada";
+  | "Cerrada"
+  | "Vencido";
 
 export interface Vehiculo {
   placa: string;
@@ -573,5 +574,56 @@ export const camionetasStore = {
 
     const idx = this.inventario.findIndex((x) => x.placa === placa);
     if (idx >= 0) this.inventario[idx] = vFromRow(data as VehiculoRow);
+  },
+
+  /* =========================================================
+   * Mantenimiento Automático
+   * ======================================================= */
+  /**
+   * Revisa tickets "Reservada" o "En uso" cuya fecha fin ya pasó.
+   * Los marca como "Vencido" en la BD.
+   */
+  async verificarVencidos(): Promise<void> {
+    // 1. Buscamos candidatos locales o remotos. 
+    // Para asegurar consistencia, consultamos a la BD directo o usamos lo que ya tenemos en memoria.
+    // Usaremos memoria para detectar IDs, luego update en batch (o uno por uno).
+
+    // Filtramos de 'this.solicitudes' (asumiendo que están frescas o tras un sync)
+    // O mejor, hacemos fetch de los activos de la BD para ser precisos.
+    const { data: activos, error } = await supabase
+      .from("solicitudes")
+      .select("id, uso_fin, estado")
+      .in("estado", ["Reservada", "En uso"]);
+
+    if (error) {
+      console.error("Error fetching activos para verificar vencidos:", error);
+      return;
+    }
+
+    const now = new Date();
+    const vencidosIds: string[] = [];
+
+    (activos as any[]).forEach((t) => {
+      const fin = new Date(t.uso_fin);
+      if (now > fin) {
+        vencidosIds.push(t.id);
+      }
+    });
+
+    if (vencidosIds.length === 0) return;
+
+    // 2. Update masivo
+    const { error: updateError } = await supabase
+      .from("solicitudes")
+      .update({ estado: "Vencido" })
+      .in("id", vencidosIds);
+
+    if (updateError) {
+      console.error("Error marcando vencidos:", updateError);
+    } else {
+      console.log(`Se marcaron ${vencidosIds.length} tickets como Vencidos.`);
+      // 3. Refrescar local
+      await this.syncSolicitudes();
+    }
   },
 };

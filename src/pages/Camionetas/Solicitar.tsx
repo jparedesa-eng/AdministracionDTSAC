@@ -456,7 +456,21 @@ export default function Solicitar() {
     if (ticketFilter === "reservados") {
       return ticketsUsuario.filter((s) => {
         const estadoLower = (s.estado ?? "").toString().toLowerCase();
-        return estadoLower.startsWith("reserv") || estadoLower === "en uso";
+        const matchesEstado =
+          estadoLower.startsWith("reserv") || estadoLower === "en uso";
+
+        if (!matchesEstado) return false;
+
+        // Filtrar vencidos (si ya pasó la fecha fin)
+        const finStr = (s as any).uso_fin ?? (s as any).usoFin;
+        if (finStr) {
+          const finDate = new Date(finStr);
+          if (finDate < new Date()) {
+            return false;
+          }
+        }
+
+        return true;
       });
     }
     return ticketsUsuario;

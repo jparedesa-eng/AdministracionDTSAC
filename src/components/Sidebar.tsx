@@ -29,7 +29,8 @@ import {
   Folder,
   Database,
   Layers,
-  TabletSmartphone
+  TabletSmartphone,
+  Car,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -157,10 +158,10 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     // 1. Camionetas
     const camionetasSubItems: NavItem[] = [];
     if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
-    if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: ListChecks });
+    if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: Layers });
     if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });
-    if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Truck });
-    if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Wrench });
+    if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Car });
+    if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Car });
     if (canSeeCam_Conductores) camionetasSubItems.push({ id: 'cam-cond', label: 'Conductores', path: '/camionetas/conductores', icon: Users });
     if (canSeeCam_RegGastos) camionetasSubItems.push({ id: 'cam-gastos', label: 'Registros G.', path: '/camionetas/registros/gastos', icon: DollarSign });
     if (canSeeCam_RegChecklist) camionetasSubItems.push({ id: 'cam-check', label: 'Checklists', path: '/camionetas/registros/checklist', icon: ClipboardList });
