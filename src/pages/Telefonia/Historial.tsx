@@ -9,17 +9,18 @@ import {
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
-    ChevronsRight,
-    Calendar
+    ChevronsRight
 } from "lucide-react";
 import { utils, writeFile } from "xlsx";
+import { DateRangePicker } from "../../components/ui/DateRangePicker";
 
 export default function HistorialTelefonia() {
     const [searchTerm, setSearchTerm] = useState("");
 
     // Filters
-    const [startDate, setStartDate] = useState("");
-    const [endDate, setEndDate] = useState("");
+    const [appliedStartDate, setAppliedStartDate] = useState("");
+    const [appliedEndDate, setAppliedEndDate] = useState("");
+    const [hasAppliedFilter, setHasAppliedFilter] = useState(false);
 
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
@@ -30,12 +31,27 @@ export default function HistorialTelefonia() {
     }, []);
 
     // Reset pagination when filters change
+    // Reset pagination when filters change (only when applied changes)
     useEffect(() => {
         setCurrentPage(1);
-    }, [searchTerm, startDate, endDate]);
+    }, [searchTerm, appliedStartDate, appliedEndDate]);
+
+    const handleDateRangeApply = (range: { start: Date | null; end: Date | null }) => {
+        if (range.start && range.end) {
+            setAppliedStartDate(range.start.toISOString().split('T')[0]);
+            setAppliedEndDate(range.end.toISOString().split('T')[0]);
+            setHasAppliedFilter(true);
+        } else {
+            setAppliedStartDate("");
+            setAppliedEndDate("");
+            setHasAppliedFilter(false);
+        }
+    };
 
     // Filter Logic
     const getFilteredTickets = () => {
+        if (!hasAppliedFilter) return [];
+
         return telefoniaStore.solicitudes.filter(t => {
             // 1. Status Filter (Only Finished)
             const isFinished = ["Entregado", "Rechazada", "Cancelada"].includes(t.estado);
@@ -50,17 +66,17 @@ export default function HistorialTelefonia() {
             );
             if (!matchesSearch) return false;
 
-            // 3. Date Range Filter
-            if (startDate || endDate) {
+            // 3. Date Range Filter using APPLIED dates
+            if (appliedStartDate || appliedEndDate) {
                 const ticketDate = new Date(t.created_at).setHours(0, 0, 0, 0);
 
-                if (startDate) {
-                    const start = new Date(startDate).setHours(0, 0, 0, 0);
+                if (appliedStartDate) {
+                    const start = new Date(appliedStartDate).setHours(0, 0, 0, 0);
                     if (ticketDate < start) return false;
                 }
 
-                if (endDate) {
-                    const end = new Date(endDate).setHours(23, 59, 59, 999);
+                if (appliedEndDate) {
+                    const end = new Date(appliedEndDate).setHours(23, 59, 59, 999);
                     if (ticketDate > end) return false;
                 }
             }
@@ -119,8 +135,8 @@ export default function HistorialTelefonia() {
             "ID": t.id,
             "Fecha Creación": new Date(t.created_at).toLocaleDateString() + " " + new Date(t.created_at).toLocaleTimeString(),
             "Estado": t.estado,
-            "DNI Beneficiario": t.beneficiario_dni || "",
-            "Nombre Beneficiario": t.beneficiario_nombre || "",
+            "DNI Responsable": t.beneficiario_dni || "",
+            "Nombre Responsable": t.beneficiario_nombre || "",
             "Área": t.beneficiario_area || "",
             "Puesto": t.beneficiario_puesto || "",
             "Motivo Solicitud": t.tipo_solicitud || "Línea Nueva",
@@ -175,42 +191,15 @@ export default function HistorialTelefonia() {
 
                     <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
 
-                    {/* Date Range Filters */}
-                    <div className="flex flex-wrap items-center gap-2">
-                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
-                            <span className="text-xs font-medium text-gray-500 px-2 uppercase tracking-wide flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                Desde
-                            </span>
-                            <input
-                                type="date"
-                                value={startDate}
-                                onChange={(e) => setStartDate(e.target.value)}
-                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8 w-32"
-                            />
-                        </div>
+                    {/* Date Range Picker */}
+                    <DateRangePicker
+                        onChange={handleDateRangeApply}
+                    />
 
-                        <div className="flex items-center bg-gray-50 rounded-lg border border-gray-300 p-1">
-                            <span className="text-xs font-medium text-gray-500 px-2 uppercase tracking-wide flex items-center gap-1">
-                                <Calendar className="w-3 h-3" />
-                                Hasta
-                            </span>
-                            <input
-                                type="date"
-                                value={endDate}
-                                onChange={(e) => setEndDate(e.target.value)}
-                                className="bg-white border-l border-gray-300 text-sm py-1 px-2 focus:outline-none focus:ring-0 rounded-r-none h-8 w-32"
-                            />
-                        </div>
-
-                        {(startDate || endDate) && (
-                            <button
-                                onClick={() => { setStartDate(""); setEndDate(""); }}
-                                className="text-xs text-red-500 hover:text-red-700 underline px-1"
-                            >
-                                Limpiar
-                            </button>
-                        )}
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200">
+                            {tickets.length} registros
+                        </span>
                     </div>
 
                     <div className="relative w-full md:w-64">
@@ -234,7 +223,7 @@ export default function HistorialTelefonia() {
                             <tr>
                                 <th className="px-4 py-3">Fecha</th>
                                 <th className="px-4 py-3">ID</th>
-                                <th className="px-4 py-3">Beneficiario</th>
+                                <th className="px-4 py-3">Responsable</th>
                                 <th className="px-4 py-3">Área / Puesto</th>
                                 <th className="px-4 py-3">Detalle</th>
                                 <th className="px-4 py-3">Estado</th>
@@ -245,7 +234,7 @@ export default function HistorialTelefonia() {
                             {displayedTickets.length === 0 ? (
                                 <tr>
                                     <td colSpan={7} className="px-4 py-8 text-center text-gray-500 italic">
-                                        No se encontraron registros
+                                        {hasAppliedFilter ? "No se encontraron registros" : "Aplique filtros para ver registros"}
                                     </td>
                                 </tr>
                             ) : (

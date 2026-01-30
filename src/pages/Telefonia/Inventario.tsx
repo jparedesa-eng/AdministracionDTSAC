@@ -888,19 +888,27 @@ export default function InventarioTelefonia() {
     const uniqueFundos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.fundo_planta || "Sin Asignar"))).sort();
     const uniqueAnios = Array.from(new Set(telefoniaStore.equipos.map(e => e.fecha_compra ? new Date(e.fecha_compra).getFullYear().toString() : "Sin fecha"))).sort((a, b) => b.localeCompare(a));
     const uniqueEstados = Array.from(new Set(telefoniaStore.equipos.map(e => e.estado))).sort();
-    const uniqueCultivosEquipos = Array.from(new Set(
-        telefoniaStore.equipos
-            .filter(e => !filterFundo || e.asignacion_activa?.fundo_planta === filterFundo)
-            .map(e => e.asignacion_activa?.cultivo)
-            .filter(Boolean)
-    )).sort();
+    const uniqueCultivosEquipos = React.useMemo(() => {
+        return Array.from(new Set(
+            (telefoniaStore.equipos || [])
+                .filter(e => !filterFundo || e.asignacion_activa?.fundo_planta === filterFundo)
+                .map(e => e.asignacion_activa?.cultivo)
+                .filter(Boolean)
+        )).sort();
+    }, [telefoniaStore.equipos, filterFundo]);
 
     // Unique Values for Chips Filters
     const uniqueChipEstados = Array.from(new Set(telefoniaStore.chips.map(c => c.estado))).sort();
     const uniqueChipOperadores = Array.from(new Set(telefoniaStore.chips.map(c => c.operador))).sort();
     const uniqueChipPlanes = Array.from(new Set(telefoniaStore.chips.map(c => c.plan?.nombre || "Sin Plan"))).sort();
     const uniquePlanOperadores = Array.from(new Set(telefoniaStore.planes.map(p => p.operador))).sort();
-    const uniqueCultivosChips = Array.from(new Set(telefoniaStore.chips.map(c => c.asignacion_activa?.cultivo).filter(Boolean))).sort();
+    const uniqueCultivosChips = React.useMemo(() => {
+        return Array.from(new Set(
+            (telefoniaStore.chips || [])
+                .map(c => c.asignacion_activa?.cultivo)
+                .filter(Boolean)
+        )).sort();
+    }, [telefoniaStore.chips]);
 
     const filteredChips = telefoniaStore.chips.filter((c) => {
         const term = q.toLowerCase();
