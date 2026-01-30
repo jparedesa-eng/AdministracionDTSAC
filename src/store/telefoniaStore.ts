@@ -542,6 +542,7 @@ export const telefoniaStore = {
                         beneficiario_nombre,
                         beneficiario_area,
                         fundo_planta,
+                        cultivo,
                         periodo_uso,
                         fecha_fin_uso
                     )
@@ -558,6 +559,7 @@ export const telefoniaStore = {
 
                         // Priority for Fundo/Planta display: Sede (Usuario Final) -> Fundo/Planta (Ticket)
                         const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta || "";
+                        const cultivo = a.solicitud?.cultivo || "";
 
                         // Period info
                         const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
@@ -571,6 +573,7 @@ export const telefoniaStore = {
                             fecha_entrega: a.fecha_entrega,
                             tipo_servicio: "Asignación Múltiple",
                             fundo_planta: fundo,
+                            cultivo: cultivo,
                             periodo_uso: periodo,
                             fecha_fin_uso: fechaFin
                         });
@@ -677,6 +680,7 @@ export const telefoniaStore = {
                         beneficiario_nombre,
                         beneficiario_area,
                         fundo_planta,
+                        cultivo,
                         periodo_uso,
                         fecha_fin_uso
                     )
@@ -692,6 +696,7 @@ export const telefoniaStore = {
                         const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "";
                         const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
                         const fechaFin = a.solicitud?.fecha_fin_uso || "";
+                        const cultivo = a.solicitud?.cultivo || "";
 
                         activeChipMap.set(a.chip_id, {
                             id: a.solicitud_id,
@@ -699,7 +704,8 @@ export const telefoniaStore = {
                             beneficiario_area: area,
                             fecha_entrega: a.fecha_entrega,
                             periodo_uso: periodo,
-                            fecha_fin_uso: fechaFin
+                            fecha_fin_uso: fechaFin,
+                            cultivo: cultivo
                         });
                     }
                 });

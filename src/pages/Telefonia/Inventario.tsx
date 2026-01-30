@@ -888,7 +888,12 @@ export default function InventarioTelefonia() {
     const uniqueFundos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.fundo_planta || "Sin Asignar"))).sort();
     const uniqueAnios = Array.from(new Set(telefoniaStore.equipos.map(e => e.fecha_compra ? new Date(e.fecha_compra).getFullYear().toString() : "Sin fecha"))).sort((a, b) => b.localeCompare(a));
     const uniqueEstados = Array.from(new Set(telefoniaStore.equipos.map(e => e.estado))).sort();
-    const uniqueCultivosEquipos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.cultivo).filter(Boolean))).sort();
+    const uniqueCultivosEquipos = Array.from(new Set(
+        telefoniaStore.equipos
+            .filter(e => !filterFundo || e.asignacion_activa?.fundo_planta === filterFundo)
+            .map(e => e.asignacion_activa?.cultivo)
+            .filter(Boolean)
+    )).sort();
 
     // Unique Values for Chips Filters
     const uniqueChipEstados = Array.from(new Set(telefoniaStore.chips.map(c => c.estado))).sort();
@@ -1098,7 +1103,10 @@ export default function InventarioTelefonia() {
                                 <select
                                     className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
                                     value={filterFundo}
-                                    onChange={(e) => setFilterFundo(e.target.value)}
+                                    onChange={(e) => {
+                                        setFilterFundo(e.target.value);
+                                        setFilterCultivo("");
+                                    }}
                                 >
                                     <option value="">Todas las Sedes</option>
                                     {uniqueFundos.map(f => (f && <option key={f} value={f}>{f}</option>))}
