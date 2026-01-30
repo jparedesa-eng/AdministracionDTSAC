@@ -754,16 +754,8 @@ export default function InventarioTelefonia() {
         try {
             setSubmitting(true);
 
-            // --- BLOCKING VALIDATION ---
-            if (responsableData.dni && responsableData.dni.length === 8) {
-                const check = await telefoniaStore.checkActiveAssignment(responsableData.dni);
-                if (check.exists) {
-                    setToast({ type: 'error', message: check.message || "Usuario ya tiene asignación." });
-                    setFormErrors({ dni: "Usuario ya con equipo asignado." });
-                    setSubmitting(false);
-                    return;
-                }
-            }
+            // --- BLOCKING VALIDATION REMOVED FOR CHIPS ---
+            // Chips can be assigned even if user has other assignments
             // ---------------------------
 
             await telefoniaStore.asignarChipDirectamente(
@@ -3031,22 +3023,9 @@ export default function InventarioTelefonia() {
                                 className={`block w-full rounded-md sm:text-sm border p-2 ${formErrors.responsable_dni_error ? "border-red-500 bg-red-50" : "border-gray-300"}`}
                                 value={responsableData.dni}
                                 maxLength={8}
-                                onChange={async (e) => {
+                                onChange={(e) => {
                                     const val = e.target.value.replace(/\D/g, '');
                                     setResponsableData({ ...responsableData, dni: val });
-
-                                    if (val.length === 8) {
-                                        const check = await telefoniaStore.checkActiveAssignment(val);
-                                        if (check.exists) {
-                                            setFormErrors(prev => ({ ...prev, responsable_dni_error: check.message || "Usuario ya tiene asignación." }));
-                                        } else {
-                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
-                                        }
-                                    } else {
-                                        if (formErrors.responsable_dni_error) {
-                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
-                                        }
-                                    }
                                 }}
                                 placeholder="DNI Responsable"
                             />
