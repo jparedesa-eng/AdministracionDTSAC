@@ -84,6 +84,9 @@ import { AgentReportView } from "./pages/SeguimientoAgentes/AgentReportView";
 
 /* RISP */
 import HistorialRisp from "./pages/RISP/Historial";
+import MantenedorJefaturas from "./pages/RISP/MantenedorJefaturas";
+import MantenedorAreas from "./pages/RISP/MantenedorAreas";
+import MantenedorIncidentes from "./pages/RISP/MantenedorIncidentes";
 
 
 
@@ -670,6 +673,30 @@ export default function App() {
             element={
               <ProtectedRoute path="/risp/historial">
                 <HistorialRisp />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/risp/jefaturas"
+            element={
+              <ProtectedRoute path="/risp/historial">
+                <MantenedorJefaturas />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/risp/areas"
+            element={
+              <ProtectedRoute path="/risp/historial">
+                <MantenedorAreas />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/risp/incidentes"
+            element={
+              <ProtectedRoute path="/risp/historial">
+                <MantenedorIncidentes />
               </ProtectedRoute>
             }
           />

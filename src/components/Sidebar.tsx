@@ -256,6 +256,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     // 5. RISP
     const rispSubItems: NavItem[] = [];
     if (canSeeSeg_RISP) rispSubItems.push({ id: 'risp-hist', label: 'Historial', path: '/risp/historial', icon: FilePlus2 });
+    if (canSeeSeg_RISP) rispSubItems.push({ id: 'risp-jef', label: 'Jefaturas', path: '/risp/jefaturas', icon: Users });
+    if (canSeeSeg_RISP) rispSubItems.push({ id: 'risp-areas', label: 'Áreas', path: '/risp/areas', icon: MapPin });
+    if (canSeeSeg_RISP) rispSubItems.push({ id: 'risp-cat', label: 'Catálogo Incidentes', path: '/risp/incidentes', icon: ListChecks });
 
     if (rispSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-risp', label: 'RISP', icon: ShieldCheck, subItems: rispSubItems });

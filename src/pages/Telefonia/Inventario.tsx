@@ -34,7 +34,8 @@ import {
     Inbox,
     ClipboardCheck,
     Clock,
-    CardSim
+    CardSim,
+    Sprout
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -64,6 +65,7 @@ export default function InventarioTelefonia() {
 
     // New Filter
     const [filterVencimiento, setFilterVencimiento] = useState("");
+    const [filterCultivo, setFilterCultivo] = useState("");
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     // Autocomplete State
@@ -82,6 +84,7 @@ export default function InventarioTelefonia() {
         setFilterChipPlan("");
         setQ("");
         setFilterVencimiento("");
+        setFilterCultivo("");
     }, [activeTab]);
 
 
@@ -880,6 +883,11 @@ export default function InventarioTelefonia() {
             }
         }
 
+        if (filterCultivo) {
+            const cultivo = e.asignacion_activa?.cultivo || "Sin Cultivo";
+            if (cultivo !== filterCultivo) return false;
+        }
+
         return true;
     });
 
@@ -888,12 +896,14 @@ export default function InventarioTelefonia() {
     const uniqueFundos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.fundo_planta || "Sin Asignar"))).sort();
     const uniqueAnios = Array.from(new Set(telefoniaStore.equipos.map(e => e.fecha_compra ? new Date(e.fecha_compra).getFullYear().toString() : "Sin fecha"))).sort((a, b) => b.localeCompare(a));
     const uniqueEstados = Array.from(new Set(telefoniaStore.equipos.map(e => e.estado))).sort();
+    const uniqueCultivosEquipos = Array.from(new Set(telefoniaStore.equipos.map(e => e.asignacion_activa?.cultivo).filter(Boolean))).sort();
 
     // Unique Values for Chips Filters
     const uniqueChipEstados = Array.from(new Set(telefoniaStore.chips.map(c => c.estado))).sort();
     const uniqueChipOperadores = Array.from(new Set(telefoniaStore.chips.map(c => c.operador))).sort();
     const uniqueChipPlanes = Array.from(new Set(telefoniaStore.chips.map(c => c.plan?.nombre || "Sin Plan"))).sort();
     const uniquePlanOperadores = Array.from(new Set(telefoniaStore.planes.map(p => p.operador))).sort();
+    const uniqueCultivosChips = Array.from(new Set(telefoniaStore.chips.map(c => c.asignacion_activa?.cultivo).filter(Boolean))).sort();
 
     const filteredChips = telefoniaStore.chips.filter((c) => {
         const term = q.toLowerCase();
@@ -929,6 +939,10 @@ export default function InventarioTelefonia() {
                 const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                 if (diffDays < 0 || diffDays > 30) return false;
             }
+        }
+        if (filterCultivo) {
+            const cultivo = c.asignacion_activa?.cultivo || "Sin Cultivo";
+            if (cultivo !== filterCultivo) return false;
         }
         return true;
     });
@@ -1113,9 +1127,23 @@ export default function InventarioTelefonia() {
                                 </select>
                             </div>
 
-                            {(filterEstado || filterFundo || filterAnio) && (
+                            {/* Filter: Cultivo */}
+                            <div className="relative group min-w-[140px]">
+                                <Sprout className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterCultivo}
+                                    onChange={(e) => setFilterCultivo(e.target.value)}
+                                >
+                                    <option value="">Todos los Cultivos</option>
+                                    {uniqueCultivosEquipos.map(c => (c && <option key={c} value={c}>{c}</option>))}
+                                </select>
+                            </div>
+
+                            {(filterEstado || filterFundo || filterAnio || filterCultivo) && (
                                 <button
-                                    onClick={() => { setFilterEstado(""); setFilterFundo(""); setFilterAnio(""); }}
+                                    onClick={() => { setFilterEstado(""); setFilterFundo(""); setFilterAnio(""); setFilterCultivo(""); }}
                                     className="h-10 px-4 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors whitespace-nowrap"
                                 >
                                     Limpiar
@@ -1172,9 +1200,23 @@ export default function InventarioTelefonia() {
                                 </select>
                             </div>
 
-                            {(filterChipEstado || filterChipOperador || filterChipPlan) && (
+                            {/* Filter: Cultivo */}
+                            <div className="relative group min-w-[140px]">
+                                <Sprout className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-500 z-10" />
+                                <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                                <select
+                                    className="h-10 w-full appearance-none rounded-lg border border-slate-200 bg-slate-50 pl-10 pr-8 text-sm text-slate-700 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-slate-100 transition-colors cursor-pointer"
+                                    value={filterCultivo}
+                                    onChange={(e) => setFilterCultivo(e.target.value)}
+                                >
+                                    <option value="">Todos los Cultivos</option>
+                                    {uniqueCultivosChips.map(c => (c && <option key={c} value={c}>{c}</option>))}
+                                </select>
+                            </div>
+
+                            {(filterChipEstado || filterChipOperador || filterChipPlan || filterCultivo) && (
                                 <button
-                                    onClick={() => { setFilterChipEstado(""); setFilterChipOperador(""); setFilterChipPlan(""); }}
+                                    onClick={() => { setFilterChipEstado(""); setFilterChipOperador(""); setFilterChipPlan(""); setFilterCultivo(""); }}
                                     className="h-10 px-4 text-sm font-medium text-red-600 bg-red-50 hover:bg-red-100 rounded-lg border border-red-100 transition-colors whitespace-nowrap"
                                 >
                                     Limpiar
@@ -2353,7 +2395,7 @@ export default function InventarioTelefonia() {
                             required
                             className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
                             value={draftEquipo.imei || ""}
-                            onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value.replace(/\s/g, "") })}
+                            onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value.replace(/\D/g, "") })}
                         />
                     </div>
                     <div className="grid grid-cols-2 gap-4">
@@ -2374,6 +2416,7 @@ export default function InventarioTelefonia() {
                                 <option value="Rojo">Rojo</option>
                                 <option value="Verde">Verde</option>
                                 <option value="Otro">Otro</option>
+                                <option value="Morado Estelar">Morado Estelar</option>
                             </select>
                         </div>
                         <div>

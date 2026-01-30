@@ -4,9 +4,17 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { Modal } from "../../components/ui/Modal";
 import { rispStore, type HechoRisp } from "../../store/rispStore";
+import { getSedesState, subscribeSedes } from "../../store/sedesStore";
+import { getRispAreasState, subscribeRispAreas } from "../../store/rispAreasStore";
+import { getPersonalState, subscribePersonal } from "../../store/personalStore";
+// import { RISP_INCIDENT_CATALOG, getSubtypes, getCategoria } from "../../store/rispIncidentCatalog"; // REMOVED
+import { rispIncidentCatalogStore, type RispIncidentCatalogItem } from "../../store/rispIncidentCatalogStore";
+import { getAgentesState, subscribeAgentes } from "../../store/agentesStore";
+import { useAuth } from "../../auth/AuthContext";
 
 // Using a simple list layout similar to other pages
 export default function Historial() {
+    const { user, profile } = useAuth();
     const [risps, setRisps] = useState<HechoRisp[]>([]);
     const [search, setSearch] = useState("");
     const [loading, setLoading] = useState(true);
@@ -14,9 +22,39 @@ export default function Historial() {
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedItem, setSelectedItem] = useState<HechoRisp | null>(null);
 
+    // Store States
+    const { sedes } = getSedesState();
+    const { areas } = getRispAreasState();
+    const { personal } = getPersonalState();
+    const { agentes } = getAgentesState();
+
+    // Catalog State
+    const [catalogItems, setCatalogItems] = useState<RispIncidentCatalogItem[]>([]);
+
+    // Subscriptions
+    useEffect(() => {
+        const u1 = subscribeSedes(() => { });
+        const u2 = subscribeRispAreas(() => { });
+        const u3 = subscribePersonal(() => { });
+        const u4 = subscribeAgentes(() => { });
+
+        // Load catalog
+        const loadCatalog = async () => {
+            try {
+                const items = await rispIncidentCatalogStore.fetchCatalog();
+                setCatalogItems(items);
+            } catch (error) {
+                console.error("Error loading catalog:", error);
+            }
+        };
+        loadCatalog();
+
+        return () => { u1(); u2(); u3(); u4(); };
+    }, []);
+
     // Form state
     const [formData, setFormData] = useState<Partial<HechoRisp>>({
-        categoria_risp: 'AGENTE',
+        categoria_risp: 'CCTV',
         unidad: '',
         fecha_incidente: new Date().toISOString().split('T')[0],
         dni_agente: '',
@@ -40,6 +78,27 @@ export default function Historial() {
         nombre_usuario_reportante: '',
         fotos: []
     });
+
+    // Derived state for filtered areas (Must be after formData)
+    const availableAreas = formData.unidad
+        ? areas.filter(a => a.sede?.nombre === formData.unidad || a.sede_id === sedes.find(s => s.nombre === formData.unidad)?.id)
+        : [];
+
+    // Incident Types (Unique)
+    const availableTypes = Array.from(new Set(catalogItems.map(i => i.tipo)));
+
+    // Incident Subtypes based on selected Tipo
+    const availableSubtypes = formData.tipo_incidente
+        ? catalogItems.filter(i => i.tipo === formData.tipo_incidente)
+        : [];
+
+    // Autocomplete state
+    const [personalSearch, setPersonalSearch] = useState("");
+    const [showPersonalSuggestions, setShowPersonalSuggestions] = useState(false);
+
+    const personalSuggestions = personalSearch.length > 2
+        ? personal.filter(p => p.dni.includes(personalSearch) || p.nombre.toLowerCase().includes(personalSearch.toLowerCase())).slice(0, 5)
+        : [];
 
     const [uploading, setUploading] = useState(false);
 
@@ -114,7 +173,7 @@ export default function Historial() {
         } else {
             setSelectedItem(null);
             setFormData({
-                categoria_risp: 'AGENTE',
+                categoria_risp: 'CCTV',
                 unidad: '',
                 fecha_incidente: new Date().toISOString().split('T')[0],
                 dni_agente: '',
@@ -134,8 +193,8 @@ export default function Historial() {
                 estado_cumplimiento: 'PENDIENTE',
                 fecha_cumplimiento: '',
                 intensidad: 'BAJA',
-                usuario_reportante: '',
-                nombre_usuario_reportante: '',
+                usuario_reportante: user?.id || '',
+                nombre_usuario_reportante: profile?.nombre || '',
                 fotos: []
             });
         }
@@ -225,270 +284,361 @@ export default function Historial() {
             <Modal
                 open={modalOpen}
                 onClose={() => setModalOpen(false)}
-                title={selectedItem ? "Editar RISP" : "Nuevo Registro RISP"}
-                size="xl"
+                title={selectedItem ? "Editar RISP" : "Nuevo Reporte de Incidente (CCTV)"}
+                size="lg"
             >
-                <div className="space-y-6">
-                    {/* Section 1: Basic Info */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Categoría RISP</label>
-                            <select
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.categoria_risp}
-                                onChange={e => setFormData({ ...formData, categoria_risp: e.target.value as any })}
-                            >
-                                <option value="AGENTE">AGENTE</option>
-                                <option value="CCTV">CCTV</option>
-                            </select>
+                <div className="space-y-8 p-1">
+                    {/* Section: Información General */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Información General</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Categoría RISP</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                                    value={formData.categoria_risp || 'CCTV'}
+                                    readOnly
+                                />
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Fecha Incidente *</label>
+                                <input
+                                    type="date"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                    value={formData.fecha_incidente || ''}
+                                    onChange={e => setFormData({ ...formData, fecha_incidente: e.target.value })}
+                                />
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Unidad *</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.unidad || ''}
-                                onChange={e => setFormData({ ...formData, unidad: e.target.value })}
-                            />
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">DNI Agente</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                    value={formData.dni_agente || ''}
+                                    onChange={e => {
+                                        const val = e.target.value;
+                                        // Auto-search agent
+                                        const found = agentes.find(a => a.dni === val);
+                                        setFormData({
+                                            ...formData,
+                                            dni_agente: val,
+                                            nombre_agente: found ? found.nombre : ''
+                                        });
+                                    }}
+                                />
+                            </div>
+                            <div className="space-y-2 col-span-2">
+                                <label className="text-sm font-medium text-gray-700">Nombre Agente Reporta</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                                    value={formData.nombre_agente || ''}
+                                    readOnly
+                                    placeholder="Se completa automáticamente al ingresar DNI válido"
+                                />
+                            </div>
                         </div>
+                    </div>
+
+                    {/* Section: Ubicación y Responsables */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Ubicación y Responsables</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Sede *</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.unidad || ''}
+                                    onChange={e => setFormData({ ...formData, unidad: e.target.value, area_involucrada: '' })}
+                                >
+                                    <option value="">-- Seleccione --</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Área Involucrada</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.area_involucrada || ''}
+                                    onChange={e => {
+                                        const selectedArea = availableAreas.find(a => a.nombre === e.target.value);
+                                        setFormData({
+                                            ...formData,
+                                            area_involucrada: e.target.value,
+                                            asignado_a: selectedArea?.responsable?.nombre || ''
+                                        });
+                                    }}
+                                    disabled={!formData.unidad}
+                                >
+                                    <option value="">-- Seleccione Área --</option>
+                                    {availableAreas.map(a => (
+                                        <option key={a.id} value={a.nombre}>{a.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Asignado A</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-50 text-gray-500 focus:outline-none cursor-not-allowed"
+                                    value={formData.asignado_a || ''}
+                                    readOnly
+                                />
+                            </div>
+                            <div className="space-y-2 relative">
+                                <label className="text-sm font-medium text-gray-700">Personal Involucrado</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                    value={formData.personal_involucrado || ''}
+                                    onChange={e => {
+                                        setFormData({ ...formData, personal_involucrado: e.target.value });
+                                        setPersonalSearch(e.target.value);
+                                        setShowPersonalSuggestions(true);
+                                    }}
+                                    onFocus={() => setShowPersonalSuggestions(true)}
+                                    onBlur={() => setTimeout(() => setShowPersonalSuggestions(false), 200)}
+                                    placeholder="Buscar por DNI o Nombre"
+                                />
+                                {showPersonalSuggestions && personalSuggestions.length > 0 && (
+                                    <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-48 overflow-y-auto mt-1">
+                                        {personalSuggestions.map(p => (
+                                            <li
+                                                key={p.id}
+                                                className="px-3 py-2 hover:bg-gray-50 cursor-pointer text-sm"
+                                                onClick={() => {
+                                                    setFormData({ ...formData, personal_involucrado: `${p.dni} - ${p.nombre}` });
+                                                    setPersonalSearch(`${p.dni} - ${p.nombre}`);
+                                                    setShowPersonalSuggestions(false);
+                                                }}
+                                            >
+                                                <span className="font-bold">{p.dni}</span> - {p.nombre}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section: Clasificación del Incidente */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Clasificación del Incidente</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Tipo Incidente</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.tipo_incidente || ''}
+                                    onChange={e => {
+                                        setFormData({
+                                            ...formData,
+                                            tipo_incidente: e.target.value,
+                                            sub_tipo_incidente: '',
+                                            categoria: ''
+                                        });
+                                    }}
+                                >
+                                    <option value="">-- Seleccione Tipo --</option>
+                                    {availableTypes.map(t => (
+                                        <option key={t} value={t}>{t}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Sub-Tipo Incidente</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.sub_tipo_incidente || ''}
+                                    onChange={e => {
+                                        const selectedSubtype = e.target.value;
+                                        const matchingItem = catalogItems.find(i =>
+                                            i.tipo === formData.tipo_incidente &&
+                                            i.subtipo === selectedSubtype
+                                        );
+
+                                        setFormData({
+                                            ...formData,
+                                            sub_tipo_incidente: selectedSubtype,
+                                            categoria: matchingItem?.categoria || '',
+                                            intensidad: matchingItem?.gravedad || ''
+                                        });
+                                    }}
+                                    disabled={!formData.tipo_incidente}
+                                >
+                                    <option value="">-- Seleccione Sub-Tipo --</option>
+                                    {availableSubtypes.map(s => (
+                                        <option key={s.id} value={s.subtipo}>{s.subtipo}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Categoría</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                                    value={formData.categoria || ''}
+                                    readOnly
+                                    placeholder="Automático"
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Intensidad</label>
+                                <input
+                                    type="text"
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                                    value={formData.intensidad || ''}
+                                    readOnly
+                                    placeholder="Automático"
+                                />
+                            </div>
+                        </div>
+
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Fecha Incidente *</label>
-                            <input
-                                type="date"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.fecha_incidente || ''}
-                                onChange={e => setFormData({ ...formData, fecha_incidente: e.target.value })}
+                            <label className="text-sm font-medium text-gray-700">Descripción del Incidente</label>
+                            <textarea
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[80px]"
+                                value={formData.descripcion_incidente || ''}
+                                onChange={e => setFormData({ ...formData, descripcion_incidente: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">DNI Agente</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.dni_agente || ''}
-                                onChange={e => setFormData({ ...formData, dni_agente: e.target.value })}
-                            />
+                    {/* Section: Reporte y Acciones */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Reporte y Acciones</h3>
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Tipo Reporte</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.tipo_reporte || ''}
+                                    onChange={e => setFormData({ ...formData, tipo_reporte: e.target.value })}
+                                >
+                                    <option value="">-- Seleccione --</option>
+                                    <option value="OCURRENCIA">OCURRENCIA</option>
+                                    <option value="HALLAZGO">HALLAZGO</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Tipo Acción Inmediata</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.tipo_accion_inmediata || ''}
+                                    onChange={e => setFormData({ ...formData, tipo_accion_inmediata: e.target.value })}
+                                >
+                                    <option value="">-- Seleccione --</option>
+                                    <option value="DERIVADO A GCH">DERIVADO A GCH</option>
+                                    <option value="CUSTODIA">CUSTODIA</option>
+                                    <option value="COMUNICACION A SUPERIOR">COMUNICACION A SUPERIOR</option>
+                                </select>
+                            </div>
+                            <div className="space-y-2">
+                                <label className="text-sm font-medium text-gray-700">Tipo Observación</label>
+                                <select
+                                    className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 bg-white"
+                                    value={formData.tipo_observacion || ''}
+                                    onChange={e => setFormData({ ...formData, tipo_observacion: e.target.value })}
+                                >
+                                    <option value="">-- Seleccione --</option>
+                                    <option value="PREVENTIVA">PREVENTIVA</option>
+                                    <option value="CORRECTIVA">CORRECTIVA</option>
+                                </select>
+                            </div>
                         </div>
-                        <div className="space-y-2 col-span-2">
-                            <label className="text-sm font-medium text-gray-700">Nombre Agente Reporta</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.nombre_agente || ''}
-                                onChange={e => setFormData({ ...formData, nombre_agente: e.target.value })}
+
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-gray-700">Descripción de Acciones Tomadas</label>
+                            <textarea
+                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[80px]"
+                                value={formData.descripcion_acciones_tomadas || ''}
+                                onChange={e => setFormData({ ...formData, descripcion_acciones_tomadas: e.target.value })}
                             />
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Macrozona</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.macrozona || ''}
-                                onChange={e => setFormData({ ...formData, macrozona: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Área Involucrada</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.area_involucrada || ''}
-                                onChange={e => setFormData({ ...formData, area_involucrada: e.target.value })}
-                            />
-                        </div>
-                    </div>
+                    {/* Section: Archivos y Estado */}
+                    <div className="space-y-4">
+                        <h3 className="text-lg font-semibold text-gray-800 border-b pb-2">Archivos y Estado</h3>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Asignado A</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.asignado_a || ''}
-                                onChange={e => setFormData({ ...formData, asignado_a: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Personal Involucrado</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.personal_involucrado || ''}
-                                onChange={e => setFormData({ ...formData, personal_involucrado: e.target.value })}
-                            />
-                        </div>
-                    </div>
+                            <label className="text-sm font-medium text-gray-700">Fotos del Incidente</label>
+                            <div className="flex gap-4 items-start">
+                                <label className="flex flex-col items-center justify-center w-32 h-32 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
+                                    <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                        <Upload className="w-8 h-8 text-gray-400 mb-2" />
+                                        <span className="text-xs text-gray-500 font-medium">{uploading ? 'Subiendo...' : 'Subir Imagen'}</span>
+                                    </div>
+                                    <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} disabled={uploading} />
+                                </label>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Categoría</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.categoria || ''}
-                                onChange={e => setFormData({ ...formData, categoria: e.target.value })}
-                            />
+                                {formData.fotos && formData.fotos.map((url, idx) => (
+                                    <div key={idx} className="relative w-32 h-32 group">
+                                        <img src={url} alt="Foto" className="w-full h-full object-cover rounded-lg border border-gray-200" />
+                                        <button
+                                            onClick={() => setFormData(prev => ({ ...prev, fotos: prev.fotos?.filter((_, i) => i !== idx) }))}
+                                            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1.5 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                                        >
+                                            <X className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Tipo Incidente</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.tipo_incidente || ''}
-                                onChange={e => setFormData({ ...formData, tipo_incidente: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Sub-Tipo Incidente</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.sub_tipo_incidente || ''}
-                                onChange={e => setFormData({ ...formData, sub_tipo_incidente: e.target.value })}
-                            />
-                        </div>
-                    </div>
 
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Descripción del Incidente</label>
-                        <textarea
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[80px]"
-                            value={formData.descripcion_incidente || ''}
-                            onChange={e => setFormData({ ...formData, descripcion_incidente: e.target.value })}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Tipo Reporte</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.tipo_reporte || ''}
-                                onChange={e => setFormData({ ...formData, tipo_reporte: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Tipo Acción Inmediata</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.tipo_accion_inmediata || ''}
-                                onChange={e => setFormData({ ...formData, tipo_accion_inmediata: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Tipo Observación</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.tipo_observacion || ''}
-                                onChange={e => setFormData({ ...formData, tipo_observacion: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Descripción de Acciones Tomadas</label>
-                        <textarea
-                            className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20 min-h-[80px]"
-                            value={formData.descripcion_acciones_tomadas || ''}
-                            onChange={e => setFormData({ ...formData, descripcion_acciones_tomadas: e.target.value })}
-                        />
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Estado Cumplimiento</label>
-                            <select
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.estado_cumplimiento}
-                                onChange={e => setFormData({ ...formData, estado_cumplimiento: e.target.value })}
-                            >
-                                <option value="PENDIENTE">PENDIENTE</option>
-                                <option value="EN PROCESO">EN PROCESO</option>
-                                <option value="CUMPLIDO">CUMPLIDO</option>
-                            </select>
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Fecha Cumplimiento</label>
-                            <input
-                                type="date"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.fecha_cumplimiento || ''}
-                                onChange={e => setFormData({ ...formData, fecha_cumplimiento: e.target.value })}
-                            />
-                        </div>
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Intensidad</label>
-                            <select
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.intensidad}
-                                onChange={e => setFormData({ ...formData, intensidad: e.target.value })}
-                            >
-                                <option value="BAJA">BAJA</option>
-                                <option value="MEDIA">MEDIA</option>
-                                <option value="ALTA">ALTA</option>
-                                <option value="CRITICA">CRÍTICA</option>
-                            </select>
-                        </div>
-                    </div>
-
-                    <div className="space-y-2">
-                        <label className="text-sm font-medium text-gray-700">Fotos</label>
-                        <div className="flex gap-4 items-start">
-                            <label className="flex flex-col items-center justify-center w-24 h-24 border-2 border-dashed border-gray-300 rounded-lg cursor-pointer hover:bg-gray-50 transition-colors">
-                                <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                    <Upload className="w-6 h-6 text-gray-400" />
-                                    <span className="text-xs text-gray-500 mt-1">{uploading ? '...' : 'Subir'}</span>
-                                </div>
-                                <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} disabled={uploading} />
-                            </label>
-
-                            {formData.fotos && formData.fotos.map((url, idx) => (
-                                <div key={idx} className="relative w-24 h-24 group">
-                                    <img src={url} alt="Foto" className="w-full h-full object-cover rounded-lg border border-gray-200" />
-                                    <button
-                                        onClick={() => setFormData(prev => ({ ...prev, fotos: prev.fotos?.filter((_, i) => i !== idx) }))}
-                                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-md opacity-0 group-hover:opacity-100 transition-opacity"
+                        {selectedItem && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 bg-gray-50 rounded-xl border border-gray-100">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">Estado Cumplimiento</label>
+                                    <select
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-white text-gray-900 focus:outline-none focus:ring-2 focus:ring-red-500/20"
+                                        value={formData.estado_cumplimiento}
+                                        disabled
                                     >
-                                        <X className="w-3 h-3" />
-                                    </button>
+                                        <option value="PENDIENTE">PENDIENTE</option>
+                                        <option value="EN PROCESO">EN PROCESO</option>
+                                        <option value="CUMPLIDO">CUMPLIDO</option>
+                                    </select>
                                 </div>
-                            ))}
-                        </div>
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-gray-700">Fecha Cumplimiento</label>
+                                    <input
+                                        type="date"
+                                        className="w-full px-3 py-2 rounded-lg border border-gray-200 bg-gray-100 text-gray-600 focus:outline-none cursor-not-allowed"
+                                        value={formData.fecha_cumplimiento || ''}
+                                        readOnly
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                            <label className="text-sm font-medium text-gray-700">Nombre Usuario Reportante</label>
-                            <input
-                                type="text"
-                                className="w-full px-3 py-2 rounded-lg border border-gray-200 focus:outline-none focus:ring-2 focus:ring-red-500/20"
-                                value={formData.nombre_usuario_reportante || ''}
-                                onChange={e => setFormData({ ...formData, nombre_usuario_reportante: e.target.value })}
-                            />
-                        </div>
-                    </div>
-
-                    <div className="pt-4 flex justify-end gap-3">
+                    <div className="pt-6 flex justify-end gap-3 border-t mt-4">
                         <button
                             onClick={() => setModalOpen(false)}
-                            className="px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-100 font-medium transition-colors"
+                            className="px-6 py-2.5 rounded-xl text-gray-700 hover:bg-gray-100 font-medium transition-colors"
                         >
                             Cancelar
                         </button>
                         <button
                             onClick={handleSave}
-                            className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition-colors"
+                            className="px-6 py-2.5 rounded-xl bg-red-600 text-white font-medium hover:bg-red-700 transition-colors shadow-sm"
                         >
-                            Guardar
+                            Guardar Registro
                         </button>
                     </div>
                 </div>

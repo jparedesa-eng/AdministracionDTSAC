@@ -7,7 +7,7 @@ interface ModalProps {
   title?: string;
   onClose: () => void;
   children: React.ReactNode;
-  size?: "sm" | "md" | "lg" | "xl";
+  size?: "sm" | "md" | "lg" | "xl" | "2xl";
   footer?: React.ReactNode;
 }
 
@@ -28,7 +28,9 @@ export const Modal: React.FC<ModalProps> = ({
         ? "max-w-3xl"
         : size === "xl"
           ? "max-w-5xl"
-          : "max-w-lg";
+          : size === "2xl"
+            ? "max-w-7xl"
+            : "max-w-lg";
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 px-4 transition-all duration-200">

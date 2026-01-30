@@ -173,74 +173,13 @@ function TabCamaras({
             // 2. Fetch Data
             const data = await getChecklistDataRange(startDate, endDate, reportCentralId);
 
-            // 3. Prepare PDF
-            const doc = new jsPDF('l', 'mm', 'a4');
-            const centralName = centrales.find(c => c.id === reportCentralId)?.nombre || "CENTRAL";
+            // 3. Prepare Data for Layout (Moved BEFORE PDF init to calculate height)
 
-            // Load Logo
-            try {
-                const getImageData = (url: string) => {
-                    return new Promise<HTMLImageElement>((resolve, reject) => {
-                        const img = new Image();
-                        img.crossOrigin = "Anonymous";
-                        img.onload = () => resolve(img);
-                        img.onerror = reject;
-                        img.src = url;
-                    });
-                };
-
-                // Using PNG for better PDF compatibility
-                const logoImg = await getImageData('/logo-danper-rojo.png');
-                const logoWidth = 20;
-                const logoHeight = logoWidth * (logoImg.height / logoImg.width);
-                doc.addImage(logoImg, 'PNG', 14, 15, logoWidth, logoHeight);
-            } catch (e) {
-                console.warn("No se pudo cargar el logo", e);
-            }
-            // Header Text (Shifted right to avoid logo)
-            doc.setFont("helvetica", "bold");
-            doc.setFontSize(22);
-            doc.setTextColor(0, 0, 0);
-            doc.text(`REPORTE SEMANAL CCTV - ${centralName}`, 42, 22);
-
-            doc.setFontSize(14);
-            doc.text(`SEMANA: ${reportWeek}`, 42, 29);
-
-            doc.setFont("helvetica", "normal");
-            doc.setFontSize(11);
-            doc.text(`Período: ${startDate} al ${endDate}`, 42, 35);
-            doc.text(`Tipo: ${reportIncludeAll ? "Reporte Completo" : "Solo Fallas e Incidentes"}`, 42, 41);
-
-            doc.setFontSize(9);
-            doc.setTextColor(100);
-            doc.text(`Generado: ${new Date().toLocaleString()}`, 280, 15, { align: 'right' });
-            doc.setTextColor(0);
-
-
-
-            // Matriz Operativa
+            // Matriz Operativa Logic
             const days: string[] = [];
             const cur = new Date(ISOweekStart);
-
-            // Header Row 1: Grouped Headers
-            const headRow1: any[] = [
-                { content: 'DATOS DE LA CÁMARA', colSpan: 4, styles: { halign: 'center', fillColor: [15, 23, 42] } } // Increased colspan to 4
-            ];
-
-            // Header Row 2: Sub Headers
-            const headRow2: any[] = ["SEDE", "NAVE", "ÁREA", "CÁMARA"];
-
             for (let i = 0; i < 7; i++) {
                 days.push(new Date(cur).toISOString().split('T')[0]);
-                const dayName = cur.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
-
-                // Add Day Header spanning 2 cols
-                headRow1.push({ content: dayName.toUpperCase(), colSpan: 2, styles: { halign: 'center', fillColor: [51, 65, 85] } });
-
-                // Add Sub Headers
-                headRow2.push("ESTADO\n(M / T)");
-                headRow2.push("CALIDAD\n(M / T)");
-
                 cur.setDate(cur.getDate() + 1);
             }
 
@@ -257,46 +196,132 @@ function TabCamaras({
                 });
             });
 
-            const rows: any[] = [];
             let allCentralCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa);
-
             // Filter by Sede Ids
             if (reportSedeIds.length > 0) {
                 allCentralCameras = allCentralCameras.filter(c => c.sede_id && reportSedeIds.includes(c.sede_id));
             } else {
-                // If no sede selected, arguably we should show none, or all? 
-                // Assuming if user deselects all, they want none.
                 allCentralCameras = [];
             }
 
-            // Filter: Only failures/incidents if !reportIncludeAll
+            // Filter logic
             if (!reportIncludeAll) {
                 allCentralCameras = allCentralCameras.filter(cam => {
-                    // Check for operational failures OR Poor quality in the matrix
                     let hasFailures = false;
                     days.forEach(d => {
                         const mInfo = detailsMap[cam.id]?.[d]?.["MAÑANA"];
                         const tInfo = detailsMap[cam.id]?.[d]?.["TARDE"];
-
-                        // Check Morning
-                        if (mInfo) {
-                            if (!mInfo.operativa) hasFailures = true; // Operational Failure
-                            if (mInfo.calidad !== null && mInfo.calidad < 3) hasFailures = true; // Poor Quality
-                        }
-
-                        // Check Afternoon
-                        if (tInfo) {
-                            if (!tInfo.operativa) hasFailures = true; // Operational Failure
-                            if (tInfo.calidad !== null && tInfo.calidad < 3) hasFailures = true; // Poor Quality
-                        }
+                        if (mInfo && (!mInfo.operativa || (mInfo.calidad !== null && mInfo.calidad < 3))) hasFailures = true;
+                        if (tInfo && (!tInfo.operativa || (tInfo.calidad !== null && tInfo.calidad < 3))) hasFailures = true;
                     });
-
-                    // Check for incidents in reportes
                     const hasIncidents = data.reportes.some(r => r.camara_id === cam.id);
-
                     return hasFailures || hasIncidents;
                 });
             }
+
+            // --- HEIGHT CALCULATION ---
+            const ROW_HEIGHT = 8; // Approx mm per row in Matrix
+            const HEADER_HEIGHT = 60; // Title + Table Headers
+            const SUMMARY_HEIGHT = 50; // Summary + Legend block
+            const INCIDENT_ROW_HEIGHT = 8;
+            const MAJOR_ROW_HEIGHT = 8;
+            const SECT_TITLE_HEIGHT = 15;
+            const BOTTOM_MARGIN = 50;
+
+            const matrixHeight = (allCentralCameras.length * ROW_HEIGHT) + 20; // 20 for Headers
+
+            // Incident Count
+            const incidentCount = data.reportes.filter(rep => allCentralCameras.some(c => c.id === rep.camara_id)).length;
+            const incidentsHeight = incidentCount > 0 ? (incidentCount * INCIDENT_ROW_HEIGHT) + SECT_TITLE_HEIGHT + 10 : 0;
+
+            // Major Events Count
+            const majorCount = (data.eventosMayores || []).length;
+            const majorHeight = majorCount > 0 ? (majorCount * MAJOR_ROW_HEIGHT) + SECT_TITLE_HEIGHT + 10 : 0;
+
+            const totalEstimatedHeight = Math.max(297, HEADER_HEIGHT + matrixHeight + SUMMARY_HEIGHT + incidentsHeight + majorHeight + BOTTOM_MARGIN);
+
+            // 4. Initialize PDF with Dynamic Height
+            const doc = new jsPDF({
+                orientation: 'p',
+                unit: 'mm',
+                format: [420, totalEstimatedHeight]
+            });
+
+            const centralName = centrales.find(c => c.id === reportCentralId)?.nombre || "CENTRAL";
+
+            // Header Background
+            doc.setFillColor(255, 255, 255); // White
+            doc.rect(0, 0, 420, 40, 'F'); // Full width header background
+
+            // Logo
+            try {
+                const getImageData = (url: string) => {
+                    return new Promise<HTMLImageElement>((resolve, reject) => {
+                        const img = new Image();
+                        img.crossOrigin = "Anonymous";
+                        img.onload = () => resolve(img);
+                        img.onerror = reject;
+                        img.src = url;
+                    });
+                };
+                const logoImg = await getImageData('/logo-danper-rojo.png');
+                const logoWidth = 22;
+                const logoHeight = logoWidth * (logoImg.height / logoImg.width);
+                doc.addImage(logoImg, 'PNG', 15, 12, logoWidth, logoHeight);
+            } catch (e) {
+                console.warn("No se pudo cargar el logo", e);
+            }
+
+            // Load Tech Font (Roboto)
+            try {
+                const fontUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.1.66/fonts/Roboto/Roboto-Medium.ttf';
+                const fontBytes = await fetch(fontUrl).then(res => res.arrayBuffer());
+                const fontBase64 = btoa(new Uint8Array(fontBytes).reduce((data, byte) => data + String.fromCharCode(byte), ''));
+                doc.addFileToVFS('Roboto-Medium.ttf', fontBase64);
+                doc.addFont('Roboto-Medium.ttf', 'Roboto', 'normal');
+                doc.setFont('Roboto');
+            } catch (e) {
+                console.warn("Could not load custom font", e);
+                doc.setFont("helvetica");
+            }
+
+            // LEFT SIDE
+            doc.setTextColor(15, 23, 42);
+            doc.setFontSize(18);
+            doc.text(`REPORTE SEMANAL - ${centralName}`, 42, 18);
+            doc.setFontSize(14);
+            doc.setTextColor(51, 65, 85);
+            doc.text(`SEMANA: ${reportWeek}`, 42, 25);
+            doc.setFontSize(7);
+            doc.setTextColor(100);
+            doc.text(`Período: ${startDate} al ${endDate}`, 42, 30);
+
+            // RIGHT SIDE
+            doc.setFontSize(11);
+            doc.setTextColor(0);
+            doc.text(`Tipo: ${reportIncludeAll ? "Reporte Completo" : "Solo Fallas e Incidentes"}`, 400, 18, { align: 'right' });
+            doc.setFontSize(7);
+            doc.setTextColor(100);
+            const genDate = new Date().toLocaleString('es-PE', { hour12: true });
+            doc.text(`Generado: ${genDate}`, 400, 24, { align: 'right' });
+
+
+            // Matriz Operativa Headers Setup
+            const curDate = new Date(ISOweekStart);
+            const headRow1: any[] = [{ content: 'DATOS DE LA CÁMARA', colSpan: 4, styles: { halign: 'center', fillColor: [15, 23, 42], textColor: [255, 255, 255] } }];
+            const headRow2: any[] = ["SEDE", "NAVE", "ÁREA", "CÁMARA"];
+
+            for (let i = 0; i < 7; i++) {
+                const dayName = curDate.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' });
+                headRow1.push({ content: dayName.toUpperCase(), colSpan: 2, styles: { halign: 'center', fillColor: [51, 65, 85], textColor: [255, 255, 255] } });
+                headRow2.push("ESTADO\n(M/T)");
+                headRow2.push("CALIDAD\n(M/T)");
+                curDate.setDate(curDate.getDate() + 1);
+            }
+
+            // Build Rows for Matrix
+            const rows: any[] = [];
+
 
             const getQualityLabel = (q: number | null) => {
                 if (q === null) return "-";
@@ -326,142 +351,160 @@ function TabCamaras({
                 rows.push(row);
             });
 
+            // Matriz Operativa Style
+            const cleanTableStyles = {
+                lineWidth: 0, // No borders
+                cellPadding: 1.5,
+            };
+            const cleanHeadStyles = {
+                fillColor: [241, 245, 249], // Slate-100 (Very light gray for header)
+                textColor: [30, 41, 59], // Slate-800
+                fontStyle: 'bold',
+                fontSize: 8,
+                halign: 'center',
+                lineWidth: 0
+            };
+            const cleanBodyStyles = {
+                textColor: [71, 85, 105], // Slate-600
+                fontSize: 7
+            };
+
             /* @ts-ignore */
             autoTable(doc, {
                 startY: 50,
                 head: [headRow1, headRow2],
                 body: rows,
-                theme: 'grid',
-                styles: { fontSize: 5, cellPadding: 1, halign: 'center', valign: 'middle', lineWidth: 0.1 },
-                headStyles: { fillColor: [15, 23, 42], textColor: 255, fontStyle: 'bold', fontSize: 6 },
-                columnStyles: {
-                    0: { halign: 'left', cellWidth: 20 }, // Sede
-                    1: { halign: 'left', cellWidth: 15 }, // Nave
-                    2: { halign: 'left', cellWidth: 15 }, // Area
-                    3: { halign: 'left', cellWidth: 25, fontStyle: 'bold' }, // Camara
-                },
+                theme: 'striped', // Striped rows
+                styles: { ...cleanTableStyles, valign: 'middle' } as any,
+                headStyles: cleanHeadStyles as any,
+                bodyStyles: cleanBodyStyles as any,
+                // columnStyles removed to allow auto-width
                 didParseCell: function (data: any) {
-                    // Columns 0,1,2,3 are data. Op columns start at index 4.
+                    // Custom Logic for Colors (Preserve existing logic but adjust colors if needed)
                     if (data.section === 'body' && data.column.index > 3) {
                         const text = data.cell.raw as string;
-
-                        // Check if it's an OP column (index 4, 6, 8...)
-                        // (index - 4) % 2 === 0
                         const isOpCol = (data.column.index - 4) % 2 === 0;
 
                         if (isOpCol) {
                             if (text.includes("F")) {
-                                data.cell.styles.fillColor = [254, 202, 202]; // Light Red Bg
-                                data.cell.styles.textColor = [185, 28, 28];
+                                data.cell.styles.fillColor = [254, 202, 202]; // Soft Red (Red-200)
+                                data.cell.styles.textColor = [185, 28, 28];   // Dark Red Text (Red-700)
                                 data.cell.styles.fontStyle = 'bold';
                             } else if (text.includes("OK")) {
-                                data.cell.styles.fillColor = [220, 252, 231]; // Light Green Bg
-                                data.cell.styles.textColor = [21, 128, 61];
+                                data.cell.styles.fillColor = [220, 252, 231]; // Soft Green (Green-100)
+                                data.cell.styles.textColor = [21, 128, 61];   // Dark Green Text (Green-700)
                             }
                         } else {
-                            // Quality Column
+                            // Quality Column - NOW COLORED TOO
                             if (text.includes("Poor")) {
-                                data.cell.styles.fillColor = [254, 202, 202]; // Light Red Bg
+                                data.cell.styles.fillColor = [254, 202, 202]; // Soft Red
                                 data.cell.styles.textColor = [185, 28, 28];
                                 data.cell.styles.fontStyle = 'bold';
                             } else if (text.includes("Fair")) {
-                                data.cell.styles.fillColor = [254, 249, 195]; // Light Yellow Bg
-                                data.cell.styles.textColor = [161, 98, 7];
+                                data.cell.styles.fillColor = [254, 249, 195]; // Soft Yellow (Yellow-100)
+                                data.cell.styles.textColor = [161, 98, 7];    // Dark Yellow (Yellow-700)
                             } else if (text.includes("Good")) {
-                                data.cell.styles.fillColor = [220, 252, 231]; // Light Green Bg
+                                data.cell.styles.fillColor = [220, 252, 231]; // Soft Green
                                 data.cell.styles.textColor = [21, 128, 61];
                             }
                         }
                     }
                 }
-
             });
 
-            // Leyenda (Legend)
+            // === LAYOUT: SIDE-BY-SIDE SUMMARY & LEGEND ===
             /* @ts-ignore */
-            const finalMatrixY = (doc as any).lastAutoTable.finalY + 10;
+            let currentY = (doc as any).lastAutoTable.finalY + 10;
 
-            doc.setFontSize(10);
-            doc.text("Leyenda de Códigos y Colores", 14, finalMatrixY);
+            // NO PAGE BREAK CHECKS because of "single long page" request
 
-            /* @ts-ignore */
-            /* @ts-ignore */
-            autoTable(doc, {
-                startY: finalMatrixY + 3,
-                head: [["CÓDIGO", "DESCRIPCIÓN"]],
-                body: [
-                    ["OK", "Cámara Operativa (Estado)"],
-                    ["F", "Falla Operativa (Estado)"],
-                    ["Good", "Calidad Buena"],
-                    ["Fair", "Calidad Regular"],
-                    ["Poor", "Calidad Mala"],
-                ],
-                theme: 'grid',
-                styles: { fontSize: 6, cellPadding: 1 },
-                headStyles: { fillColor: [71, 85, 105], fontSize: 6, halign: 'center' },
-                columnStyles: {
-                    0: { fontStyle: 'bold', cellWidth: 15, halign: 'center' },
-                    1: { cellWidth: 50 },
-                },
-                didParseCell: function (data: any) {
-                    if (data.section === 'body' && data.column.index === 0) {
-                        const code = data.cell.raw as string;
-                        if (code === 'OK' || code === 'Good') {
-                            data.cell.styles.fillColor = [220, 252, 231];
-                            data.cell.styles.textColor = [21, 128, 61];
-                        } else if (code === 'F' || code === 'Poor') {
-                            data.cell.styles.fillColor = [254, 202, 202];
-                            data.cell.styles.textColor = [185, 28, 28];
-                        } else if (code === 'Fair') {
-                            data.cell.styles.fillColor = [254, 249, 195];
-                            data.cell.styles.textColor = [161, 98, 7];
-                        }
-                    }
-                },
-                tableWidth: 80
-            });
-
-            // Resumen Gerencial
-            doc.addPage();
-            doc.setFontSize(14);
-            doc.text("Resumen Gerencial y Estadísticas", 14, 15);
-
-            // Calculate Stats Scope: All active cameras in the selected Sedes (ignoring the "Solo Fallas" display filter)
+            // 1. RESUMEN GERENCIAL (Left Side) - Table Title as Header Row
+            // Calculate Stats Scope: All active cameras in selecting Sedes
             const scopeCameras = camaras.filter(c => c.central_id === reportCentralId && c.activa && (!reportSedeIds.length || (c.sede_id && reportSedeIds.includes(c.sede_id))));
             const scopeCameraIds = scopeCameras.map(c => c.id);
+
+            // Calculate Unique Cameras with Failures
+            const camerasWithFailures = scopeCameras.filter(cam => {
+                const camDetails = data.detalles.filter(d => d.camara_id === cam.id);
+                return camDetails.some(d => !d.operativa);
+            }).length;
 
             let totalChecks = 0;
             let totalFails = 0;
             data.checklists.forEach(cl => {
-                // Filter details to only include cameras in our Scope
                 const dets = data.detalles.filter(d => d.checklist_id === cl.id && scopeCameraIds.includes(d.camara_id));
                 totalChecks += dets.length;
                 totalFails += dets.filter(d => !d.operativa).length;
             });
+
             const operability = totalChecks > 0 ? ((1 - (totalFails / totalChecks)) * 100).toFixed(2) + "%" : "0%";
             const totalIncidents = data.reportes.filter(r => scopeCameraIds.includes(r.camara_id)).length;
 
             /* @ts-ignore */
-            /* @ts-ignore */
             autoTable(doc, {
-                startY: 20,
-                head: [["INDICADOR", "VALOR"]],
+                startY: currentY, // Start exactly at Y
+                head: [
+                    [{ content: 'Resumen Gerencial y Estadísticas', colSpan: 2, styles: { halign: 'left', fillColor: [226, 232, 240] } }]
+                ],
                 body: [
-                    ["Total Revisiones Puntos de Control", totalChecks],
-                    ["Total Fallas Detectadas", totalFails],
+                    ["Total Cámaras con Falla", camerasWithFailures],
                     ["Operatividad Promedio Semanal", operability],
                     ["Total Incidentes Reportados", totalIncidents],
                 ],
                 theme: 'striped',
-                headStyles: { fillColor: [51, 65, 85] },
-                tableWidth: 120
+                styles: cleanTableStyles as any,
+                headStyles: { ...cleanHeadStyles, fillColor: [226, 232, 240] } as any, // Slightly darker header for sections
+                bodyStyles: cleanBodyStyles as any,
+                tableWidth: 120,
+                margin: { left: 14 }
             });
+
+            /* @ts-ignore */
+            const summaryFinalY = (doc as any).lastAutoTable.finalY;
+
+            // 2. LEYENDA (Right Side)
+            /* @ts-ignore */
+            autoTable(doc, {
+                startY: currentY,
+                head: [
+                    [{ content: 'Leyenda de Códigos y Colores', colSpan: 2, styles: { halign: 'left', fillColor: [226, 232, 240] } }]
+                ],
+                body: [
+                    ["OK", "Cámara Operativa"],
+                    ["F", "Falla Operativa"],
+                    ["Good / Fair / Poor", "Calidad de Imagen"],
+                ],
+                theme: 'striped',
+                styles: cleanTableStyles as any,
+                headStyles: { ...cleanHeadStyles, fillColor: [226, 232, 240] } as any,
+                bodyStyles: cleanBodyStyles as any,
+                tableWidth: 120, // Match width of summary
+                margin: { left: 150 },
+                didParseCell: function (data: any) {
+                    // Match coloring in legend
+                    if (data.section === 'body' && data.column.index === 0) {
+                        const text = data.cell.raw as string;
+                        if (text === 'F') {
+                            data.cell.styles.fillColor = [254, 202, 202]; // Soft Red
+                            data.cell.styles.textColor = [185, 28, 28];
+                            data.cell.styles.fontStyle = 'bold';
+                        } else if (text === 'OK') {
+                            data.cell.styles.fillColor = [220, 252, 231]; // Soft Green
+                            data.cell.styles.textColor = [21, 128, 61];
+                        }
+                    }
+                }
+            });
+
+            /* @ts-ignore */
+            const legendFinalY = (doc as any).lastAutoTable.finalY;
+
+            const nextSectionY = Math.max(summaryFinalY, legendFinalY) + 15;
 
             // Incidentes
             /* @ts-ignore */
-            const finalY = (doc as any).lastAutoTable.finalY + 15;
-            doc.setFontSize(12);
-            doc.text("Historial de Incidencias", 14, finalY);
+            let incidentY = nextSectionY;
+            // No flow check
 
             const incidentRows = data.reportes
                 .filter(rep => allCentralCameras.some(c => c.id === rep.camara_id))
@@ -477,15 +520,24 @@ function TabCamaras({
                 });
 
             /* @ts-ignore */
-            /* @ts-ignore */
             autoTable(doc, {
-                startY: finalY + 5,
-                head: [["FECHA", "HORA", "CÁMARA", "TIPO", "DESCRIPCIÓN"]],
-                body: incidentRows.length > 0 ? incidentRows : [["-", "-", "-", "Sin incidentes", "-"]],
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [180, 83, 9], textColor: 255 },
-                columnStyles: { 4: { cellWidth: 'auto' } }
+                startY: incidentY,
+                head: [[{ content: 'Historial de Incidencias', colSpan: 5, styles: { halign: 'left', fillColor: [226, 232, 240] } }]],
+                body: [
+                    ["FECHA", "HORA", "CÁMARA", "TIPO", "DESCRIPCIÓN"], // Sub-header manually in body for style or use head
+                    ...(incidentRows.length > 0 ? incidentRows : [["-", "-", "-", "Sin incidentes", "-"]])
+                ],
+                theme: 'striped',
+                styles: cleanTableStyles as any,
+                headStyles: { ...cleanHeadStyles, fillColor: [226, 232, 240] } as any,
+                bodyStyles: cleanBodyStyles as any,
+                columnStyles: { 4: { cellWidth: 'auto' } },
+                didParseCell: function (data: any) {
+                    // Make the "Sub-header" row bold
+                    if (data.section === 'body' && data.row.index === 0) {
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
             });
 
             // Reportes Mayores (Eventos CCTV)
@@ -493,15 +545,8 @@ function TabCamaras({
             const majorY = (doc as any).lastAutoTable.finalY + 15;
 
             // Check if we need new page
-            let nextStart: number;
-            if (majorY > 180) {
-                doc.addPage();
-                doc.text("Registro de Eventos Mayores", 14, 15);
-                nextStart = 20;
-            } else {
-                doc.text("Registro de Eventos Mayores", 14, majorY);
-                nextStart = majorY + 5;
-            }
+            let nextStart: number = majorY;
+            // No flow check
 
             const majorRows = (data.eventosMayores || []).map((ev: any) => {
                 const sede = sedes.find(s => s.id === ev.sede_id)?.nombre || "---";
@@ -518,22 +563,20 @@ function TabCamaras({
             /* @ts-ignore */
             autoTable(doc, {
                 startY: nextStart,
-                head: [["FECHA", "HORA", "SEDE", "EVENTO", "DETALLE", "ESTADO"]],
-                body: majorRows.length > 0 ? majorRows : [["-", "-", "-", "Sin eventos mayores", "-", "-"]],
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 28, 28] },
-            });
-
-            /* @ts-ignore */
-            /* @ts-ignore */
-            autoTable(doc, {
-                startY: nextStart,
-                head: [["FECHA", "CÁMARA", "TIPO", "DETALLE"]],
-                body: majorRows.length > 0 ? majorRows : [["-", "-", "Sin reportes mayores", "-"]],
-                theme: 'grid',
-                styles: { fontSize: 8 },
-                headStyles: { fillColor: [185, 28, 28] },
+                head: [[{ content: 'Registro de Eventos Mayores', colSpan: 6, styles: { halign: 'left', fillColor: [226, 232, 240] } }]],
+                body: [
+                    ["FECHA", "HORA", "SEDE", "EVENTO", "DETALLE", "ESTADO"],
+                    ...(majorRows.length > 0 ? majorRows : [["-", "-", "-", "Sin eventos mayores", "-", "-"]])
+                ],
+                theme: 'striped',
+                styles: cleanTableStyles as any,
+                headStyles: { ...cleanHeadStyles, fillColor: [226, 232, 240] } as any,
+                bodyStyles: cleanBodyStyles as any,
+                didParseCell: function (data: any) {
+                    if (data.section === 'body' && data.row.index === 0) {
+                        data.cell.styles.fontStyle = 'bold';
+                    }
+                }
             });
 
             doc.save(`Reporte_Semanal_${reportWeek}_${centralName}.pdf`);

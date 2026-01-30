@@ -54,8 +54,6 @@ export default function AdministrarSolicitudes() {
           camionetasStore.syncInventario(),
           camionetasStore.syncSolicitudes(),
         ]);
-        // Verificar vencidos (limpieza automática)
-        await camionetasStore.verificarVencidos();
         refresh();
       } catch (e: any) {
         console.error(e);
@@ -346,12 +344,12 @@ export default function AdministrarSolicitudes() {
                     RESERVADAS
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {asignadas.length}
+                    {asignadas.filter(s => new Date() <= new Date(s.usoFin)).length}
                   </span>
                 </div>
 
                 <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {asignadas.filter(filtro).map(s => (
+                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).map(s => (
                     <TicketCard
                       key={s.id}
                       s={s}
@@ -360,7 +358,7 @@ export default function AdministrarSolicitudes() {
                       pedirDevolucion={pedirDevolucion}
                     />
                   ))}
-                  {asignadas.filter(filtro).length === 0 && (
+                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay reservas
                     </div>
@@ -376,12 +374,12 @@ export default function AdministrarSolicitudes() {
                     EN USO
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {enUso.length}
+                    {enUso.filter(s => new Date() <= new Date(s.usoFin)).length}
                   </span>
                 </div>
 
                 <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {enUso.filter(filtro).map(s => {
+                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).map(s => {
                     const now = new Date();
                     const fin = new Date(s.usoFin);
                     const isVencido = now > fin;
@@ -395,7 +393,7 @@ export default function AdministrarSolicitudes() {
                       />
                     );
                   })}
-                  {enUso.filter(filtro).length === 0 && (
+                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay unidades en uso
                     </div>
