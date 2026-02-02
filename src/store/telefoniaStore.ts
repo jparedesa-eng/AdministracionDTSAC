@@ -727,7 +727,7 @@ export const telefoniaStore = {
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { equipo, plan, ...payload } = chip;
+        const { equipo, plan, asignacion_activa, periodo_asignado, fecha_fin_asignado, ...payload } = chip;
         const { data, error } = await supabase
             .from("telefonia_chips")
             .insert([payload])
@@ -740,7 +740,7 @@ export const telefoniaStore = {
 
     async updateChip(id: string, updates: Partial<Chip>) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { equipo, plan, ...payload } = updates;
+        const { equipo, plan, asignacion_activa, periodo_asignado, fecha_fin_asignado, ...payload } = updates;
         const { data, error } = await supabase
             .from("telefonia_chips")
             .update(payload)
