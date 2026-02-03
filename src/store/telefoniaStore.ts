@@ -63,6 +63,42 @@ export interface Equipo {
     asignacion_activa?: Solicitud | null;
     periodo_asignado?: string; // Derived from active assignment
     fecha_fin_asignado?: string; // Derived from active assignment
+
+    // Facturación / Origen
+    factura_id?: string | null;
+    solicitud_compra_id?: string | null;
+    factura?: Factura | null;
+}
+
+export interface FacturaItem {
+    id: string;
+    factura_id: string;
+    modelo_id: string; // Link to Modelo
+    nombre_modelo: string; // Snapshot name
+    cantidad: number;
+    costo_unitario: number;
+    // Helper
+    modelo?: Modelo;
+
+    // Moved from Header
+    solicitud_id?: string | null;
+    ceco?: string | null;
+    tipo_adquisicion?: string | null;
+    asumido_por?: 'Danper' | 'Usuario' | string | null;
+    solicitud?: import("./telefoniaStore").Solicitud; // Relation
+}
+
+export interface Factura {
+    id: string;
+    numero_factura: string;
+    proveedor: 'CLARO' | 'ENTEL';
+    fecha_compra: string;
+    monto: number;
+    cantidad_total?: number;
+    created_at?: string;
+
+    // Relations
+    items?: FacturaItem[];
 }
 
 export interface Chip {
@@ -245,6 +281,120 @@ export const telefoniaStore = {
     solicitudes: [] as Solicitud[],
     bajas: [] as Baja[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
+    facturas: [] as Factura[],
+
+    // --- FACTURAS ---
+    async fetchFacturas() {
+        // Fetch Header
+        const { data: facturas, error } = await supabase
+            .from("telefonia_factura_equipos")
+            .select(`*`)
+            .order("created_at", { ascending: false });
+
+        if (error) throw error;
+
+        // Fetch Items (in separate query for simplicity or joint?)
+        // Let's do separate for clarity and avoiding duplicates in main list
+        const { data: items, error: itemsError } = await supabase
+            .from("telefonia_factura_equipos_items")
+            .select(`
+                *, 
+                modelo:telefonia_modelos(*),
+                solicitud:telefonia_solicitudes(*) 
+            `);
+
+        if (itemsError) throw itemsError;
+
+        // Map items to facturas
+        const facturasWithItems = facturas?.map(f => ({
+            ...f,
+            items: items?.filter(i => i.factura_id === f.id) || []
+        }));
+
+        this.facturas = facturasWithItems as Factura[];
+    },
+
+    async createFactura(factura: Omit<Factura, "id" | "created_at" | "items" | "cantidad_total">, items: Omit<FacturaItem, "id" | "factura_id">[]) {
+        // 1. Calculate Total Items
+        const totalQty = items.reduce((acc, item) => acc + item.cantidad, 0);
+
+        // 2. Insert Header
+        const { data: newFactura, error: fError } = await supabase
+            .from("telefonia_factura_equipos")
+            .insert([{ ...factura, cantidad_total: totalQty }])
+            .select()
+            .single();
+
+        if (fError) throw fError;
+
+        // 3. Insert Items
+        if (items.length > 0) {
+            const itemsPayload = items.map(i => ({
+                ...i,
+                factura_id: newFactura.id
+            }));
+
+            const { error: iError } = await supabase
+                .from("telefonia_factura_equipos_items")
+                .insert(itemsPayload);
+
+            if (iError) throw iError; // Ideally rollback, but basic implementation first
+        }
+
+        await this.fetchFacturas();
+        return newFactura;
+    },
+
+    async updateFactura(id: string, factura: Omit<Factura, "id" | "created_at" | "items" | "cantidad_total">, items: Omit<FacturaItem, "id" | "factura_id">[]) {
+        // 1. Calculate Total Items
+        const totalQty = items.reduce((acc, item) => acc + item.cantidad, 0);
+
+        // 2. Update Header
+        const { data: updatedFactura, error: fError } = await supabase
+            .from("telefonia_factura_equipos")
+            .update({ ...factura, cantidad_total: totalQty })
+            .eq("id", id)
+            .select()
+            .single();
+
+        if (fError) throw fError;
+
+        // 3. Replace Items (Delete All + Insert New)
+        // Transaction safety would be better here, but doing sequential for now.
+        const { error: delError } = await supabase
+            .from("telefonia_factura_equipos_items")
+            .delete()
+            .eq("factura_id", id);
+
+        if (delError) throw delError;
+
+        if (items.length > 0) {
+            const itemsPayload = items.map(i => ({
+                ...i,
+                factura_id: id
+            }));
+
+            const { error: iError } = await supabase
+                .from("telefonia_factura_equipos_items")
+                .insert(itemsPayload);
+
+            if (iError) throw iError;
+        }
+
+        await this.fetchFacturas();
+        return updatedFactura;
+    },
+
+    async deleteFactura(id: string) {
+        const { error } = await supabase
+            .from("telefonia_factura_equipos")
+            .delete()
+            .eq("id", id);
+
+        if (error) throw error;
+        this.facturas = this.facturas.filter(f => f.id !== id);
+    },
+
 
     // --- VALIDATION ---
     async checkActiveAssignment(dni: string): Promise<{ exists: boolean; message?: string; detail?: any }> {

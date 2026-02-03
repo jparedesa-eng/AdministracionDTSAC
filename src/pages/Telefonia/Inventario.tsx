@@ -230,6 +230,8 @@ export default function InventarioTelefonia() {
                 telefoniaStore.fetchModelos(),
                 telefoniaStore.fetchPuestos(),
                 telefoniaStore.fetchProyectos(),
+                telefoniaStore.fetchFacturas(), // [NEW] Fetch Invoices
+                telefoniaStore.fetchSolicitudes(), // [NEW] Fetch Tickets for linking
             ]);
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error cargando datos" });
@@ -474,7 +476,19 @@ export default function InventarioTelefonia() {
     };
 
     const handleNewEquipo = () => {
-        setDraftEquipo({ estado: "Disponible", marca: "", modelo: "", imei: "", color: "", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE" });
+        setDraftEquipo({
+            estado: "Disponible",
+            marca: "",
+            modelo: "",
+            imei: "",
+            color: "",
+            condicion: "Nuevo",
+            fecha_compra: "",
+            categoria: "TELEFONIA",
+            ubicacion: "BASE",
+            factura_id: "", // [NEW]
+            solicitud_compra_id: "" // [NEW]
+        });
         setIncludeEsim(false);
         setEsimData({ numero: "", operador: "" });
         setOpenEquipo(true);
@@ -488,6 +502,31 @@ export default function InventarioTelefonia() {
             // Ensure IMEI has no spaces
             if (draftEquipo.imei) {
                 draftEquipo.imei = draftEquipo.imei.replace(/\s/g, "");
+            }
+
+            // [NEW] Validation: Invoice Quota
+            if (draftEquipo.factura_id) {
+                const factura = telefoniaStore.facturas.find(f => f.id === draftEquipo.factura_id);
+                if (factura) {
+                    // Find item for this model
+                    const item = factura.items?.find(i => i.nombre_modelo === draftEquipo.modelo);
+                    if (!item) {
+                        // Warn but allow? Or Block? Block is safer.
+                        // "El modelo X no está registrado en la factura seleccionada."
+                        throw new Error(`El modelo '${draftEquipo.modelo}' no figura en la factura seleccionada.`);
+                    }
+
+                    // Check Current Count
+                    const currentCount = telefoniaStore.equipos.filter(e =>
+                        e.factura_id === factura.id &&
+                        e.modelo === draftEquipo.modelo &&
+                        e.id !== draftEquipo.id // Exclude self if editing
+                    ).length;
+
+                    if (currentCount >= item.cantidad) {
+                        throw new Error(`La factura no tiene saldo disponible para '${draftEquipo.modelo}' (${currentCount}/${item.cantidad} registrados).`);
+                    }
+                }
             }
 
             if (!draftEquipo.id && includeEsim) {
@@ -2346,6 +2385,41 @@ export default function InventarioTelefonia() {
                         <p className="text-[10px] text-gray-400 mt-1">
                             Al seleccionar un modelo, los datos técnicos se completarán automáticamente.
                         </p>
+                    </div>
+
+                    {/* [NEW] Invoice & Ticket Origin Selection */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Factura de Compra</label>
+                            <select
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.factura_id || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, factura_id: e.target.value || null })}
+                            >
+                                <option value="">-- Sin Factura (Inventario Inicial) --</option>
+                                {telefoniaStore.facturas.map(f => (
+                                    <option key={f.id} value={f.id}>
+                                        {f.numero_factura} - {f.proveedor} ({f.fecha_compra})
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700">Ticket de Origen</label>
+                            <select
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                value={draftEquipo.solicitud_compra_id || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, solicitud_compra_id: e.target.value || null })}
+                            >
+                                <option value="">-- Sin Ticket Origen --</option>
+                                {/* Filter tickets to relevant ones if needed */}
+                                {telefoniaStore.solicitudes.map(s => (
+                                    <option key={s.id} value={s.id}>
+                                        {s.beneficiario_nombre} - {s.tipo_solicitud}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">

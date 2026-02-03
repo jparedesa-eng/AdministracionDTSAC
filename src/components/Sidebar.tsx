@@ -12,6 +12,7 @@ import {
   ClipboardList,
   Users,
   Plane,
+  Receipt, // New icon
   CalendarDays,
   Smartphone,
   ShieldCheck,
@@ -117,6 +118,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeTel_Historial = hasAccess("/telefonia/historial");
   const canSeeTel_AprobGerencia = hasAccess("/telefonia/aprobacion-gerencia");
   const canSeeTel_AprobAdmin = hasAccess("/telefonia/aprobacion-admin");
+  const canSeeTel_Facturas = hasAccess("/telefonia/facturas"); // New permission
 
   // Configuración
 
@@ -190,6 +192,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     if (canSeeTel_AprobGerencia) telefoniaSubItems.push({ id: 'tel-ger', label: 'Aprobación Ger.', path: '/telefonia/aprobacion-gerencia', icon: ShieldCheck });
     if (canSeeTel_AprobAdmin) telefoniaSubItems.push({ id: 'tel-admin', label: 'Aprobación Admin', path: '/telefonia/aprobacion-admin', icon: ShieldCheck });
     if (canSeeTel_Gestion) telefoniaSubItems.push({ id: 'tel-ges', label: 'Panel Gestión', path: '/telefonia/gestion', icon: Layers });
+    if (canSeeTel_Facturas) telefoniaSubItems.push({ id: 'tel-fac', label: 'Facturas', path: '/telefonia/facturas', icon: Receipt }); // Add Item
     if (canSeeTel_Historial) telefoniaSubItems.push({ id: 'tel-hist', label: 'Historial', path: '/telefonia/historial', icon: Database });
 
     // Catalogos (Using AprobAdmin permission for now as likely only admins should see this)
