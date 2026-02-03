@@ -486,8 +486,8 @@ export default function InventarioTelefonia() {
             fecha_compra: "",
             categoria: "TELEFONIA",
             ubicacion: "BASE",
-            factura_id: "", // [NEW]
-            solicitud_compra_id: "" // [NEW]
+            factura_id: null, // [NEW]
+            solicitud_compra_id: null // [NEW]
         });
         setIncludeEsim(false);
         setEsimData({ numero: "", operador: "" });
@@ -542,11 +542,17 @@ export default function InventarioTelefonia() {
                 newChipId = newChip.id;
             }
 
+            // Sanitize payload
+            const payload = {
+                ...draftEquipo,
+                factura_id: draftEquipo.factura_id || null,
+                solicitud_compra_id: draftEquipo.solicitud_compra_id || null
+            };
+
             if (draftEquipo.id) {
-                await telefoniaStore.updateEquipo(draftEquipo.id, draftEquipo);
+                await telefoniaStore.updateEquipo(draftEquipo.id, payload);
                 setToast({ type: "success", message: "Equipo actualizado" });
             } else {
-                const payload = { ...draftEquipo };
                 const newEquipo = await telefoniaStore.createEquipo(payload as any);
 
                 if (newChipId) {
