@@ -12,14 +12,18 @@ import {
     Receipt,
     CheckCircle,
     DollarSign,
-    Calendar, // Added for aesthetics
+    Calendar,
     Box,
-    Pencil
+    Pencil,
+    ChevronLeft,
+    ChevronRight,
+    ChevronsLeft,
+    ChevronsRight
 } from "lucide-react";
 
 
 export default function FacturasTelefonia() {
-    // const { user } = useAuth(); // Removed unused
+    // const { user } = useAuth();
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
     const [refreshTrigger, setRefreshTrigger] = useState(0);
@@ -51,14 +55,17 @@ export default function FacturasTelefonia() {
     // Form State
     const [formData, setFormData] = useState({
         numero_factura: "",
-        proveedor: "CLARO", // Default
+        proveedor: "CLARO",
         fecha_compra: new Date().toISOString().slice(0, 10),
         monto: 0,
-        // Removed: ceco, tipo, asumido, solicitud
     });
 
+    // Pagination State
+    const [currentPage, setCurrentPage] = useState(1);
+    const [itemsPerPage, setItemsPerPage] = useState(10);
+
     const handleOpenCreate = () => {
-        setEditingId(null); // Reset Editing Mode
+        setEditingId(null);
         setFormData({
             numero_factura: "",
             proveedor: "CLARO",
@@ -77,11 +84,10 @@ export default function FacturasTelefonia() {
             fecha_compra: factura.fecha_compra,
             monto: factura.monto
         });
-        // Load items
         if (factura.items) {
             setItems(factura.items.map(i => ({
                 modelo_id: i.modelo_id,
-                nombre_modelo: i.nombre_modelo, // Ensure snapshot name is kept or re-fetched?? It's usually safe to keep
+                nombre_modelo: i.nombre_modelo,
                 cantidad: i.cantidad,
                 costo_unitario: i.costo_unitario,
                 ceco: i.ceco || "",
@@ -118,7 +124,6 @@ export default function FacturasTelefonia() {
         const newItems = [...items];
         newItems[index] = { ...newItems[index], [field]: value };
 
-        // Auto-fill Model Name for snapshot
         if (field === "modelo_id") {
             const model = telefoniaStore.modelos.find(m => m.id === value);
             if (model) {
@@ -126,7 +131,6 @@ export default function FacturasTelefonia() {
             }
         }
 
-        // Auto-fill Ticket Data
         if (field === "solicitud_id") {
             const ticket = telefoniaStore.solicitudes.find(s => s.id === value);
             if (ticket) {
@@ -138,12 +142,7 @@ export default function FacturasTelefonia() {
         setItems(newItems);
     };
 
-    // Calculate Totals Live
-    // const calculatedTotalQty = items.reduce((acc, curr) => acc + (Number(curr.cantidad) || 0), 0); // Removed unused
     const calculatedTotalAmount = items.reduce((acc, curr) => acc + ((Number(curr.cantidad) || 0) * (Number(curr.costo_unitario) || 0)), 0);
-
-    // Ticket Linking Logic Removed from Header
-    // const handleTicketSelect ... removed
 
     const mapSolicitudTypeToAcquisition = (solType?: string) => {
         if (!solType) return null;
@@ -186,7 +185,6 @@ export default function FacturasTelefonia() {
             setOpenModal(false);
             setRefreshTrigger(prev => prev + 1);
 
-            // Reset Form
             setFormData({
                 numero_factura: "",
                 proveedor: "CLARO",
@@ -212,6 +210,24 @@ export default function FacturasTelefonia() {
             setToast({ type: "error", message: "Error al eliminar" });
         }
     }
+
+    // Pagination Logic
+    const getCurrentData = () => {
+        const data = telefoniaStore.facturas;
+        if (itemsPerPage === 0) return data;
+        const start = (currentPage - 1) * itemsPerPage;
+        return data.slice(start, start + itemsPerPage);
+    };
+
+    const currentData = getCurrentData();
+    const totalItems = telefoniaStore.facturas.length;
+    const totalPages = itemsPerPage === 0 ? 1 : Math.ceil(totalItems / itemsPerPage);
+
+    const handlePageChange = (newPage: number) => {
+        if (newPage >= 1 && newPage <= totalPages) {
+            setCurrentPage(newPage);
+        }
+    };
 
     return (
         <div className="space-y-6">
@@ -250,14 +266,14 @@ export default function FacturasTelefonia() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100">
-                                {telefoniaStore.facturas.length === 0 ? (
+                                {currentData.length === 0 ? (
                                     <tr>
                                         <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
                                             No hay facturas registradas
                                         </td>
                                     </tr>
                                 ) : (
-                                    telefoniaStore.facturas.map((factura) => (
+                                    currentData.map((factura) => (
                                         <tr key={factura.id} className="hover:bg-gray-50/50">
                                             <td className="px-4 py-3 font-medium text-gray-900">
                                                 {factura.numero_factura}
@@ -279,7 +295,6 @@ export default function FacturasTelefonia() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {/* Multi-ticket display logic could be complex here. Maybe just list them or show count? */}
                                                 <div className="flex flex-col gap-1">
                                                     {Array.from(new Set(factura.items?.map(i => i.solicitud?.beneficiario_nombre).filter(Boolean))).map((name, idx) => (
                                                         <span key={idx} className="text-xs text-blue-600 bg-blue-50 px-1 rounded w-fit">{name}</span>
@@ -317,6 +332,69 @@ export default function FacturasTelefonia() {
                             </tbody>
                         </table>
                     </div>
+
+                    {/* Pagination Controls */}
+                    {!loading && totalItems > 0 && (
+                        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
+                            <div className="flex items-center gap-2">
+                                <span className="text-xs text-gray-400 font-medium uppercase">Filas:</span>
+                                <select
+                                    className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
+                                    value={itemsPerPage}
+                                    onChange={(e) => {
+                                        setItemsPerPage(Number(e.target.value));
+                                        setCurrentPage(1);
+                                    }}
+                                >
+                                    <option value={10}>10</option>
+                                    <option value={20}>20</option>
+                                    <option value={50}>50</option>
+                                    <option value={100}>100</option>
+                                    <option value={0}>Todos</option>
+                                </select>
+                            </div>
+
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => handlePageChange(1)}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Primera Página"
+                                >
+                                    <ChevronsLeft className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(currentPage - 1)}
+                                    disabled={currentPage === 1}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Página Anterior"
+                                >
+                                    <ChevronLeft className="h-4 w-4" />
+                                </button>
+
+                                <span className="text-xs font-medium px-4 text-gray-400">
+                                    {currentPage} / {totalPages}
+                                </span>
+
+                                <button
+                                    onClick={() => handlePageChange(currentPage + 1)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Página Siguiente"
+                                >
+                                    <ChevronRight className="h-4 w-4" />
+                                </button>
+                                <button
+                                    onClick={() => handlePageChange(totalPages)}
+                                    disabled={currentPage === totalPages}
+                                    className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Última Página"
+                                >
+                                    <ChevronsRight className="h-4 w-4" />
+                                </button>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
