@@ -2387,8 +2387,8 @@ export default function InventarioTelefonia() {
                         </p>
                     </div>
 
-                    {/* [NEW] Invoice & Ticket Origin Selection */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* [NEW] Invoice Selection */}
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Factura de Compra</label>
                             <select
@@ -2400,22 +2400,6 @@ export default function InventarioTelefonia() {
                                 {telefoniaStore.facturas.map(f => (
                                     <option key={f.id} value={f.id}>
                                         {f.numero_factura} - {f.proveedor} ({f.fecha_compra})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700">Ticket de Origen</label>
-                            <select
-                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                value={draftEquipo.solicitud_compra_id || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, solicitud_compra_id: e.target.value || null })}
-                            >
-                                <option value="">-- Sin Ticket Origen --</option>
-                                {/* Filter tickets to relevant ones if needed */}
-                                {telefoniaStore.solicitudes.map(s => (
-                                    <option key={s.id} value={s.id}>
-                                        {s.beneficiario_nombre} - {s.tipo_solicitud}
                                     </option>
                                 ))}
                             </select>

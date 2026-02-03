@@ -466,20 +466,11 @@ export default function FacturasTelefonia() {
                                     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 bg-indigo-50/30 p-3 rounded-lg border border-indigo-100">
                                         <div className="col-span-1 md:col-span-2 lg:col-span-1">
                                             <label className="text-[10px] font-bold text-indigo-400 uppercase mb-1 block">Ticket Origen</label>
-                                            <select
-                                                className="block w-full rounded border-indigo-200 p-1.5 text-xs bg-white"
+                                            <TicketSelector
                                                 value={item.solicitud_id || ""}
-                                                onChange={(e) => handleItemChange(idx, "solicitud_id", e.target.value)}
-                                            >
-                                                <option value="">-- Opcional --</option>
-                                                {telefoniaStore.solicitudes
-                                                    .filter(s => s.estado === "Programar Entrega")
-                                                    .map(t => (
-                                                        <option key={t.id} value={t.id}>
-                                                            {t.beneficiario_nombre} ({t.tipo_solicitud})
-                                                        </option>
-                                                    ))}
-                                            </select>
+                                                onChange={(val) => handleItemChange(idx, "solicitud_id", val)}
+                                                solicitudes={telefoniaStore.solicitudes.filter(s => s.estado === "Programar Entrega")}
+                                            />
                                         </div>
                                         <div>
                                             <label className="text-[10px] font-bold text-indigo-400 uppercase mb-1 block">CECO</label>
@@ -548,6 +539,48 @@ export default function FacturasTelefonia() {
                     </div>
                 </form>
             </Modal>
+        </div >
+    );
+}
+
+function TicketSelector({ value, onChange, solicitudes }: { value: string, onChange: (val: string) => void, solicitudes: any[] }) {
+    const [filter, setFilter] = useState("");
+
+    // Filter options based on search
+    const filteredOptions = solicitudes.filter(s => {
+        if (!filter) return true;
+        const search = filter.toLowerCase();
+        return (
+            s.beneficiario_nombre?.toLowerCase().includes(search) ||
+            s.tipo_solicitud?.toLowerCase().includes(search) ||
+            s.ceco?.includes(search)
+        );
+    });
+
+    return (
+        <div className="relative">
+            <input
+                type="text"
+                placeholder="Buscar ticket..."
+                className="w-full text-[10px] border border-indigo-100 rounded px-1 py-0.5 mb-1 bg-indigo-50/50 focus:bg-white transition-colors"
+                value={filter}
+                onChange={(e) => setFilter(e.target.value)}
+            />
+            <select
+                className="block w-full rounded border-indigo-200 p-1.5 text-xs bg-white"
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+            >
+                <option value="">-- Seleccionar --</option>
+                {filteredOptions.map(t => (
+                    <option key={t.id} value={t.id}>
+                        {t.beneficiario_nombre} ({t.tipo_solicitud})
+                    </option>
+                ))}
+                {filteredOptions.length === 0 && (
+                    <option disabled>Sin resultados</option>
+                )}
+            </select>
         </div>
     );
 }
