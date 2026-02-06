@@ -347,15 +347,20 @@ export function getReportesPendientes(): ReporteCamara[] {
 
 // ===== BULK DATA OPERATIONS FOR REPORTS =====
 
-export async function getChecklistDataRange(startDate: string, endDate: string, centralId: string) {
+export async function getChecklistDataRange(startDate: string, endDate: string, centralId?: string | null) {
     // 1. Get Checklists in range
-    const { data: checklists, error: checklistError } = await supabase
+    let checklistQuery = supabase
         .from("checklist_camaras")
         .select("*")
-        .eq("central_id", centralId)
         .gte("fecha", startDate)
         .lte("fecha", endDate)
         .order("fecha", { ascending: true });
+
+    if (centralId) {
+        checklistQuery = checklistQuery.eq("central_id", centralId);
+    }
+
+    const { data: checklists, error: checklistError } = await checklistQuery;
 
     if (checklistError) throw new Error(checklistError.message);
 
@@ -374,14 +379,6 @@ export async function getChecklistDataRange(startDate: string, endDate: string, 
     }
 
     // 3. Get Reports in range
-    // Note: Reports are linked to date via 'fecha_reporte'
-    // We filter by date string comparison (assuming YYYY-MM-DD format in start/end matches database text or date)
-    // Actually fecha_reporte is likely timestampz or similar, but stored as string in local type?
-    // Let's check type definition above: fecha_reporte: string.
-    // In DB it might be timestamp. We should be careful.
-    // Assuming string comparison works if strict ISO.
-
-    // Better to use filter on the day part if it's a timestamp
     const { data: reports, error: reportError } = await supabase
         .from("reportes_camaras")
         .select("*")
@@ -390,14 +387,19 @@ export async function getChecklistDataRange(startDate: string, endDate: string, 
 
     if (reportError) throw new Error(reportError.message);
 
-    // 4. Get Major Events (Eventos Mayores) in range for this central
-    const { data: majorEvents, error: majorError } = await supabase
+    // 4. Get Major Events (Eventos Mayores) in range
+    let majorEventsQuery = supabase
         .from("cctv_eventos_mayores")
         .select("*")
-        .eq("cctv_id", centralId)
         .gte("fecha_evento", startDate)
         .lte("fecha_evento", endDate)
         .order("fecha_hora_inicio", { ascending: true });
+
+    if (centralId) {
+        majorEventsQuery = majorEventsQuery.eq("cctv_id", centralId);
+    }
+
+    const { data: majorEvents, error: majorError } = await majorEventsQuery;
 
     if (majorError) throw new Error(majorError.message);
 

@@ -395,6 +395,22 @@ export const telefoniaStore = {
         this.facturas = this.facturas.filter(f => f.id !== id);
     },
 
+    async checkFacturaUsage(id: string): Promise<boolean> {
+        // Build the query to check if any equipment uses this factura_id
+        const { count, error } = await supabase
+            .from("telefonia_equipos")
+            .select("id", { count: "exact", head: true })
+            .eq("factura_id", id);
+
+        if (error) {
+            console.error("Error checking factura usage:", error);
+            // Default to true (prevent deletion) on error to be safe
+            return true;
+        }
+
+        return (count || 0) > 0;
+    },
+
 
     // --- VALIDATION ---
     async checkActiveAssignment(dni: string): Promise<{ exists: boolean; message?: string; detail?: any }> {

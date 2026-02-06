@@ -1,5 +1,5 @@
-
 import React, { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { ChevronLeft, ChevronRight, Calendar as CalendarIcon } from "lucide-react";
 
 interface DateRangePickerProps {
@@ -23,17 +23,40 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
     const [tempEnd, setTempEnd] = useState<Date | null>(initialEnd);
 
     const containerRef = useRef<HTMLDivElement>(null);
+    const popoverRef = useRef<HTMLDivElement>(null);
+    const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
 
-    // Close on click outside
+    // Update position when opening
+    useEffect(() => {
+        if (isOpen && containerRef.current) {
+            const rect = containerRef.current.getBoundingClientRect();
+            // Basic positioning: Align left, place below
+            // Ideally we check viewport bounds, but for now fixed below is safer than clipped
+            setPopoverPos({
+                top: rect.bottom + window.scrollY + 8,
+                left: rect.left + window.scrollX
+            });
+        }
+    }, [isOpen]);
+
+    // Close on click outside (Handling Portal)
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(event.target as Node)) {
+            const target = event.target as Node;
+            const clickedInsideContainer = containerRef.current && containerRef.current.contains(target);
+            const clickedInsidePopover = popoverRef.current && popoverRef.current.contains(target);
+
+            if (!clickedInsideContainer && !clickedInsidePopover) {
                 setIsOpen(false);
             }
         };
-        document.addEventListener("mousedown", handleClickOutside);
+
+        // Use mousedown to catch interactions before click
+        if (isOpen) {
+            document.addEventListener("mousedown", handleClickOutside);
+        }
         return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
+    }, [isOpen]);
 
     // Calendar Logic
     const getDaysInMonth = (date: Date) => {
@@ -156,7 +179,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
             <button
                 onClick={() => setIsOpen(!isOpen)}
                 className={`
-                    flex items-center gap-2 px-4 py-2 bg-white border rounded-full transition-all
+                    flex items-center gap-2 px-4 py-2 bg-white border rounded-full transition-all w-full
                     ${isOpen ? 'border-[#D32F2F] ring-1 ring-[#D32F2F]' : 'border-gray-300 hover:border-gray-400'}
                 `}
             >
@@ -165,12 +188,19 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                     {start && end ? `${formatDate(start)} - ${formatDate(end)}` : (start ? formatDate(start) : "Seleccionar Fechas")}
                 </span>
                 {/* Arrow indicator */}
-                <div className={`ml-1 w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] transition-transform ${isOpen ? 'rotate-180 border-t-[#D32F2F]' : 'border-t-gray-500'}`} />
+                <div className={`ml-auto w-0 h-0 border-l-[4px] border-l-transparent border-r-[4px] border-r-transparent border-t-[4px] transition-transform ${isOpen ? 'rotate-180 border-t-[#D32F2F]' : 'border-t-gray-500'}`} />
             </button>
 
             {/* Popover */}
-            {isOpen && (
-                <div className="absolute top-full left-0 mt-2 bg-white rounded-xl border border-gray-200 z-50 flex flex-col md:flex-row overflow-hidden min-w-[320px] md:min-w-[500px]">
+            {isOpen && createPortal(
+                <div
+                    ref={popoverRef}
+                    style={{
+                        top: `${popoverPos.top}px`,
+                        left: `${popoverPos.left}px`
+                    }}
+                    className="fixed z-[9999] bg-white rounded-xl border border-gray-200 shadow-2xl flex flex-col md:flex-row overflow-hidden min-w-[320px] md:min-w-[500px]"
+                >
                     {/* Left Panel (Controls + Info) */}
                     <div className="bg-gray-50 p-4 border-r border-gray-100 flex flex-col justify-between w-full md:w-48">
                         <div>
@@ -234,7 +264,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                             {renderDays()}
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

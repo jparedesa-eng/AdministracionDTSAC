@@ -21,6 +21,7 @@ import { getChecklistDataRange } from "../../store/checklistCamarasStore";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { FileDown } from "lucide-react";
+import { DateRangePicker } from "../../components/ui/DateRangePicker";
 
 export default function InventarioCamaras() {
     const [, setSedesVersion] = useState(0);
@@ -122,6 +123,8 @@ function TabCamaras({
 
     // Report State
     const [reportModalOpen, setReportModalOpen] = useState(false);
+    const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+
     const [reportWeek, setReportWeek] = useState(() => {
         const now = new Date();
         const year = now.getFullYear();
@@ -817,6 +820,13 @@ function TabCamaras({
                 </div>
                 <div className="flex gap-3">
                     <button
+                        onClick={() => setIsExcelModalOpen(true)}
+                        className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-700 transition-colors shadow-sm"
+                    >
+                        <FileDown className="h-4 w-4" />
+                        Exportar Excel
+                    </button>
+                    <button
                         onClick={() => setReportModalOpen(true)}
                         className="flex items-center gap-2 bg-white border border-slate-200 text-slate-700 px-4 py-2 rounded-xl text-sm font-bold hover:bg-slate-50 transition-colors"
                     >
@@ -1229,6 +1239,16 @@ function TabCamaras({
                 </div>
             </Modal>
 
+            {/* Excel Export Modal */}
+            <ExcelExportModal
+                open={isExcelModalOpen}
+                onClose={() => setIsExcelModalOpen(false)}
+                centrales={centrales}
+                sedes={sedes}
+                setToast={setToast}
+                camaras={camaras}
+            />
+
             {/* Report Modal */}
             <Modal
                 open={reportModalOpen}
@@ -1377,6 +1397,277 @@ function TabCamaras({
                 </div>
             </Modal>
         </div >
+    );
+}
+
+
+function ExcelExportModal({ open, onClose, centrales, sedes, setToast, camaras }: {
+    open: boolean, onClose: () => void, centrales: any[], sedes: any[], setToast: any, camaras: any[]
+}) {
+    // Excel State
+    const [exportRange, setExportRange] = useState<{ start: Date | null, end: Date | null }>({ start: null, end: null });
+    const [selectedCentral, setSelectedCentral] = useState("");
+    const [selectedSedes, setSelectedSedes] = useState<string[]>([]);
+    const [isExporting, setIsExporting] = useState(false);
+
+    // Reset Sedes when Central changes
+    useEffect(() => {
+        if (selectedCentral) {
+            const central = centrales.find(c => c.id === selectedCentral);
+            if (central && central.sedes) {
+                setSelectedSedes(central.sedes); // Default to all from this central
+            } else {
+                setSelectedSedes([]);
+            }
+        } else {
+            // If "Todas", maybe select ALL sedes from ALL centrales?
+            // Or just clear? Let's select ALL valid sedes from ALL centrales to be helpful.
+            const allSedesIds = centrales.flatMap(c => c.sedes || []);
+            // Unique IDs just in case
+            const unique = Array.from(new Set(allSedesIds));
+            setSelectedSedes(unique);
+        }
+    }, [selectedCentral, centrales]);
+
+    const handleExport = async () => {
+        // Validation: Date is required. Central can be empty (meaning ALL). Sedes required.
+        if (!exportRange.start || !exportRange.end) return setToast({ type: "error", message: "Seleccione un rango de fechas." });
+        if (selectedSedes.length === 0) return setToast({ type: "error", message: "Seleccione al menos una sede." });
+
+        try {
+            setIsExporting(true);
+            setToast({ type: "success", message: "Generando Excel... por favor espere." });
+
+            const XLSX = await import("xlsx");
+            const { getChecklistDataRange } = await import("../../store/checklistCamarasStore");
+
+            const startDateStr = exportRange.start.toISOString().split("T")[0];
+            const endDateStr = exportRange.end.toISOString().split("T")[0];
+
+            // Pass null if selectedCentral is empty string to fetch ALL
+            const { checklists, detalles } = await getChecklistDataRange(startDateStr, endDateStr, selectedCentral || null);
+
+            // Filter Cameras by Central (if selected) AND Selected Sedes
+            // If selectedCentral is empty, we include cameras from ANY central as long as they match selectedSedes.
+            const relevantCamaras = camaras.filter(c =>
+                (!selectedCentral || c.central_id === selectedCentral) &&
+                c.sede_id &&
+                selectedSedes.includes(c.sede_id)
+            );
+
+            const rows: any[] = [];
+            const sedeMap = sedes.reduce((acc, s) => { acc[s.id] = s.nombre; return acc; }, {} as Record<string, string>);
+
+            // Strategy: Iterate over relevant cameras. For each camera, check if it was part of any checklist in the range. 
+            // Or rather, iterate over Checklists, and for each checklist, list the status of relevant cameras.
+            const QUALITY_LABELS: Record<number, { label: string }> = {
+                5: { label: 'Good' },
+                3: { label: 'Fair' },
+                1: { label: 'Poor' },
+            };
+
+            for (const checklist of checklists) {
+                // Relevant cameras that were active at the time? We assume current camera list for simplicity unless historic tracking is needed.
+                // We use relevantCamaras (filtered by Current Sede selection).
+
+                for (const cam of relevantCamaras) {
+                    const detail = detalles.find(d => d.checklist_id === checklist.id && d.camara_id === cam.id);
+
+                    // Logic:
+                    // If detail exists, use it.
+                    // If detail valid but no quality -> Good (Default).
+                    // If operative false -> Falla.
+
+                    // Mappings
+                    const calidadLabel = detail?.calidad_imagen
+                        ? (QUALITY_LABELS[detail.calidad_imagen as number]?.label || 'BUENA')
+                        : (detail?.operativa === false ? 'MALA' : 'BUENA');
+
+                    const estado = detail?.operativa === false ? 'FALLA' : 'OPERATIVA';
+                    const activacion = cam.activa ? 'ACTIVO' : 'INACTIVO';
+
+                    // Only skip if we want to filter out 'missing' data? No, show all cameras for the shift.
+                    // But if no detail exists (e.g. camera added later), it might be misleading.
+                    // Usually checklists cover all cameras. If missing, maybe "-" or "NO AUDITADO".
+                    // Let's assume if missing in detail but camera is active -> NO AUDITADO or Default OK?
+                    // Previous logic iteration used implicit default. Here let's be strict or use "SIN DATOS" if strictly missing.
+                    // But `getChecklistDataRange` likely fetches all details.
+
+                    const isMissing = !detail;
+
+                    if (isMissing) continue; // Skip if not registered in this checklist
+
+                    rows.push({
+                        "SEDE": sedeMap[cam.sede_id || ""] || "SIN SEDE",
+                        "NAVE - FUNDO": cam.nave_fundo || "-",
+                        "FECHA": checklist.fecha,
+                        "TURNO": checklist.turno || "-",
+                        "TIPO DE COMPONENTE": cam.tipo_componente || "-",
+                        "UBICACIÓN DE COMPONENTE": cam.ubicacion || "-",
+                        "ÁREA": cam.area || "-",
+                        "NOMBRE DE CAMARA": cam.nombre,
+                        "CODIGO DE CAMARA": cam.codigo,
+                        "ACTIVACION": activacion,
+                        "ESTADO": isMissing ? "NO REGISTRADO" : estado,
+                        "CALIDAD DE IMAGEN": isMissing ? "-" : (detail?.operativa === false ? 'MALA' : calidadLabel)
+                    });
+                }
+            }
+
+            if (rows.length === 0) {
+                setToast({ type: "error", message: "No se encontraron registros en este rango." });
+                setIsExporting(false);
+                return;
+            }
+
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte CCTV");
+
+            // Auto-width
+            const wscols = Object.keys(rows[0]).map(k => ({ wch: k.length + 5 }));
+            worksheet['!cols'] = wscols;
+
+            XLSX.writeFile(workbook, `REPORTE_CCTV_RANGO_${startDateStr}_${endDateStr}.xlsx`);
+            setToast({ type: "success", message: "Excel descargado con éxito." });
+            onClose();
+
+        } catch (error: any) {
+            console.error(error);
+            setToast({ type: "error", message: "Error: " + error.message });
+        } finally {
+            setIsExporting(false);
+        }
+    };
+
+    return (
+        <Modal
+            open={open}
+            onClose={onClose}
+            title="Exportar Registro a Excel"
+            size="md"
+        >
+            <div className="space-y-6 mt-4">
+                <div className="bg-emerald-50 p-4 rounded-xl border border-emerald-100 flex gap-3">
+                    <FileDown className="text-emerald-600 shrink-0" size={24} />
+                    <div>
+                        <p className="text-sm font-bold text-emerald-900">Configuración de Exportación</p>
+                        <p className="text-xs text-emerald-700 mt-1">Descarga el historial de checklists en formato Excel para análisis.</p>
+                    </div>
+                </div>
+
+                <div className="space-y-4">
+                    {/* Date Range Use */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Rango de Fechas</label>
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-2">
+                            <DateRangePicker
+                                onChange={(range) => setExportRange(range)}
+                                initialStart={exportRange.start}
+                                initialEnd={exportRange.end}
+                            />
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-1.5">Central CCTV</label>
+                        <select
+                            value={selectedCentral}
+                            onChange={e => setSelectedCentral(e.target.value)}
+                            className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 appearance-none"
+                        >
+                            <option value="">Todas las Centrales</option>
+                            <option disabled>------------------------</option>
+                            {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                        </select>
+                    </div>
+
+                    {/* Multi-Select Sede */}
+                    <div>
+                        <label className="block text-sm font-bold text-gray-700 mb-2">Sedes a Incluir</label>
+                        <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 max-h-[150px] overflow-y-auto">
+                            <div className="space-y-2">
+                                <label className="flex items-center gap-2 p-1 hover:bg-slate-100 rounded cursor-pointer">
+                                    <input
+                                        type="checkbox"
+                                        checked={
+                                            sedes
+                                                .filter(s => {
+                                                    if (!selectedCentral) return centrales.some(c => c.sedes?.includes(s.id));
+                                                    const central = centrales.find(c => c.id === selectedCentral);
+                                                    return central?.sedes?.includes(s.id);
+                                                })
+                                                .every((s) => selectedSedes.includes(s.id))
+                                        }
+                                        onChange={(e) => {
+                                            if (e.target.checked) {
+                                                // Select all visible
+                                                const visibleSedes = sedes
+                                                    .filter(s => {
+                                                        if (!selectedCentral) return centrales.some(c => c.sedes?.includes(s.id));
+                                                        const central = centrales.find(c => c.id === selectedCentral);
+                                                        return central?.sedes?.includes(s.id);
+                                                    })
+                                                    .map(s => s.id);
+                                                setSelectedSedes(visibleSedes);
+                                            } else {
+                                                setSelectedSedes([]);
+                                            }
+                                        }}
+                                        className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                    />
+                                    <span className="text-sm font-bold text-slate-700">Seleccionar Todas</span>
+                                </label>
+                                <hr className="border-slate-200 my-1" />
+                                {sedes
+                                    .filter(s => {
+                                        // Show sedes belonging to selected central, OR all sedes belonging to ANY central if "Todas" selected
+                                        if (!selectedCentral) {
+                                            return centrales.some(c => c.sedes?.includes(s.id));
+                                        }
+                                        const central = centrales.find(c => c.id === selectedCentral);
+                                        return central?.sedes?.includes(s.id);
+                                    })
+                                    .map(s => (
+                                        <label key={s.id} className="flex items-center gap-2 p-1 hover:bg-slate-100 rounded cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={selectedSedes.includes(s.id)}
+                                                onChange={(e) => {
+                                                    if (e.target.checked) {
+                                                        setSelectedSedes(prev => [...prev, s.id]);
+                                                    } else {
+                                                        setSelectedSedes(prev => prev.filter(id => id !== s.id));
+                                                    }
+                                                }}
+                                                className="w-4 h-4 text-emerald-600 rounded focus:ring-emerald-500"
+                                            />
+                                            <span className="text-sm text-slate-600">{s.nombre}</span>
+                                        </label>
+                                    ))
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-bold text-slate-500 hover:text-slate-700"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={isExporting || !exportRange.start || !exportRange.end}
+                        className="px-6 py-2 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                    >
+                        {isExporting ? "Generando..." : "Descargar Excel"} <FileDown size={16} />
+                    </button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 

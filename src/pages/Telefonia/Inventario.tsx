@@ -1387,7 +1387,7 @@ export default function InventarioTelefonia() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 <div className="text-sm text-gray-600">
-                                                    {item.fecha_compra ? new Date(item.fecha_compra).toLocaleDateString() : "-"}
+                                                    {item.fecha_compra ? new Date(item.fecha_compra + 'T00:00:00').toLocaleDateString() : "-"}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4">

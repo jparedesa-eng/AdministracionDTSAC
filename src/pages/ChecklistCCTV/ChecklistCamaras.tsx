@@ -25,6 +25,7 @@ import {
     Trash2
 } from 'lucide-react';
 import { Toast, type ToastState } from "../../components/ui/Toast";
+import { DateRangePicker } from "../../components/ui/DateRangePicker";
 import { useAuth } from "../../auth/AuthContext";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
 import { getCamarasState, subscribeCamaras } from "../../store/camarasStore";
@@ -599,6 +600,107 @@ export default function ChecklistCamaras() {
         }, 100);
     };
 
+    // Excel Export Logic
+    const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+    const [exportRange, setExportRange] = useState<{ start: Date | null, end: Date | null }>({ start: null, end: null });
+
+    const handleExportExcel = async () => {
+        if (!selectedCentral) return setToast({ type: "error", message: "Seleccione una central." });
+        if (!exportRange.start || !exportRange.end) return setToast({ type: "error", message: "Seleccione un rango de fechas." });
+
+        try {
+            setToast({ type: "success", message: "Generando Excel... por favor espere." });
+
+            // Dynamic import to avoid heavy bundle if not used
+            const XLSX = await import("xlsx");
+            const { getChecklistDataRange } = await import("../../store/checklistCamarasStore");
+
+            const startDateStr = exportRange.start.toISOString().split("T")[0];
+            const endDateStr = exportRange.end.toISOString().split("T")[0];
+
+            const { checklists, detalles } = await getChecklistDataRange(startDateStr, endDateStr, selectedCentral);
+
+            // Construct the Flat Dataset
+            const rows = [];
+
+            // Map Sede IDs to Names for efficiency
+            const sedeMap = sedes.reduce((acc, s) => { acc[s.id] = s.nombre; return acc; }, {} as Record<string, string>);
+
+            // We iterate over ALL cameras in the current central, and for each day in range, we find if there was a checklist.
+            // Requirement says: "REGISTROS DE CHECKLIST". This implies we iterate over the checklists found.
+            // If we iterate over checklists, we get one row per camera per checklist? 
+            // "NECESITO DESCARGAR UN EXCEL ENTRE RANGO DE FECHA LOS REGISTROS DE CHECKLIST" -> "SEDE, NAVE, FECHA, TURNO..."
+            // Yes, one row per camera check.
+
+            for (const checklist of checklists) {
+                // For each checklist, we match against ALL cameras of the central to show their status in that checklist. 
+                // Or only those that have a detail? The system creates details for all cameras when saving.
+                // But to be safe and complete (as per "CALIDAD", "ESTADO"), we should look at the details.
+
+                // However, user likely wants to see ALL cameras for that shift, even if some detail is missing (implicit check?).
+                // But usually details are generated for all active cameras.
+                // Let's iterate over the details found for this checklist.
+
+                const checklistDetails = detalles.filter(d => d.checklist_id === checklist.id);
+
+                // If we only iterate details, we might miss cameras if they weren't checked? 
+                // But the save logic iterates all statsCameras.
+                // Let's iterate central cameras and find their detail in this checklist to be robust.
+
+                for (const cam of centrales.find(c => c.id === selectedCentral)?.id === checklist.central_id ? camaras.filter(c => c.central_id === checklist.central_id && c.activa) : []) { // Filter only active for report
+                    const detail = checklistDetails.find(d => d.camara_id === cam.id);
+
+                    // Mappings
+                    const calidadLabel = detail?.calidad_imagen
+                        ? (QUALITY_LABELS[detail.calidad_imagen as QualityValue]?.label || 'BUENA')
+                        : (detail?.operativa === false ? 'MALA' : 'BUENA'); // Default if online but no quality (usually 5)
+
+                    const estado = detail?.operativa === false ? 'FALLA' : 'OPERATIVA';
+                    const activacion = cam.activa ? 'ACTIVO' : 'INACTIVO';
+
+                    // Push Row
+                    rows.push({
+                        "SEDE": sedeMap[cam.sede_id || ""] || "SIN SEDE",
+                        "NAVE - FUNDO": cam.nave_fundo || "-",
+                        "FECHA": checklist.fecha,
+                        "TURNO": checklist.turno || "-",
+                        "TIPO DE COMPONENTE": cam.tipo_componente || "-",
+                        "UBICACIÓN DE COMPONENTE": cam.ubicacion || "-",
+                        "ÁREA": cam.area || "-",
+                        "NOMBRE DE CAMARA": cam.nombre,
+                        "CODIGO DE CAMARA": cam.codigo,
+                        "ACTIVACION": activacion,
+                        "ESTADO": estado,
+                        "CALIDAD DE IMAGEN": detail?.operativa === false ? 'MALA' : calidadLabel // Override if fail
+                    });
+                }
+            }
+
+            if (rows.length === 0) {
+                setToast({ type: "error", message: "No se encontraron registros en este rango." });
+                return;
+            }
+
+            // Create Worksheet
+            const worksheet = XLSX.utils.json_to_sheet(rows);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Reporte CCTV");
+
+            // Auto-width columns (basic approximation)
+            const wscols = Object.keys(rows[0]).map(k => ({ wch: k.length + 5 }));
+            worksheet['!cols'] = wscols;
+
+            // Download
+            XLSX.writeFile(workbook, `REPORTE_CCTV_${startDateStr}_${endDateStr}.xlsx`);
+            setToast({ type: "success", message: "Excel descargado con éxito." });
+            setIsExcelModalOpen(false);
+
+        } catch (error) {
+            console.error(error);
+            setToast({ type: "error", message: "Error al generar Excel: " + (error as any).message });
+        }
+    };
+
 
 
     const SignalMeter = ({ quality, active = true, forceInactive = false }: { quality: number, active?: boolean, forceInactive?: boolean }) => {
@@ -874,6 +976,12 @@ export default function ChecklistCamaras() {
                     </p>
                 </div>
                 <div className="flex items-center gap-3">
+                    <button
+                        onClick={() => setIsExcelModalOpen(true)}
+                        className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2"
+                    >
+                        <Grid size={16} /> Exportar Excel
+                    </button>
                     <button
                         onClick={handleExportPdf}
                         className="bg-white border border-slate-200 text-slate-700 px-5 py-3 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all flex items-center gap-2"
@@ -1466,6 +1574,48 @@ export default function ChecklistCamaras() {
             }
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
+
+            {/* Excel Export Modal */}
+            {isExcelModalOpen && (
+                <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="p-6 bg-slate-50 border-b border-slate-100 flex justify-between items-center">
+                            <div>
+                                <h3 className="text-lg font-black text-slate-800 uppercase">Exportar a Excel</h3>
+                                <p className="text-xs font-bold text-slate-500 uppercase tracking-widest">Seleccione Rango de Fechas</p>
+                            </div>
+                            <button onClick={() => setIsExcelModalOpen(false)} className="text-slate-400 hover:text-rose-500 transition-colors">
+                                <XCircle size={24} />
+                            </button>
+                        </div>
+
+                        <div className="p-8 flex flex-col items-center gap-6">
+                            <div className="w-full flex justify-center">
+                                <DateRangePicker
+                                    onChange={(range) => setExportRange(range)}
+                                    initialStart={exportRange.start}
+                                    initialEnd={exportRange.end}
+                                />
+                            </div>
+
+                            <div className="w-full bg-blue-50 p-4 rounded-xl border border-blue-100">
+                                <p className="text-xs text-blue-800 font-medium text-center">
+                                    Se descargará el reporte detallado de auditorías para la central <strong>{centrales.find(c => c.id === selectedCentral)?.nombre}</strong>.
+                                </p>
+                            </div>
+
+                            <button
+                                onClick={handleExportExcel}
+                                disabled={!exportRange.start || !exportRange.end}
+                                className="w-full py-4 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold uppercase tracking-widest shadow-lg shadow-emerald-200 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-[0.98] flex items-center justify-center gap-3"
+                            >
+                                <FileDown size={20} />
+                                Descargar Reporte
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div >
     );
 }

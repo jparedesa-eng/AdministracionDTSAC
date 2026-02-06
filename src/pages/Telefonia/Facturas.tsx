@@ -175,11 +175,17 @@ export default function FacturasTelefonia() {
                 monto: formData.monto || calculatedTotalAmount
             };
 
+            // Sanitize items: convert empty strings to null for UUID fields
+            const sanitizedItems = items.map(item => ({
+                ...item,
+                solicitud_id: item.solicitud_id === "" ? null : item.solicitud_id
+            }));
+
             if (editingId) {
-                await telefoniaStore.updateFactura(editingId, payload, items as any[]);
+                await telefoniaStore.updateFactura(editingId, payload, sanitizedItems as any[]);
                 setToast({ type: "success", message: "Factura actualizada correctamente" });
             } else {
-                await telefoniaStore.createFactura(payload, items as any[]);
+                await telefoniaStore.createFactura(payload, sanitizedItems as any[]);
                 setToast({ type: "success", message: "Factura registrada correctamente" });
             }
             setOpenModal(false);
@@ -201,13 +207,22 @@ export default function FacturasTelefonia() {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm("¿Eliminar esta factura?")) return;
         try {
+            // 1. Check if factura is in use
+            const inUse = await telefoniaStore.checkFacturaUsage(id);
+            if (inUse) {
+                setToast({ type: "error", message: "No se puede eliminar porque tiene equipos relacionados" });
+                return;
+            }
+
+            // 2. Confirm deletion
+            if (!window.confirm("¿Eliminar esta factura? Esta acción no se puede deshacer.")) return;
+
             await telefoniaStore.deleteFactura(id);
             setToast({ type: "success", message: "Factura eliminada" });
             setRefreshTrigger(prev => prev + 1);
-        } catch (e) {
-            setToast({ type: "error", message: "Error al eliminar" });
+        } catch (e: any) {
+            setToast({ type: "error", message: e.message || "Error al eliminar" });
         }
     }
 
@@ -240,7 +255,7 @@ export default function FacturasTelefonia() {
                 </div>
                 <button
                     onClick={handleOpenCreate}
-                    className="flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                    className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                 >
                     <Plus size={16} />
                     Registrar Factura
