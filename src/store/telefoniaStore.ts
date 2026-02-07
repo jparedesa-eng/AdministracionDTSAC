@@ -1970,6 +1970,7 @@ export const telefoniaStore = {
                 tipo_equipo: string;
                 codigo: string;
             };
+            plan_id?: string;
         }
     ) {
         // 1. Update Solicitud (Ticket)
@@ -2025,6 +2026,30 @@ export const telefoniaStore = {
             .eq("id", assignmentId);
 
         if (assignError) throw assignError;
+
+        // 3. Update Chip Plan if provided (and if it's a chip assignment)
+        // We need to know the chip_id. We can fetch the assignment to be sure, or pass it.
+        // But for optimization, we can assume if plan_id is passed, we check the assignment's chip_id?
+        // Actually, we don't have chip_id in the args.
+        // Let's fetch the assignment's chip_id to be safe, or pass it in data?
+        // Since we already have the assignmentId, let's fetch the chip_id from the assignment record we just updated?
+        // Or better, let's trust the Caller to pass chip_id?
+        // No, let's just fetch it quickly if plan_id is present.
+
+        if (data.plan_id !== undefined) {
+            const { data: currentAssign } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .select("chip_id")
+                .eq("id", assignmentId)
+                .single();
+
+            if (currentAssign && currentAssign.chip_id) {
+                await supabase
+                    .from("telefonia_chips")
+                    .update({ plan_id: data.plan_id || null })
+                    .eq("id", currentAssign.chip_id);
+            }
+        }
 
         // Refresh Data
         await this.fetchSolicitudes();

@@ -257,7 +257,8 @@ export default function InventarioTelefonia() {
                     dispositivo: {
                         tipo_equipo: assign.tipo_equipo_destino || "Smartphone",
                         codigo: assign.codigo_equipo_destino || ""
-                    }
+                    },
+                    plan_id: assign.chip?.plan_id || ""
                 },
                 isChipAssignment: !assign.equipo_id && assign.chip_id
             });
@@ -274,10 +275,19 @@ export default function InventarioTelefonia() {
         setSubmitting(true);
         try {
             if (!editAssignData) return;
+
+            const formData = { ...editAssignData.formData };
+            if (formData.ticket.fecha_inicio) {
+                formData.ticket.fecha_inicio = `${formData.ticket.fecha_inicio}T12:00:00`;
+            }
+            if (formData.ticket.fecha_fin) {
+                formData.ticket.fecha_fin = `${formData.ticket.fecha_fin}T12:00:00`;
+            }
+
             await telefoniaStore.updateSolicitudAsignacion(
                 editAssignData.assignment.id,
                 editAssignData.ticket.id,
-                editAssignData.formData
+                formData
             );
             setToast({ type: "success", message: "Asignación actualizada correctamente" });
             setOpenEditAssign(false);
@@ -3615,6 +3625,25 @@ export default function InventarioTelefonia() {
                                         />
                                     </div>
                                 </div>
+                                <div className="mt-3">
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Plan de Datos</label>
+                                    <select
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.plan_id || ""}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.plan_id = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="">-- Sin Plan --</option>
+                                        {telefoniaStore.planes.map(p => (
+                                            <option key={p.id} value={p.id}>
+                                                {p.nombre} ({p.operador}) - {p.gigas}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
                             </div>
                         )}
 
@@ -3783,6 +3812,58 @@ export default function InventarioTelefonia() {
                                             </select>
                                         </>
                                     )}
+                                </div>
+                            </div>
+
+                            {/* PERIODO & FECHAS */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Periodo</label>
+                                    <select
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.periodo}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.periodo = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="PERMANENTE">PERMANENTE</option>
+                                        <option value="CAMPAÑA">CAMPAÑA</option>
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div>
+                                        <label className="block text-xs font-medium text-indigo-800 uppercase">Inicio</label>
+                                        <input
+                                            type="date"
+                                            className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.ticket.fecha_inicio}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.ticket.fecha_inicio = e.target.value;
+                                                setEditAssignData(newData);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        {editAssignData.formData.ticket.periodo === "CAMPAÑA" && (
+                                            <>
+                                                <label className="block text-xs font-medium text-indigo-800 uppercase">Fin</label>
+                                                <input
+                                                    type="date"
+                                                    required={editAssignData.formData.ticket.periodo === "CAMPAÑA"}
+                                                    className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                                    value={editAssignData.formData.ticket.fecha_fin}
+                                                    onChange={(e) => {
+                                                        const newData = { ...editAssignData };
+                                                        newData.formData.ticket.fecha_fin = e.target.value;
+                                                        setEditAssignData(newData);
+                                                    }}
+                                                />
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
                             <div className="grid grid-cols-2 gap-3">
