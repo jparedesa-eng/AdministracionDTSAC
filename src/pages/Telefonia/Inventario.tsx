@@ -213,11 +213,9 @@ export default function InventarioTelefonia() {
 
     // EDIT ASSIGNMENT STATE
     const [openEditAssign, setOpenEditAssign] = useState(false);
-    const [editAssignLoading, setEditAssignLoading] = useState(false);
     const [editAssignData, setEditAssignData] = useState<any>(null);
 
     const handleEditAssignment = async (assign: any) => {
-        setEditAssignLoading(true);
         try {
             // Find Ticket
             let ticket = telefoniaStore.solicitudes.find(s => s.id === assign.solicitud_id);
@@ -265,8 +263,6 @@ export default function InventarioTelefonia() {
             setOpenEditAssign(true);
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error cargando datos" });
-        } finally {
-            setEditAssignLoading(false);
         }
     };
 
@@ -1205,8 +1201,8 @@ export default function InventarioTelefonia() {
             </div>
 
             {/* TOOLBAR */}
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div className="flex flex-1 items-center gap-2 w-full overflow-x-auto sm:overflow-visible pb-2 sm:pb-0">
+            <div className="flex flex-col sm:flex-row sm:flex-wrap items-center justify-between gap-4">
+                <div className="flex flex-1 items-center gap-2 w-full overflow-x-auto sm:flex-wrap pb-2 sm:pb-0 order-last sm:order-none">
                     <div className="relative w-full sm:max-w-xs shrink-0">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                         <input
@@ -1400,7 +1396,7 @@ export default function InventarioTelefonia() {
                             activeTab === "chips" ? handleNewChip :
                                 handleNewPlan
                     }
-                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors"
+                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 transition-colors order-first sm:order-none w-full sm:w-auto justify-center"
                 >
                     <Plus className="h-4 w-4" />
                     Nuevo {
