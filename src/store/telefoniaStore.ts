@@ -1935,5 +1935,100 @@ export const telefoniaStore = {
 
         await this.fetchSolicitudes();
         await this.fetchEquipos();
+    },
+
+    async updateSolicitudAsignacion(
+        assignmentId: string,
+        solicitudId: string,
+        data: {
+            ticket: {
+                ceco: string;
+                fundo_planta: string;
+                cultivo: string;
+                categoria: string;
+                proyecto: string;
+                periodo: string;
+                fecha_inicio: string;
+                fecha_fin?: string;
+                beneficiario_puesto?: string;
+                gr?: string;
+            };
+            beneficiario: {
+                dni: string;
+                nombre: string;
+                area: string;
+                puesto?: string;
+            };
+            usuario_final: {
+                dni: string;
+                nombre: string;
+                area: string;
+                puesto?: string;
+                sede: string;
+            };
+            dispositivo?: {
+                tipo_equipo: string;
+                codigo: string;
+            };
+        }
+    ) {
+        // 1. Update Solicitud (Ticket)
+        const ticketUpdates = {
+            ceco: data.ticket.ceco,
+            fundo_planta: data.ticket.fundo_planta,
+            cultivo: data.ticket.cultivo,
+            categoria: data.ticket.categoria,
+            proyecto: data.ticket.proyecto,
+            periodo_uso: data.ticket.periodo,
+            fecha_inicio_uso: data.ticket.fecha_inicio,
+            fecha_fin_uso: data.ticket.fecha_fin || null,
+            beneficiario_dni: data.beneficiario.dni,
+            beneficiario_nombre: data.beneficiario.nombre,
+            beneficiario_area: data.beneficiario.area,
+            beneficiario_puesto: data.ticket.beneficiario_puesto || data.beneficiario.puesto,
+            gr: data.ticket.gr
+        };
+
+        const { error: ticketError } = await supabase
+            .from("telefonia_solicitudes")
+            .update(ticketUpdates)
+            .eq("id", solicitudId);
+
+        if (ticketError) throw ticketError;
+
+        // 2. Update Assignment
+        const assignmentUpdates: any = {
+            usuario_final_dni: data.usuario_final.dni,
+            usuario_final_nombre: data.usuario_final.nombre,
+            usuario_final_area: data.usuario_final.area,
+            usuario_final_puesto: data.usuario_final.puesto,
+            usuario_final_sede: data.usuario_final.sede,
+
+            // Sync Responsable with Ticket Beneficiary
+            responsable_dni: data.beneficiario.dni,
+            responsable_nombre: data.beneficiario.nombre,
+            responsable_area: data.beneficiario.area,
+
+            periodo_uso: data.ticket.periodo,
+            fecha_fin_uso: data.ticket.fecha_fin || null
+        };
+
+        // Update Device Data if provided (for Chip Assignments)
+        if (data.dispositivo) {
+            assignmentUpdates.tipo_equipo_destino = data.dispositivo.tipo_equipo;
+            assignmentUpdates.codigo_equipo_destino = data.dispositivo.codigo;
+        }
+
+        const { error: assignError } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update(assignmentUpdates)
+            .eq("id", assignmentId);
+
+        if (assignError) throw assignError;
+
+        // Refresh Data
+        await this.fetchSolicitudes();
+        await this.fetchEquipos();
+        await this.fetchChips();
     }
 };

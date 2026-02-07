@@ -211,6 +211,91 @@ export default function InventarioTelefonia() {
 
     const closeConfirmation = () => setConfirmation(prev => ({ ...prev, open: false }));
 
+    // EDIT ASSIGNMENT STATE
+    const [openEditAssign, setOpenEditAssign] = useState(false);
+    const [editAssignLoading, setEditAssignLoading] = useState(false);
+    const [editAssignData, setEditAssignData] = useState<any>(null);
+
+    const handleEditAssignment = async (assign: any) => {
+        setEditAssignLoading(true);
+        try {
+            // Find Ticket
+            let ticket = telefoniaStore.solicitudes.find(s => s.id === assign.solicitud_id);
+
+            // If not found in store (rare), we can't edit without ticket data.
+            if (!ticket) throw new Error("No se encontraron los detalles del ticket (Solicitud) de esta asignación.");
+
+            setEditAssignData({
+                assignment: assign,
+                ticket: ticket,
+                formData: {
+                    ticket: {
+                        ceco: ticket.ceco || "",
+                        fundo_planta: ticket.fundo_planta || "",
+                        cultivo: ticket.cultivo || "",
+                        categoria: ticket.categoria || "TELEFONIA",
+                        proyecto: ticket.proyecto || "",
+                        periodo: ticket.periodo_uso || "PERMANENTE",
+                        fecha_inicio: ticket.fecha_inicio_uso || "",
+                        fecha_fin: ticket.fecha_fin_uso || "",
+                        gr: ticket.gr || "",
+                        beneficiario_puesto: ticket.beneficiario_puesto || ""
+                    },
+                    beneficiario: {
+                        dni: ticket.beneficiario_dni || "",
+                        nombre: ticket.beneficiario_nombre || "",
+                        area: ticket.beneficiario_area || "",
+                        puesto: ticket.beneficiario_puesto || ""
+                    },
+                    usuario_final: {
+                        dni: assign.usuario_final_dni || "",
+                        nombre: assign.usuario_final_nombre || "",
+                        area: assign.usuario_final_area || "",
+                        puesto: assign.usuario_final_puesto || "",
+                        sede: assign.usuario_final_sede || ""
+                    },
+                    dispositivo: {
+                        tipo_equipo: assign.tipo_equipo_destino || "Smartphone",
+                        codigo: assign.codigo_equipo_destino || ""
+                    }
+                },
+                isChipAssignment: !assign.equipo_id && assign.chip_id
+            });
+            setOpenEditAssign(true);
+        } catch (e: any) {
+            setToast({ type: "error", message: e.message || "Error cargando datos" });
+        } finally {
+            setEditAssignLoading(false);
+        }
+    };
+
+    const submitEditAssignment = async (e: React.FormEvent) => {
+        e.preventDefault();
+        setSubmitting(true);
+        try {
+            if (!editAssignData) return;
+            await telefoniaStore.updateSolicitudAsignacion(
+                editAssignData.assignment.id,
+                editAssignData.ticket.id,
+                editAssignData.formData
+            );
+            setToast({ type: "success", message: "Asignación actualizada correctamente" });
+            setOpenEditAssign(false);
+
+            // Refresh history view if open
+            if (showHistory && modalActionItem) handleViewHistory(modalActionItem.id);
+            if (showChipHistory && modalActionChip) handleViewChipHistory(modalActionChip.id);
+
+            // Refresh main data to show updates in table
+            loadData(true);
+
+        } catch (e: any) {
+            setToast({ type: "error", message: e.message || "Error actualizando" });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
     // Pagination
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10); // 10, 20, 50, 0 (Todos)
@@ -2648,27 +2733,7 @@ export default function InventarioTelefonia() {
                             <option value="Baja">Baja</option>
                         </select>
                     </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Plan Asignado</label>
-                        <select
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                            value={draftChip.plan_id || ""}
-                            onChange={(e) => setDraftChip({ ...draftChip, plan_id: e.target.value || null })}
-                        >
-                            <option value="">-- Sin Plan --</option>
-                            {telefoniaStore.planes
-                                .filter(p => !draftChip.operador || p.operador === draftChip.operador)
-                                .map(p => (
-                                    <option key={p.id} value={p.id}>
-                                        {p.nombre} (S/ {p.costo.toFixed(2)}) - {p.gigas}
-                                    </option>
-                                ))
-                            }
-                        </select>
-                        <p className="text-xs text-gray-500 mt-1">
-                            Se muestran solo los planes de {draftChip.operador || "todos los operadores"}.
-                        </p>
-                    </div>
+
                     <div className="flex justify-end pt-4">
                         <button
                             type="submit"
@@ -2853,9 +2918,20 @@ export default function InventarioTelefonia() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 align-top text-right">
-                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
-                                                    {assign.fecha_devolucion ? "Devuelto" : "Activo"}
-                                                </span>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
+                                                        {assign.fecha_devolucion ? "Devuelto" : "Activo"}
+                                                    </span>
+                                                    {!assign.fecha_devolucion && (
+                                                        <button
+                                                            onClick={() => handleEditAssignment(assign)}
+                                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 transition-colors"
+                                                            title="Editar Datos de Asignación"
+                                                        >
+                                                            <Pencil className="w-3 h-3" /> Editar
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -2943,9 +3019,20 @@ export default function InventarioTelefonia() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 align-top text-right">
-                                                <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
-                                                    {assign.fecha_devolucion ? "Devuelto" : "Activo"}
-                                                </span>
+                                                <div className="flex flex-col items-end gap-1">
+                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
+                                                        {assign.fecha_devolucion ? "Devuelto" : "Activo"}
+                                                    </span>
+                                                    {!assign.fecha_devolucion && (
+                                                        <button
+                                                            onClick={() => handleEditAssignment(assign)}
+                                                            className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 transition-colors"
+                                                            title="Editar Datos de Asignación"
+                                                        >
+                                                            <Pencil className="w-3 h-3" /> Editar
+                                                        </button>
+                                                    )}
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}
@@ -3411,6 +3498,342 @@ export default function InventarioTelefonia() {
                         </button>
                     </div>
                 </form>
+            </Modal>
+
+            {/* MODAL EDIT ASSIGNMENT */}
+            <Modal
+                open={openEditAssign}
+                onClose={() => setOpenEditAssign(false)}
+                title="Editar Asignación / Ticket"
+                size="lg" // Wider modal
+            >
+                {/* Re-using logic similar to AsignacionDirecta but bound to editAssignData */}
+                {editAssignData && (
+                    <form onSubmit={submitEditAssignment} className="space-y-6">
+                        <div className="bg-amber-50 p-3 rounded-md border border-amber-200 text-xs text-amber-800 mb-4">
+                            <p><strong>Atención:</strong> Estás editando una asignación activa. Los cambios se reflejarán en el historial y en los reportes actuales. Asegúrate de verificar los datos.</p>
+                        </div>
+
+                        {/* RESPONSABLE */}
+                        <div className="bg-blue-50 p-4 rounded-lg border border-blue-100 space-y-3">
+                            <h4 className="text-sm font-semibold text-blue-900 border-b border-blue-200 pb-1">Datos del Responsable (Beneficiario del Ticket)</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">DNI</label>
+                                    <input
+                                        required
+                                        className="block w-full rounded-md sm:text-sm border p-2 mt-1 border-gray-300"
+                                        value={editAssignData.formData.beneficiario.dni}
+                                        maxLength={8}
+                                        onChange={(e) => {
+                                            // Handle DNI change & autofill
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            const newData = { ...editAssignData };
+                                            newData.formData.beneficiario.dni = val;
+                                            if (val.length === 8) {
+                                                const person = getPersonalState().personal.find(p => p.dni === val);
+                                                if (person) {
+                                                    newData.formData.beneficiario.nombre = person.nombre;
+                                                }
+                                            }
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Nombre</label>
+                                    <input
+                                        required
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.beneficiario.nombre}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.beneficiario.nombre = e.target.value.toUpperCase();
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-1 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Área / Gerencia</label>
+                                    <select
+                                        required
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.beneficiario.area}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.beneficiario.area = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="">Seleccione...</option>
+                                        {gerencias.map(g => (
+                                            <option key={g.id} value={g.nombre}>{g.nombre}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* DATOS DEL EQUIPO DESTINO (SOLO CHIPS) */}
+                        {editAssignData.isChipAssignment && (
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                                <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Equipo Destino</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">Tipo de Equipo</label>
+                                        <select
+                                            required
+                                            className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.dispositivo.tipo_equipo}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.dispositivo.tipo_equipo = e.target.value;
+                                                setEditAssignData(newData);
+                                            }}
+                                        >
+                                            <option value="Smartphone">Smartphone</option>
+                                            <option value="Tablet">Tablet</option>
+                                            <option value="Modem">Modem</option>
+                                            <option value="Router">Router</option>
+                                            <option value="Otros">Otros</option>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">IMEI / Serie / Código</label>
+                                        <input
+                                            required
+                                            className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.dispositivo.codigo}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.dispositivo.codigo = e.target.value;
+                                                setEditAssignData(newData);
+                                            }}
+                                            placeholder="Ingrese identificador"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* USUARIO FINAL */}
+                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Usuario Final</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">DNI</label>
+                                    <input
+                                        className="block w-full rounded-md sm:text-sm border p-2 mt-1 border-gray-300"
+                                        value={editAssignData.formData.usuario_final.dni}
+                                        maxLength={8}
+                                        onChange={(e) => {
+                                            const val = e.target.value.replace(/\D/g, '');
+                                            const newData = { ...editAssignData };
+                                            newData.formData.usuario_final.dni = val;
+                                            if (val.length === 8) {
+                                                const person = getPersonalState().personal.find(p => p.dni === val);
+                                                if (person) {
+                                                    newData.formData.usuario_final.nombre = person.nombre;
+                                                }
+                                            }
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Nombre</label>
+                                    <input
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.usuario_final.nombre}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.usuario_final.nombre = e.target.value.toUpperCase();
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Área</label>
+                                    <input
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.usuario_final.area}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.usuario_final.area = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Puesto</label>
+                                    <input
+                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.usuario_final.puesto}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.usuario_final.puesto = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 uppercase">Sede</label>
+                                <select
+                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                    value={editAssignData.formData.usuario_final.sede}
+                                    onChange={(e) => {
+                                        const newData = { ...editAssignData };
+                                        newData.formData.usuario_final.sede = e.target.value;
+                                        setEditAssignData(newData);
+                                    }}
+                                >
+                                    <option value="">Seleccione Sede...</option>
+                                    <option value="BASE">BASE</option>
+                                    {sedes.map(s => (
+                                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+
+                        {/* TICKET DETAILS */}
+                        <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 space-y-3">
+                            <h4 className="text-sm font-semibold text-indigo-900 border-b border-indigo-200 pb-1">Datos del Ticket / Costos</h4>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Fundo / Planta</label>
+                                    <select
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.fundo_planta}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.fundo_planta = e.target.value;
+                                            newData.formData.ticket.cultivo = ""; // Reset
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="">Seleccione Fundo/Planta...</option>
+                                        <option value="BASE">BASE</option>
+                                        {sedes.map(sede => (
+                                            <option key={sede.id} value={sede.nombre}>{sede.nombre}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Cultivo</label>
+                                    <select
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.cultivo}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.cultivo = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="">Seleccione Cultivo...</option>
+                                        {(() => {
+                                            const activeSede = sedes.find(s => s.nombre === editAssignData.formData.ticket.fundo_planta);
+                                            const availableCultivos = activeSede?.cultivos || [];
+                                            if (availableCultivos.length > 0) {
+                                                return availableCultivos.map(c => <option key={c} value={c}>{c}</option>);
+                                            }
+                                            return null;
+                                        })()}
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">Categoría</label>
+                                    <select
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.categoria}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.categoria = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    >
+                                        <option value="TELEFONIA">TELEFONIA</option>
+                                        <option value="PROYECTO">PROYECTO</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    {editAssignData.formData.ticket.categoria === "PROYECTO" && (
+                                        <>
+                                            <label className="block text-xs font-medium text-indigo-800 uppercase">Proyecto</label>
+                                            <select
+                                                className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                                value={editAssignData.formData.ticket.proyecto}
+                                                onChange={(e) => {
+                                                    const newData = { ...editAssignData };
+                                                    newData.formData.ticket.proyecto = e.target.value;
+                                                    setEditAssignData(newData);
+                                                }}
+                                            >
+                                                <option value="">Seleccione Proyecto...</option>
+                                                {telefoniaStore.proyectos.filter(p => p.active).map(p => (
+                                                    <option key={p.id} value={p.nombre}>{p.nombre}</option>
+                                                ))}
+                                            </select>
+                                        </>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">CECO</label>
+                                    <input
+                                        required
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.ceco}
+                                        maxLength={10}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.ceco = e.target.value.replace(/\D/g, '').slice(0, 10);
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-indigo-800 uppercase">GR</label>
+                                    <input
+                                        className="block w-full rounded-md border-indigo-300 sm:text-sm border p-2 mt-1"
+                                        value={editAssignData.formData.ticket.gr}
+                                        onChange={(e) => {
+                                            const newData = { ...editAssignData };
+                                            newData.formData.ticket.gr = e.target.value;
+                                            setEditAssignData(newData);
+                                        }}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="flex justify-end pt-2">
+                            <button
+                                type="button"
+                                onClick={() => setOpenEditAssign(false)}
+                                className="mr-2 px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                            >
+                                Cancelar
+                            </button>
+                            <button
+                                type="submit"
+                                disabled={submitting}
+                                className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                            >
+                                {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+                                Guardar Cambios
+                            </button>
+                        </div>
+                    </form>
+                )}
             </Modal>
 
             <ConfirmationModal
