@@ -35,13 +35,15 @@ import {
     ClipboardCheck,
     Clock,
     CardSim,
-    Sprout
+    Sprout,
+    ScanBarcode
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore";
 import { getPersonalState, subscribePersonal } from "../../store/personalStore"; // NEW: Import Personal Store
 import { useAuth } from "../../auth/AuthContext";
+import { BarcodeScanner } from "../../components/ui/BarcodeScanner";
 
 export default function InventarioTelefonia() {
     const { user, profile } = useAuth();
@@ -138,6 +140,14 @@ export default function InventarioTelefonia() {
     });
     const [sameAsResponsable, setSameAsResponsable] = useState(true);
     const [bajaData, setBajaData] = useState({ motivo: "" });
+
+    // Scanner
+    const [openScanner, setOpenScanner] = useState(false);
+    const handleScan = (decodedText: string) => {
+        setDraftEquipo(prev => ({ ...prev, imei: decodedText.replace(/\D/g, "") }));
+        setOpenScanner(false);
+        setToast({ type: "success", message: "Código escaneado correctamente" });
+    };
 
     // Drafts
     const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE" });
@@ -2554,12 +2564,22 @@ export default function InventarioTelefonia() {
 
                     <div>
                         <label className="block text-sm font-medium text-gray-700">IMEI</label>
-                        <input
-                            required
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
-                            value={draftEquipo.imei || ""}
-                            onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value.replace(/\D/g, "") })}
-                        />
+                        <div className="flex gap-2">
+                            <input
+                                required
+                                className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 font-mono"
+                                value={draftEquipo.imei || ""}
+                                onChange={(e) => setDraftEquipo({ ...draftEquipo, imei: e.target.value.replace(/\D/g, "") })}
+                            />
+                            <button
+                                type="button"
+                                onClick={() => setOpenScanner(true)}
+                                className="mt-1 p-2 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 text-gray-700 transition-colors"
+                                title="Escanear Código de Barras"
+                            >
+                                <ScanBarcode className="w-5 h-5" />
+                            </button>
+                        </div>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -3923,6 +3943,14 @@ export default function InventarioTelefonia() {
             >
                 {confirmation.message}
             </ConfirmationModal>
+
+            {/* SCANNER MODAL */}
+            {openScanner && (
+                <BarcodeScanner
+                    onScan={handleScan}
+                    onClose={() => setOpenScanner(false)}
+                />
+            )}
         </div >
     );
 }
