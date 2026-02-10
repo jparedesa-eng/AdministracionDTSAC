@@ -143,8 +143,15 @@ export default function InventarioTelefonia() {
 
     // Scanner
     const [openScanner, setOpenScanner] = useState(false);
+    const [scannerTarget, setScannerTarget] = useState<'imei' | 'search'>('imei');
+
     const handleScan = (decodedText: string) => {
-        setDraftEquipo(prev => ({ ...prev, imei: decodedText.replace(/\D/g, "") }));
+        const cleanText = decodedText.replace(/\D/g, "");
+        if (scannerTarget === 'imei') {
+            setDraftEquipo(prev => ({ ...prev, imei: cleanText }));
+        } else {
+            setQ(cleanText);
+        }
         setOpenScanner(false);
         setToast({ type: "success", message: "Código escaneado correctamente" });
     };
@@ -1230,6 +1237,13 @@ export default function InventarioTelefonia() {
                             {totalItems} Res.
                         </div>
                     </div>
+                    <button
+                        onClick={() => { setScannerTarget('search'); setOpenScanner(true); }}
+                        className="p-2 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 text-gray-600 transition-colors"
+                        title="Escanear a Buscador"
+                    >
+                        <ScanBarcode className="w-5 h-5" />
+                    </button>
 
                     {/* FILTERS IN TOOLBAR */}
                     {activeTab === "equipos" && (
@@ -2573,7 +2587,7 @@ export default function InventarioTelefonia() {
                             />
                             <button
                                 type="button"
-                                onClick={() => setOpenScanner(true)}
+                                onClick={() => { setScannerTarget('imei'); setOpenScanner(true); }}
                                 className="mt-1 p-2 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200 text-gray-700 transition-colors"
                                 title="Escanear Código de Barras"
                             >
