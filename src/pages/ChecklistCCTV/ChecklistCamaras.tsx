@@ -988,12 +988,33 @@ export default function ChecklistCamaras() {
                     >
                         <FileDown size={16} /> Exportar PDF
                     </button>
-                    <button
-                        onClick={() => setIsAuditModalOpen(true)}
-                        className="bg-[#ff0000] text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider hover:bg-red-700 transition-all flex items-center gap-2"
-                    >
-                        <CheckSquare size={16} /> {currentChecklistId ? "Continuar Checklist" : "Iniciar Checklist"}
-                    </button>
+                    {(() => {
+                        const isLocked = useMemo(() => {
+                            const selected = new Date(selectedDate);
+                            const today = new Date();
+                            selected.setHours(0, 0, 0, 0); // Normalize
+                            today.setHours(0, 0, 0, 0); // Normalize
+                            // Add timezone offset correction if needed, but simple day diff is usually enough if ignored hours
+                            // Actually, parsing "YYYY-MM-DD" is UTC. new Date() is local.
+                            // Safer:
+                            const selectedTime = new Date(selectedDate + 'T00:00:00').getTime();
+                            const todayTime = new Date().setHours(0, 0, 0, 0);
+                            const diff = (todayTime - selectedTime) / (1000 * 60 * 60 * 24);
+                            return diff > 15; // Allow up to 15 days grace? User said "passed 2 weeks". So > 14.
+                        }, [selectedDate]);
+
+                        return (
+                            <button
+                                onClick={() => !isLocked && setIsAuditModalOpen(true)}
+                                disabled={isLocked}
+                                className={`${isLocked ? 'bg-slate-300 cursor-not-allowed' : 'bg-[#ff0000] hover:bg-red-700'} text-white px-6 py-2.5 rounded-xl text-xs font-bold uppercase tracking-wider transition-all flex items-center gap-2`}
+                                title={isLocked ? "Edición bloqueada: Fecha superior a 2 semanas" : ""}
+                            >
+                                <CheckSquare size={16} />
+                                {isLocked ? "Checklist Bloqueado" : (currentChecklistId ? "Continuar Checklist" : "Iniciar Checklist")}
+                            </button>
+                        );
+                    })()}
                 </div>
             </div>
 

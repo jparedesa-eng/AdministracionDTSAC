@@ -349,9 +349,14 @@ export function getReportesPendientes(): ReporteCamara[] {
 
 export async function getChecklistDataRange(startDate: string, endDate: string, centralId?: string | null) {
     // 1. Get Checklists in range
+    // 1. Get Checklists in range WITH details (JOIN)
+    // This solves the issue of missing details or ID mismatches in separate queries.
     let checklistQuery = supabase
         .from("checklist_camaras")
-        .select("*")
+        .select(`
+            *,
+            checklist_camaras_detalle (*)
+        `)
         .gte("fecha", startDate)
         .lte("fecha", endDate)
         .order("fecha", { ascending: true });
@@ -360,23 +365,17 @@ export async function getChecklistDataRange(startDate: string, endDate: string, 
         checklistQuery = checklistQuery.eq("central_id", centralId);
     }
 
-    const { data: checklists, error: checklistError } = await checklistQuery;
+    const { data: checklistsRaw, error: checklistError } = await checklistQuery;
 
     if (checklistError) throw new Error(checklistError.message);
 
-    const checklistIds = checklists.map(c => c.id);
+    // Normalize output: Extract details into a flat array
+    const checklists: ChecklistCamara[] = checklistsRaw.map((c: any) => {
+        const { checklist_camaras_detalle, ...rest } = c;
+        return rest;
+    });
 
-    // 2. Get Details for those checklists
-    let detalles: any[] = [];
-    if (checklistIds.length > 0) {
-        const { data: detailsData, error: detailsError } = await supabase
-            .from("checklist_camaras_detalle")
-            .select("*")
-            .in("checklist_id", checklistIds);
-
-        if (detailsError) throw new Error(detailsError.message);
-        detalles = detailsData;
-    }
+    const detalles: ChecklistDetalle[] = checklistsRaw.flatMap((c: any) => c.checklist_camaras_detalle || []);
 
     // 3. Get Reports in range
     const { data: reports, error: reportError } = await supabase
