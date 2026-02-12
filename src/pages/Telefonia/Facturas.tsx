@@ -6,20 +6,21 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import {
     Plus,
-    // Search, // Removed unused
-    Trash2,
-    FileText,
-    Receipt,
-    CheckCircle,
+    ChevronsLeft,
+    ChevronsRight,
+    Search, // Added back
     DollarSign,
-    Calendar,
-    Box,
     Pencil,
+    Trash2,
     ChevronLeft,
     ChevronRight,
-    ChevronsLeft,
-    ChevronsRight
+    FileText,
+    Receipt,
+    Calendar,
+    Box,
+    CheckCircle
 } from "lucide-react";
+import { DateRangePicker } from "../../components/ui/DateRangePicker";
 
 
 export default function FacturasTelefonia() {
@@ -63,6 +64,35 @@ export default function FacturasTelefonia() {
     // Pagination State
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
+
+    // Filters State
+    const [startDate, setStartDate] = useState<string>("");
+    const [endDate, setEndDate] = useState<string>("");
+    const [providerFilter, setProviderFilter] = useState<string>("");
+    const [searchQuery, setSearchQuery] = useState<string>("");
+
+    // Filter Logic
+    const filteredFacturas = telefoniaStore.facturas.filter(f => {
+        // Date Range
+        if (startDate && endDate) {
+            const fecha = new Date(f.fecha_compra + 'T12:00:00').getTime(); // Add time to avoid timezone issues
+            const start = new Date(startDate + 'T00:00:00').getTime();
+            const end = new Date(endDate + 'T23:59:59').getTime();
+            if (fecha < start || fecha > end) return false;
+        }
+
+        // Provider
+        if (providerFilter && f.proveedor !== providerFilter) return false;
+
+        // Search Query (Invoice Number)
+        if (searchQuery) {
+            if (!f.numero_factura.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+        }
+
+        return true;
+    });
+
+    const totalMonto = filteredFacturas.reduce((acc, curr) => acc + Number(curr.monto), 0);
 
     const handleOpenCreate = () => {
         setEditingId(null);
@@ -228,14 +258,14 @@ export default function FacturasTelefonia() {
 
     // Pagination Logic
     const getCurrentData = () => {
-        const data = telefoniaStore.facturas;
+        const data = filteredFacturas;
         if (itemsPerPage === 0) return data;
         const start = (currentPage - 1) * itemsPerPage;
         return data.slice(start, start + itemsPerPage);
     };
 
     const currentData = getCurrentData();
-    const totalItems = telefoniaStore.facturas.length;
+    const totalItems = filteredFacturas.length;
     const totalPages = itemsPerPage === 0 ? 1 : Math.ceil(totalItems / itemsPerPage);
 
     const handlePageChange = (newPage: number) => {
@@ -253,14 +283,91 @@ export default function FacturasTelefonia() {
                     <h1 className="text-2xl font-bold text-gray-900">Facturas de Compras</h1>
                     <p className="text-sm text-gray-500">Registro y gestión de compras de equipos</p>
                 </div>
-                <button
-                    onClick={handleOpenCreate}
-                    className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
-                >
-                    <Plus size={16} />
-                    Registrar Factura
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={handleOpenCreate}
+                        className="flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+                    >
+                        <Plus size={16} />
+                        Registrar Factura
+                    </button>
+                </div>
             </header>
+
+            {/* Filters and Stats */}
+            <div className="grid grid-cols-1 md:grid-cols-12 gap-4">
+                {/* Total Stats Card */}
+                <div className="md:col-span-3 bg-white p-4 rounded-xl border border-gray-200 flex flex-col justify-between">
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Monto Total</span>
+                    <div className="flex items-end gap-2 mt-2">
+                        <span className="text-2xl font-bold text-gray-900">S/ {totalMonto.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                </div>
+
+                {/* Filters */}
+                <div className="md:col-span-9 bg-white p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row items-center gap-4">
+                    {/* Date Picker */}
+                    <div className="flex-1 w-full md:w-auto">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Rango de Fechas</label>
+                        <DateRangePicker
+                            initialStart={startDate ? new Date(startDate + 'T12:00:00') : null}
+                            initialEnd={endDate ? new Date(endDate + 'T12:00:00') : null}
+                            onChange={(range) => {
+                                setStartDate(range.start ? range.start.toISOString().split('T')[0] : "");
+                                setEndDate(range.end ? range.end.toISOString().split('T')[0] : "");
+                            }}
+                        />
+                    </div>
+
+                    {/* Provider Filter */}
+                    <div className="w-full md:w-48">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Proveedor</label>
+                        <select
+                            className="w-full rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                            value={providerFilter}
+                            onChange={(e) => setProviderFilter(e.target.value)}
+                        >
+                            <option value="">Todos</option>
+                            <option value="CLARO">CLARO</option>
+                            <option value="ENTEL">ENTEL</option>
+                        </select>
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="w-full md:w-64">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Buscar Factura</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search size={16} className="text-gray-400" />
+                            </div>
+                            <input
+                                type="text"
+                                className="block w-full rounded-lg border-gray-300 pl-9 p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                placeholder="Nº Factura..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                            />
+                        </div>
+                    </div>
+
+                    {/* Clear Filters */}
+                    {(startDate || endDate || providerFilter || searchQuery) && (
+                        <div className="flex items-end h-full pb-1">
+                            <button
+                                onClick={() => {
+                                    setStartDate("");
+                                    setEndDate("");
+                                    setProviderFilter("");
+                                    setSearchQuery("");
+                                }}
+                                className="text-xs text-red-600 hover:text-red-800 font-medium underline px-2"
+                            >
+                                Limpiar
+                            </button>
+                        </div>
+                    )}
+                </div>
+            </div>
 
             {loading ? (
                 <div className="text-center py-10">Cargando...</div>
