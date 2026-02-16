@@ -152,6 +152,8 @@ export interface Solicitud {
     // Datos del beneficiario
     beneficiario_dni?: string | null;
     beneficiario_nombre?: string | null;
+    usuario_final_dni?: string | null; // Added for search
+    usuario_final_nombre?: string | null; // Added for search
     beneficiario_area?: string | null;
     beneficiario_puesto?: string | null;
     tipo_solicitud?: string;
@@ -282,8 +284,21 @@ export const telefoniaStore = {
     bajas: [] as Baja[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
     facturas: [] as Factura[],
+    availableYears: [] as number[],
 
     // --- FACTURAS ---
+    async fetchFacturaYears() {
+        const { data, error } = await supabase
+            .from("telefonia_factura_equipos")
+            .select("fecha_compra")
+            .order("fecha_compra", { ascending: false });
+
+        if (error) throw error;
+
+        // Extract unique years
+        const years = Array.from(new Set(data?.map(item => new Date(item.fecha_compra).getFullYear()) || []));
+        this.availableYears = years.sort((a, b) => b - a); // Descending
+    },
     async fetchFacturas() {
         // Fetch Header
         const { data: facturas, error } = await supabase
@@ -698,6 +713,7 @@ export const telefoniaStore = {
                 .select(`
                     id, 
                     equipo_id, 
+                    usuario_final_dni,
                     usuario_final_nombre, 
                     usuario_final_area,
                     usuario_final_sede,
@@ -705,6 +721,7 @@ export const telefoniaStore = {
                     solicitud_id,
                     estado,
                     solicitud:telefonia_solicitudes (
+                        beneficiario_dni,
                         beneficiario_nombre,
                         beneficiario_area,
                         fundo_planta,
@@ -735,6 +752,9 @@ export const telefoniaStore = {
                             id: a.solicitud_id,
                             asignacion_id: a.id, // Pass Assignment ID
                             beneficiario_nombre: nombre,
+                            beneficiario_dni: a.solicitud?.beneficiario_dni, // Added
+                            usuario_final_dni: a.usuario_final_dni, // Added
+                            usuario_final_nombre: a.usuario_final_nombre, // Added
                             beneficiario_area: area,
                             fecha_entrega: a.fecha_entrega,
                             tipo_servicio: "Asignación Múltiple",

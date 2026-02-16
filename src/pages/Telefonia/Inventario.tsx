@@ -987,6 +987,9 @@ export default function InventarioTelefonia() {
             e.modelo.toLowerCase().includes(term) ||
             e.imei.toLowerCase().includes(term) ||
             (e.asignacion_activa?.beneficiario_nombre?.toLowerCase() || "").includes(term) ||
+            (e.asignacion_activa?.usuario_final_nombre?.toLowerCase() || "").includes(term) ||
+            (e.asignacion_activa?.usuario_final_dni?.toLowerCase() || "").includes(term) ||
+            (e.asignacion_activa?.beneficiario_dni?.toLowerCase() || "").includes(term) ||
             (e.chip?.numero_linea?.toLowerCase() || "").includes(term)
         );
 
@@ -2515,7 +2518,17 @@ export default function InventarioTelefonia() {
                             <select
                                 className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
                                 value={draftEquipo.factura_id || ""}
-                                onChange={(e) => setDraftEquipo({ ...draftEquipo, factura_id: e.target.value || null })}
+                                onChange={(e) => {
+                                    const val = e.target.value || null;
+                                    const factura = telefoniaStore.facturas.find(f => f.id === val);
+
+                                    setDraftEquipo(prev => ({
+                                        ...prev,
+                                        factura_id: val,
+                                        // Auto-fill date if invoice selected
+                                        fecha_compra: factura ? factura.fecha_compra : prev.fecha_compra
+                                    }));
+                                }}
                             >
                                 <option value="">-- Sin Factura (Inventario Inicial) --</option>
                                 {telefoniaStore.facturas.map(f => (
@@ -2633,9 +2646,10 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700">Fecha de Compra</label>
                         <input
                             type="date"
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            className={`mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2 ${draftEquipo.factura_id ? "bg-gray-100 cursor-not-allowed" : ""}`}
                             value={draftEquipo.fecha_compra || ""}
                             onChange={(e) => setDraftEquipo({ ...draftEquipo, fecha_compra: e.target.value })}
+                            disabled={!!draftEquipo.factura_id}
                         />
                     </div>
 

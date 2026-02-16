@@ -3,7 +3,7 @@ import { useAuth } from "../../auth/AuthContext";
 import { telefoniaStore, type Solicitud } from "../../store/telefoniaStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCecosState, subscribeCecos } from "../../store/cecosStore";
-import { getPersonalState, subscribePersonal } from "../../store/personalStore"; // NEW: Import Personal Store
+import { getPersonalState, subscribePersonal, searchByDni } from "../../store/personalStore"; // NEW: Import Personal Store
 
 import type { ValidationResult } from "../../store/telefoniaStore";
 import { aplicativosStore } from "../../store/aplicativosStore";
@@ -67,7 +67,7 @@ export default function SolicitarTelefonia() {
     const [previousDevice, setPreviousDevice] = useState<string>("");
 
     // New State for Beneficiaries
-    const [beneficiaries, setBeneficiaries] = useState<{ dni: string, nombre: string, area: string, puesto: string, sede: string }[]>([]);
+    const [beneficiaries, setBeneficiaries] = useState<{ dni: string, nombre: string, area: string, puesto: string, sede: string, locked?: boolean }[]>([]);
     const [skipBeneficiaries, setSkipBeneficiaries] = useState(false);
     const [verifyingNumber, setVerifyingNumber] = useState(false);
     const [renewalCalculated, setRenewalCalculated] = useState<{
@@ -1651,16 +1651,24 @@ export default function SolicitarTelefonia() {
                                                         const newArr = [...beneficiaries];
                                                         newArr[index].dni = val;
 
-                                                        // Auto-fill Logic by DNI
                                                         if (val.length === 8) {
-                                                            const person = getPersonalState().personal.find(p => p.dni === val);
-                                                            if (person) {
-                                                                newArr[index].nombre = person.nombre;
-                                                                // newArr[index].area = person.gerenciaNombre || ""; // Removed
+                                                            // Search in Personal table
+                                                            try {
+                                                                const person = await searchByDni(val);
+                                                                if (person) {
+                                                                    newArr[index].nombre = person.nombre;
+                                                                    newArr[index].locked = true; // LOCK NAME
+                                                                } else {
+                                                                    newArr[index].locked = false; // Allow manual entry
+                                                                }
+                                                            } catch (err) {
+                                                                console.error(err);
+                                                                newArr[index].locked = false;
                                                             }
                                                         } else {
-                                                            // If DNI is incomplete/edited, clear the name (reset)
+                                                            // If modified (deleted digit), clear name and unlock
                                                             newArr[index].nombre = "";
+                                                            newArr[index].locked = false;
                                                         }
 
                                                         setBeneficiaries(newArr);
@@ -1689,18 +1697,29 @@ export default function SolicitarTelefonia() {
                                                         {beneficiaryErrors[index]}
                                                     </p>
                                                 )}
+                                                {/* Duplicate Warning */}
+                                                {b.dni && b.dni.length === 8 && beneficiaries.some((other, i) => i !== index && other.dni === b.dni) && (
+                                                    <div className="mt-1 p-1.5 bg-yellow-50 border border-yellow-200 rounded-md flex items-start gap-1.5 animate-in slide-in-from-top-1">
+                                                        <div className="text-yellow-600 mt-0.5">
+                                                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-3 h-3">
+                                                                <path fillRule="evenodd" d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z" clipRule="evenodd" />
+                                                            </svg>
+                                                        </div>
+                                                        <p className="text-[10px] text-yellow-800 font-medium leading-tight">
+                                                            No puede haber 2 dipositivos para el mismo usuario
+                                                        </p>
+                                                    </div>
+                                                )}
                                             </div>
                                             <div>
                                                 <label className="block text-[10px] font-semibold text-gray-500 uppercase tracking-wide mb-1">Nombre Completo <span className="text-red-500">*</span></label>
                                                 <div className="relative">
                                                     <input
-                                                        className={`block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper ${
-                                                            /* Lock if DNI matches a personal record */
-                                                            getPersonalState().personal.some(p => p.dni === b.dni && b.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                                        className={`block w-full rounded border-gray-200 border p-2 text-xs outline-none focus:border-indigo-500 transition-all font-medium text-gray-700 placeholder-gray-300 case-upper ${b.locked ? "bg-gray-100 cursor-not-allowed" : ""
                                                             }`}
                                                         placeholder="Apellidos y Nombres"
                                                         value={b.nombre}
-                                                        disabled={getPersonalState().personal.some(p => p.dni === b.dni && b.dni.length === 8)}
+                                                        disabled={!!b.locked}
                                                         onChange={e => {
                                                             const val = e.target.value.toUpperCase();
                                                             const newArr = [...beneficiaries];
@@ -2013,7 +2032,8 @@ export default function SolicitarTelefonia() {
                                         onClick={nextStep}
                                         disabled={
                                             (currentStep === 1 && formData.n_linea === "Renovación" && !validationResult?.valid) ||
-                                            (currentStep === 1 && formData.n_linea === "Reposición" && !renewalCalculated.valid)
+                                            (currentStep === 1 && formData.n_linea === "Reposición" && !renewalCalculated.valid) ||
+                                            (currentStep === 3 && !skipBeneficiaries && beneficiaries.some((b, idx) => b.dni && b.dni.length === 8 && beneficiaries.some((other, otherIdx) => idx !== otherIdx && other.dni === b.dni)))
                                         }
                                         className="px-4 py-1.5 bg-[#FF0000] text-white rounded hover:bg-red-700 text-sm font-medium inline-flex items-center gap-2 disabled:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >

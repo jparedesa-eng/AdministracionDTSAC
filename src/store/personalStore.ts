@@ -123,3 +123,32 @@ export async function upsertPersonal(input: {
 
   await fetchPersonal();
 }
+
+/**
+ * Busca un personal por DNI directamente en Supabase (sin cargar todo el estado).
+ */
+export async function searchByDni(dni: string): Promise<Personal | null> {
+  if (!dni || dni.length !== 8) return null;
+
+  const { data, error } = await supabase
+    .from("personal")
+    .select("id, dni, nombre, gerencia_id, estado, created_at")
+    .eq("dni", dni)
+    .maybeSingle();
+
+  if (error) {
+    console.error("Error searching personal by DNI", error);
+    return null;
+  }
+
+  if (!data) return null;
+
+  return {
+    id: data.id,
+    dni: data.dni,
+    nombre: data.nombre,
+    gerenciaId: data.gerencia_id,
+    estado: data.estado as EstadoTrabajador,
+    created_at: data.created_at,
+  };
+}

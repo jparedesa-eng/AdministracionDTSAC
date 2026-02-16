@@ -9,6 +9,7 @@ import {
     ChevronsLeft,
     ChevronsRight,
     Search, // Added back
+    Loader2, // Added Loader2
     DollarSign,
     Pencil,
     Trash2,
@@ -20,7 +21,6 @@ import {
     Box,
     CheckCircle
 } from "lucide-react";
-import { DateRangePicker } from "../../components/ui/DateRangePicker";
 
 
 export default function FacturasTelefonia() {
@@ -35,9 +35,10 @@ export default function FacturasTelefonia() {
             setLoading(true);
             try {
                 await Promise.all([
-                    telefoniaStore.fetchFacturas(),
+                    // telefoniaStore.fetchFacturas(), // Removed auto-fetch
                     telefoniaStore.fetchModelos(),
-                    telefoniaStore.fetchSolicitudes()
+                    telefoniaStore.fetchSolicitudes(),
+                    telefoniaStore.fetchFacturaYears()
                 ]);
             } catch (e: any) {
                 setToast({ type: "error", message: e.message || "Error cargando datos" });
@@ -65,20 +66,21 @@ export default function FacturasTelefonia() {
     const [currentPage, setCurrentPage] = useState(1);
     const [itemsPerPage, setItemsPerPage] = useState(10);
 
+    const [yearFilter, setYearFilter] = useState<string>("");
+
     // Filters State
-    const [startDate, setStartDate] = useState<string>("");
-    const [endDate, setEndDate] = useState<string>("");
     const [providerFilter, setProviderFilter] = useState<string>("");
     const [searchQuery, setSearchQuery] = useState<string>("");
+    const [hasSearched, setHasSearched] = useState(false);
 
     // Filter Logic
     const filteredFacturas = telefoniaStore.facturas.filter(f => {
-        // Date Range
-        if (startDate && endDate) {
-            const fecha = new Date(f.fecha_compra + 'T12:00:00').getTime(); // Add time to avoid timezone issues
-            const start = new Date(startDate + 'T00:00:00').getTime();
-            const end = new Date(endDate + 'T23:59:59').getTime();
-            if (fecha < start || fecha > end) return false;
+        if (!hasSearched) return false;
+
+        // Year Filter
+        if (yearFilter) {
+            const fYear = new Date(f.fecha_compra).getFullYear().toString();
+            if (fYear !== yearFilter) return false;
         }
 
         // Provider
@@ -129,6 +131,22 @@ export default function FacturasTelefonia() {
             setItems([]);
         }
         setOpenModal(true);
+    };
+
+    const handleSearch = async () => {
+        if (!yearFilter) {
+            setToast({ type: "error", message: "Seleccione un año" });
+            return;
+        }
+        setLoading(true);
+        try {
+            await telefoniaStore.fetchFacturas();
+            setHasSearched(true);
+        } catch (e: any) {
+            setToast({ type: "error", message: e.message || "Error buscando facturas" });
+        } finally {
+            setLoading(false);
+        }
     };
 
     // Items Logic
@@ -306,17 +324,20 @@ export default function FacturasTelefonia() {
 
                 {/* Filters */}
                 <div className="md:col-span-9 bg-white p-4 rounded-xl border border-gray-200 flex flex-col md:flex-row items-center gap-4">
-                    {/* Date Picker */}
-                    <div className="flex-1 w-full md:w-auto">
-                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Rango de Fechas</label>
-                        <DateRangePicker
-                            initialStart={startDate ? new Date(startDate + 'T12:00:00') : null}
-                            initialEnd={endDate ? new Date(endDate + 'T12:00:00') : null}
-                            onChange={(range) => {
-                                setStartDate(range.start ? range.start.toISOString().split('T')[0] : "");
-                                setEndDate(range.end ? range.end.toISOString().split('T')[0] : "");
-                            }}
-                        />
+
+                    {/* Year Filter */}
+                    <div className="w-full md:w-32">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Año</label>
+                        <select
+                            className="w-full rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                            value={yearFilter}
+                            onChange={(e) => setYearFilter(e.target.value)}
+                        >
+                            <option value="">Seleccionar</option>
+                            {telefoniaStore.availableYears.map(y => (
+                                <option key={y} value={y}>{y}</option>
+                            ))}
+                        </select>
                     </div>
 
                     {/* Provider Filter */}
@@ -350,18 +371,32 @@ export default function FacturasTelefonia() {
                         </div>
                     </div>
 
+                    {/* Search Trigger Button */}
+                    <div className="flex items-end h-full pb-1">
+                        <button
+                            onClick={handleSearch}
+                            disabled={!yearFilter || loading}
+                            className="flex items-center gap-2 bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors shadow-sm"
+                        >
+                            {loading ? <Loader2 size={16} className="animate-spin" /> : <Search size={16} />}
+                            Buscar
+                        </button>
+                    </div>
+
                     {/* Clear Filters */}
-                    {(startDate || endDate || providerFilter || searchQuery) && (
+                    {(yearFilter || providerFilter || searchQuery) && (
                         <div className="flex items-end h-full pb-1">
                             <button
                                 onClick={() => {
-                                    setStartDate("");
-                                    setEndDate("");
                                     setProviderFilter("");
                                     setSearchQuery("");
+                                    setYearFilter("");
+                                    setHasSearched(false);
+                                    telefoniaStore.facturas = []; // Optional: Clear store if desired, or just hide via hasSearched
                                 }}
-                                className="text-xs text-red-600 hover:text-red-800 font-medium underline px-2"
+                                className="flex items-center gap-2 bg-white text-gray-700 border border-gray-300 px-4 py-2 rounded-lg text-sm font-medium hover:bg-gray-50 transition-colors shadow-sm"
                             >
+                                <Trash2 size={16} />
                                 Limpiar
                             </button>
                         </div>
@@ -390,8 +425,20 @@ export default function FacturasTelefonia() {
                             <tbody className="divide-y divide-gray-100">
                                 {currentData.length === 0 ? (
                                     <tr>
-                                        <td colSpan={8} className="px-4 py-8 text-center text-gray-500">
-                                            No hay facturas registradas
+                                        <td colSpan={8} className="px-4 py-16 text-center text-gray-500">
+                                            <div className="flex flex-col items-center gap-2">
+                                                <div className="p-3 bg-gray-50 rounded-full">
+                                                    <Search size={24} className="text-gray-400" />
+                                                </div>
+                                                <p className="font-medium text-gray-900">
+                                                    {!hasSearched ? "Realice una búsqueda" : "No se encontraron facturas"}
+                                                </p>
+                                                <p className="text-sm text-gray-400 max-w-xs mx-auto">
+                                                    {!hasSearched
+                                                        ? "Seleccione un rango de fechas o un año y haga clic en 'Buscar'."
+                                                        : "Intente con otros filtros o rango de fechas."}
+                                                </p>
+                                            </div>
                                         </td>
                                     </tr>
                                 ) : (
