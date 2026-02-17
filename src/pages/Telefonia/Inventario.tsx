@@ -22,7 +22,6 @@ import {
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
-
     ArrowLeftRight,
     MapPin,
     UserPlus,
@@ -266,10 +265,10 @@ export default function InventarioTelefonia() {
                         beneficiario_puesto: ticket.beneficiario_puesto || ""
                     },
                     beneficiario: {
-                        dni: ticket.beneficiario_dni || "",
-                        nombre: ticket.beneficiario_nombre || "",
-                        area: ticket.beneficiario_area || "",
-                        puesto: ticket.beneficiario_puesto || ""
+                        dni: assign.responsable_dni || ticket.beneficiario_dni || "",
+                        nombre: assign.responsable_nombre || ticket.beneficiario_nombre || "",
+                        area: assign.responsable_area || ticket.beneficiario_area || "",
+                        puesto: ticket.beneficiario_puesto || assign.usuario_final_puesto || ""
                     },
                     usuario_final: {
                         dni: assign.usuario_final_dni || "",
@@ -2998,7 +2997,7 @@ export default function InventarioTelefonia() {
                                             <td className="px-4 py-3 align-top text-right">
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
-                                                        {assign.fecha_devolucion ? "Devuelto" : "Activo"}
+                                                        {assign.estado}
                                                     </span>
                                                     {!assign.fecha_devolucion && (
                                                         <button

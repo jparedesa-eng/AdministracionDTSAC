@@ -747,32 +747,65 @@ export const telefoniaStore = {
 
         // New Assignments (Graceful fetch)
         try {
-            const { data: newAssigns, error: newAssignError } = await supabase
-                .from("telefonia_solicitud_asignaciones")
-                .select(`
-                    id, 
-                    equipo_id, 
-                    usuario_final_dni,
-                    usuario_final_nombre, 
-                    usuario_final_area,
-                    usuario_final_sede,
-                    fecha_entrega, 
-                    solicitud_id,
-                    estado,
-                    solicitud:telefonia_solicitudes (
-                        beneficiario_dni,
-                        beneficiario_nombre,
-                        beneficiario_area,
-                        fundo_planta,
-                        cultivo,
-                        periodo_uso,
-                        fecha_fin_uso
-                    )
-                `)
-                .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
-                .is("fecha_devolucion", null);
 
-            if (!newAssignError && newAssigns) {
+
+            /* 
+               [FIX] Pagination for Active Assignments 
+               Supabase limits to 1000 rows. We must loop to get ALL active assignments.
+            */
+            let allActiveAssigns: any[] = [];
+            let assignPage = 0;
+            const assignPageSize = 1000;
+            let assignHasMore = true;
+
+            while (assignHasMore) {
+                const from = assignPage * assignPageSize;
+                const to = from + assignPageSize - 1;
+
+                const { data: chunk, error: chunkError } = await supabase
+                    .from("telefonia_solicitud_asignaciones")
+                    .select(`
+                        id, 
+                        equipo_id, 
+                        usuario_final_dni,
+                        usuario_final_nombre, 
+                        usuario_final_area,
+                        usuario_final_sede,
+                        fecha_entrega, 
+                        solicitud_id,
+                        estado,
+                        solicitud:telefonia_solicitudes (
+                            beneficiario_dni,
+                            beneficiario_nombre,
+                            beneficiario_area,
+                            fundo_planta,
+                            cultivo,
+                            periodo_uso,
+                            fecha_fin_uso
+                        )
+                    `)
+                    .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
+                    .is("fecha_devolucion", null)
+                    .range(from, to);
+
+                if (chunkError) {
+                    console.error("Error fetching active assignments page", assignPage, chunkError);
+                    throw chunkError;
+                }
+
+                if (chunk) {
+                    allActiveAssigns = [...allActiveAssigns, ...chunk];
+                    if (chunk.length < assignPageSize) assignHasMore = false;
+                } else {
+                    assignHasMore = false;
+                }
+                assignPage++;
+            }
+
+            // Use the full list instead of the single page 'newAssigns'
+            const newAssigns = allActiveAssigns;
+
+            if (newAssigns) {
                 newAssigns.forEach((a: any) => {
                     if (a.equipo_id) {
                         // Priority: Ticket Info > Assignment Info
@@ -978,60 +1011,133 @@ export const telefoniaStore = {
             page++;
         }
 
-        // Fetch Active Assignments for Chips
+        // Fetch Active Assignments (ALL of them)
         const activeChipMap = new Map();
+        const activeEquipoMap = new Map(); // Map by Equipo ID
+
         try {
-            const { data: chipAssigns, error: chipAssignError } = await supabase
-                .from("telefonia_solicitud_asignaciones")
-                .select(`
-                    id, 
-                    chip_id, 
-                    usuario_final_nombre, 
-                    usuario_final_area,
-                    usuario_final_sede,
-                    fecha_entrega, 
-                    solicitud_id,
-                    estado,
-                    solicitud:telefonia_solicitudes (
-                        beneficiario_nombre,
-                        beneficiario_area,
-                        fundo_planta,
-                        cultivo,
-                        periodo_uso,
-                        fecha_fin_uso
-                    )
-                `)
-                .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
-                .is("fecha_devolucion", null)
-                .not("chip_id", "is", null);
+            /* 
+               [FIX] Pagination for Active Assignments 
+            */
+            let allAssigns: any[] = [];
+            let assignPage = 0;
+            const assignPageSize = 1000;
+            let assignHasMore = true;
 
-            if (!chipAssignError && chipAssigns) {
-                chipAssigns.forEach((a: any) => {
+            while (assignHasMore) {
+                const from = assignPage * assignPageSize;
+                const to = from + assignPageSize - 1;
+
+                const { data: chunk, error: chunkError } = await supabase
+                    .from("telefonia_solicitud_asignaciones")
+                    .select(`
+                        id, 
+                        chip_id, 
+                        equipo_id,
+                        usuario_final_nombre, 
+                        usuario_final_area,
+                        usuario_final_sede,
+                        fecha_entrega, 
+                        solicitud_id,
+                        estado,
+                        solicitud:telefonia_solicitudes (
+                            beneficiario_nombre,
+                            beneficiario_area,
+                            fundo_planta,
+                            cultivo,
+                            periodo_uso,
+                            fecha_fin_uso
+                        )
+                    `)
+                    .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
+                    .is("fecha_devolucion", null)
+                    .range(from, to);
+
+                if (chunkError) throw chunkError;
+
+                if (chunk) {
+                    allAssigns = [...allAssigns, ...chunk];
+                    if (chunk.length < assignPageSize) assignHasMore = false;
+                } else {
+                    assignHasMore = false;
+                }
+                assignPage++;
+            }
+
+            // 1. Process Direct Assignments
+            const assignedEquipoIds: string[] = [];
+
+            if (allAssigns) {
+                allAssigns.forEach((a: any) => {
+                    const assignData = {
+                        id: a.solicitud_id,
+                        beneficiario_nombre: a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "",
+                        beneficiario_area: a.solicitud?.beneficiario_area || a.usuario_final_area || "",
+                        fecha_entrega: a.fecha_entrega,
+                        periodo_uso: a.solicitud?.periodo_uso || "PERMANENTE",
+                        fecha_fin_uso: a.solicitud?.fecha_fin_uso || "",
+                        cultivo: a.solicitud?.cultivo || ""
+                    };
+
                     if (a.chip_id) {
-                        const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "";
-                        const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "";
-                        const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
-                        const fechaFin = a.solicitud?.fecha_fin_uso || "";
-                        const cultivo = a.solicitud?.cultivo || "";
-
-                        activeChipMap.set(a.chip_id, {
-                            id: a.solicitud_id,
-                            beneficiario_nombre: nombre,
-                            beneficiario_area: area,
-                            fecha_entrega: a.fecha_entrega,
-                            periodo_uso: periodo,
-                            fecha_fin_uso: fechaFin,
-                            cultivo: cultivo
-                        });
+                        activeChipMap.set(a.chip_id, assignData);
+                    }
+                    if (a.equipo_id) {
+                        activeEquipoMap.set(a.equipo_id, assignData);
+                        assignedEquipoIds.push(a.equipo_id);
                     }
                 });
             }
+
+            // 2. [ROBUST FIX] Look up Chips linked to these Assigned Equipments
+            // This handles the case where foreign keys are inconsistent (Chip doesn't know about Equipment, but Equipment knows about Chip)
+            if (assignedEquipoIds.length > 0) {
+                // Chunk the IDs to avoid URL too long
+                const uniqueEqIds = [...new Set(assignedEquipoIds)];
+                const chunkSize = 200;
+
+                for (let i = 0; i < uniqueEqIds.length; i += chunkSize) {
+                    const batch = uniqueEqIds.slice(i, i + chunkSize);
+
+                    const { data: linkedChips, error: linkError } = await supabase
+                        .from('telefonia_equipos')
+                        .select('id, chip_id')
+                        .in('id', batch)
+                        .not('chip_id', 'is', null);
+
+                    if (linkError) console.error("Error fetching linked chips", linkError);
+
+                    if (linkedChips) {
+                        linkedChips.forEach((link: any) => {
+                            // If this equipment has a chip, and that equipment is assigned...
+                            // Then that chip is also assigned.
+                            const assignment = activeEquipoMap.get(link.id);
+                            if (assignment && link.chip_id) {
+                                // Prefer existing direct assignment if any, otherwise use this one
+                                if (!activeChipMap.has(link.chip_id)) {
+                                    activeChipMap.set(link.chip_id, assignment);
+                                }
+                            }
+                        });
+                    }
+                }
+            }
+
         } catch (e) {
-            console.warn("Could not fetch chip assignments", e);
+            console.warn("Could not fetch assignments", e);
         }
 
+        const chipsToUpdateDisplay: string[] = [];
+
         this.chips = (allChips as Chip[]).map(c => {
-            const active = activeChipMap.get(c.id);
+            let active = activeChipMap.get(c.id);
+
+            // Check if status needs repair: Active Assignment OR Linked to Equipment
+            if ((active || c.equipo_id) && c.estado === 'Disponible') {
+                chipsToUpdateDisplay.push(c.id);
+                c.estado = 'Asignado'; // Update in memory
+            }
+
             return {
                 ...c,
                 asignacion_activa: active || null,
@@ -1039,6 +1145,18 @@ export const telefoniaStore = {
                 fecha_fin_asignado: active?.fecha_fin_uso
             };
         });
+
+        // Execute Repairs in Background
+        if (chipsToUpdateDisplay.length > 0) {
+            supabase
+                .from("telefonia_chips")
+                .update({ estado: "Asignado" })
+                .in("id", chipsToUpdateDisplay)
+                .then(({ error }) => {
+                    if (error) console.error("Error auto-repairing chips:", error);
+                    else console.log("Auto-repaired chip statuses:", chipsToUpdateDisplay.length);
+                });
+        }
     },
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
