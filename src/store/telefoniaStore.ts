@@ -1,4 +1,13 @@
 import { supabase } from "../supabase/supabaseClient";
+import { RealtimeChannel } from "@supabase/supabase-js";
+
+// Listeners for React components
+const listeners = new Set<() => void>();
+
+function notify() {
+    listeners.forEach((l) => l());
+}
+
 
 /* =========================
  * Tipos
@@ -286,6 +295,18 @@ export const telefoniaStore = {
     facturas: [] as Factura[],
     availableYears: [] as number[],
 
+    // Realtime Subs
+    realtimeChannel: null as RealtimeChannel | null,
+    initialized: false,
+
+    subscribe(cb: () => void): () => void {
+        listeners.add(cb);
+        return () => {
+            listeners.delete(cb);
+        };
+    },
+
+
     // --- FACTURAS ---
     async fetchFacturaYears() {
         const { data, error } = await supabase
@@ -327,6 +348,8 @@ export const telefoniaStore = {
         }));
 
         this.facturas = facturasWithItems as Factura[];
+        notify();
+
     },
 
     async createFactura(factura: Omit<Factura, "id" | "created_at" | "items" | "cantidad_total">, items: Omit<FacturaItem, "id" | "factura_id">[]) {
@@ -542,6 +565,8 @@ export const telefoniaStore = {
             .order("nombre", { ascending: true });
         if (error) throw error;
         this.proyectos = data as Proyecto[];
+        notify();
+
     },
 
     async createProyecto(proyecto: Omit<Proyecto, "id" | "created_at">) {
@@ -584,6 +609,8 @@ export const telefoniaStore = {
             .order("nombre", { ascending: true });
         if (error) throw error;
         this.modelos = data as Modelo[];
+        notify();
+
     },
 
     async createModelo(modelo: Omit<Modelo, "id" | "created_at">) {
@@ -630,6 +657,8 @@ export const telefoniaStore = {
             .order("nombre", { ascending: true });
         if (error) throw error;
         this.puestos = data as Puesto[];
+        notify();
+
     },
 
     async createPuesto(puesto: Omit<Puesto, "id" | "created_at" | "modelo" | "plan">) {
@@ -667,8 +696,18 @@ export const telefoniaStore = {
     },
 
     // --- EQUIPOS ---
-    async fetchEquipos() {
+    async fetchEquipos(force = false) {
+        // Start Realtime if not started
+        if (!this.realtimeChannel) {
+            this.subscribeToRealtime();
+        }
+
+        // Cache Check
+        if (!force && this.equipos.length > 0) return;
+
         // 1. Fetch Equipos (Recursive Chunking)
+
+
         let allEquipos: any[] = [];
         let page = 0;
         const pageSize = 1000;
@@ -779,7 +818,96 @@ export const telefoniaStore = {
                 fecha_fin_asignado: active?.fecha_fin_uso
             };
         });
+
+        notify();
+
     },
+
+    async fetchSingleEquipo(id: string) {
+        // Fetch single equipo with relations to update cache
+        const { data: eq, error } = await supabase
+            .from("telefonia_equipos")
+            .select(`
+                *,
+                chip:telefonia_chips!telefonia_equipos_chip_id_fkey(
+                    *,
+                    plan:telefonia_planes!telefonia_chips_plan_id_fkey(*)
+                )
+            `)
+            .eq("id", id)
+            .single();
+
+        if (error) return null; // Deleted or error
+
+        // Re-fetch Active Assignment for this specific item
+        const { data: activeAssigns } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                id, equipo_id, usuario_final_dni, usuario_final_nombre, usuario_final_area, usuario_final_sede, fecha_entrega, solicitud_id, estado,
+                solicitud:telefonia_solicitudes (beneficiario_dni, beneficiario_nombre, beneficiario_area, fundo_planta, cultivo, periodo_uso, fecha_fin_uso)
+             `)
+            .eq("equipo_id", id)
+            .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
+            .is("fecha_devolucion", null);
+
+        let activeAssig = null;
+        if (activeAssigns && activeAssigns.length > 0) {
+            const a = activeAssigns[0] as any;
+            const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre;
+            const area = a.solicitud?.beneficiario_area || a.usuario_final_area;
+            const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta;
+
+            activeAssig = {
+                id: a.solicitud_id,
+                asignacion_id: a.id,
+                beneficiario_nombre: nombre,
+                usuario_final_dni: a.usuario_final_dni,
+                usuario_final_nombre: a.usuario_final_nombre,
+                beneficiario_area: area,
+                fecha_entrega: a.fecha_entrega,
+                fundo_planta: fundo,
+                periodo_uso: a.solicitud?.periodo_uso,
+                fecha_fin_uso: a.solicitud?.fecha_fin_uso
+            }
+        }
+
+        return {
+            ...eq,
+            asignacion_activa: activeAssig
+        } as Equipo;
+    },
+
+    subscribeToRealtime() {
+        if (this.realtimeChannel) return;
+
+        this.realtimeChannel = supabase
+            .channel('telefonia-db-changes')
+            .on(
+                'postgres_changes',
+                { event: '*', schema: 'public', table: 'telefonia_equipos' },
+                async (payload) => {
+                    if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+                        const newId = payload.new.id;
+                        const fullData = await this.fetchSingleEquipo(newId);
+                        if (fullData) {
+                            const index = this.equipos.findIndex(e => e.id === newId);
+                            if (index >= 0) {
+                                this.equipos[index] = fullData; // Update existing
+                            } else {
+                                this.equipos.unshift(fullData); // Add new
+                            }
+                            notify();
+                        }
+                    } else if (payload.eventType === 'DELETE') {
+                        const oldId = payload.old.id;
+                        this.equipos = this.equipos.filter(e => e.id !== oldId);
+                        notify();
+                    }
+                }
+            )
+            .subscribe();
+    },
+
 
     async createEquipo(eq: Omit<Equipo, "id" | "created_at">) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -797,8 +925,9 @@ export const telefoniaStore = {
             .select()
             .single();
         if (error) throw error;
-        await this.fetchEquipos();
+        // await this.fetchEquipos(); // Realtime handles it
         return data as Equipo;
+
     },
 
     async updateEquipo(id: string, updates: Partial<Equipo>) {
@@ -811,8 +940,9 @@ export const telefoniaStore = {
             .select()
             .single();
         if (error) throw error;
-        await this.fetchEquipos();
+        // await this.fetchEquipos(); // Realtime handles it
         return data as Equipo;
+
     },
 
     // --- CHIPS ---

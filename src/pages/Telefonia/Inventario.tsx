@@ -93,11 +93,18 @@ export default function InventarioTelefonia() {
     // Sedes
     const [, setSedesVersion] = useState(0);
     const { sedes } = getSedesState();
+    // Telefonia Store Subscription
+    const [, setTelefoniaVersion] = useState(0);
 
     useEffect(() => {
         const unsub = subscribeSedes(() => setSedesVersion(prev => prev + 1));
-        return () => unsub();
+        const unsubTelefonia = telefoniaStore.subscribe(() => setTelefoniaVersion(prev => prev + 1));
+        return () => {
+            unsub();
+            unsubTelefonia();
+        };
     }, []);
+
 
     // Gerencias
     const [, setGerenciasVersion] = useState(0);
@@ -334,7 +341,7 @@ export default function InventarioTelefonia() {
         if (!isRefresh) setLoading(true);
         try {
             await Promise.all([
-                telefoniaStore.fetchEquipos(),
+                telefoniaStore.fetchEquipos(isRefresh), // Pass isRefresh
                 telefoniaStore.fetchChips(),
                 telefoniaStore.fetchPlanes(),
                 telefoniaStore.fetchModelos(),
@@ -343,6 +350,7 @@ export default function InventarioTelefonia() {
                 telefoniaStore.fetchFacturas(), // [NEW] Fetch Invoices
                 telefoniaStore.fetchSolicitudes(), // [NEW] Fetch Tickets for linking
             ]);
+
         } catch (e: any) {
             setToast({ type: "error", message: e.message || "Error cargando datos" });
         } finally {
