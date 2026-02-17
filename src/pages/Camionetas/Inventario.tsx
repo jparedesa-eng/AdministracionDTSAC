@@ -166,11 +166,13 @@ async function apiFetchVehiculos({
   estado,
   page,
   pageSize,
+  soloVolantes,
 }: {
   q: string;
   estado: FiltroTipo;
   page: number;
   pageSize: number;
+  soloVolantes?: boolean;
 }) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -193,6 +195,10 @@ async function apiFetchVehiculos({
     query = query.or(`rev_tecnica.lt.${today},soat.lt.${today}`);
   } else if (estado !== "Todos") {
     query = query.eq("estado", estado);
+  }
+
+  if (soloVolantes) {
+    query = query.eq("volante", "Si");
   }
 
   const { data, error, count } = await query;
@@ -321,6 +327,8 @@ export default function Inventario() {
   const [statusDraft, setStatusDraft] =
     React.useState<EstadoVehiculoUI>("Disponible");
 
+  const [soloVolantes, setSoloVolantes] = React.useState(false);
+
   const [createOpen, setCreateOpen] = React.useState(false);
   const [createLoading, setCreateLoading] = React.useState(false);
   const [createDraft, setCreateDraft] = React.useState<Vehiculo>({
@@ -397,6 +405,7 @@ export default function Inventario() {
         estado: estadoFiltro,
         page,
         pageSize: rowsPerPage === 0 ? 10000 : rowsPerPage, // Handle "All"
+        soloVolantes,
       });
       setRows(res.rows);
       setTotal(res.total);
@@ -410,7 +419,7 @@ export default function Inventario() {
     } finally {
       setLoading(false);
     }
-  }, [q, estadoFiltro, page, rowsPerPage]);
+  }, [q, estadoFiltro, page, rowsPerPage, soloVolantes]);
 
   const loadStats = React.useCallback(async () => {
     try {
@@ -423,7 +432,7 @@ export default function Inventario() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [q, estadoFiltro]);
+  }, [q, estadoFiltro, soloVolantes]);
 
   React.useEffect(() => {
     load();
@@ -795,6 +804,22 @@ export default function Inventario() {
         </div>
 
         <div className="flex flex-wrap items-center gap-3">
+          {/* Toggle Solo Volantes */}
+          <button
+            onClick={() => setSoloVolantes(!soloVolantes)}
+            className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium border transition-colors ${soloVolantes
+              ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+              : "bg-white border-gray-200 text-gray-700 hover:bg-gray-50"
+              }`}
+          >
+            {soloVolantes ? (
+              <CheckCircle2 className="h-4 w-4" />
+            ) : (
+              <div className="h-4 w-4 rounded-full border border-gray-400" />
+            )}
+            Solo Volantes
+          </button>
+
           <div className="flex rounded-lg border border-gray-200 bg-white p-1">
             {(
               ["Todos", "Disponible", "Mantenimiento", "Inactivo", "DocVencida"] as FiltroTipo[]
@@ -1807,6 +1832,6 @@ export default function Inventario() {
 
       {/* Toast global */}
       <Toast toast={toast} onClose={() => setToast(null)} />
-    </div>
+    </div >
   );
 }
