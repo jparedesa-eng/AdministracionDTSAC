@@ -62,9 +62,13 @@ export default function Solicitar() {
   const [origen, setOrigen] = React.useState("");
   const [destino, setDestino] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
+  const [ceco, setCeco] = React.useState("");
+
+  const [dniError, setDniError] = React.useState<string | null>(null);
+  const [cecoError, setCecoError] = React.useState<string | null>(null);
 
   const [buscandoConductor, setBuscandoConductor] = React.useState(false);
-  const [nombreFromDB, setNombreFromDB] = React.useState(false);
+
 
   const [showForm, setShowForm] = React.useState(false);
 
@@ -254,6 +258,20 @@ export default function Solicitar() {
       return;
     }
 
+    // Validar si existen errores en DNI o CECO antes de enviar
+    if (dniError) {
+      setMsg({ type: "err", text: "Corrija el error en el DNI antes de continuar." });
+      return;
+    }
+    if (cecoError) {
+      setMsg({ type: "err", text: "Corrija el error en el CECO antes de continuar." });
+      return;
+    }
+    if (!ceco.trim()) {
+      setMsg({ type: "err", text: "Ingrese el CECO." });
+      return;
+    }
+
     const inicioISO = toISO(usoInicioLocal);
     const finISO = toISO(usoFinLocal);
     if (!inicioISO || !finISO) {
@@ -322,6 +340,7 @@ export default function Solicitar() {
         origen: origen.trim(),
         destino: destino.trim(),
         motivo: (motivo || null) as string | null,
+        ceco: ceco.trim(),
         uso_inicio: new Date(inicioISO).toISOString(),
         uso_fin: new Date(finISO).toISOString(),
         estado: "Reservada" as const,
@@ -373,7 +392,9 @@ export default function Solicitar() {
       setDestino("");
       setMotivo("");
       setSelectedPlaca("");
-      setNombreFromDB(false);
+      setSelectedPlaca("");
+      setCeco("");
+      setCeco("");
 
       await calcDisponibilidad();
       setShowForm(false);
@@ -488,7 +509,7 @@ export default function Solicitar() {
 
     if (v.length !== 8) {
       setBuscandoConductor(false);
-      setNombreFromDB(false);
+      setDniError(null);
       return;
     }
 
@@ -497,15 +518,15 @@ export default function Solicitar() {
     (async () => {
       try {
         setBuscandoConductor(true);
-        setNombreFromDB(false);
 
         const { data, error } = await supabase
           .from("conductores")
           .select("nombre, activo")
           .eq("dni", v)
           .eq("activo", true)
+
           .limit(1)
-          .single();
+          .maybeSingle();
 
         if (cancelado) return;
 
@@ -514,15 +535,16 @@ export default function Solicitar() {
             "No se pudo buscar conductor por DNI:",
             error.message
           );
-          setNombreFromDB(false);
-          return;
+          // No retornamos aquí para permitir que el flujo continúe y limpie si es error de red
         }
 
         if (data && data.nombre) {
           setNombre(data.nombre);
-          setNombreFromDB(true);
+          setDniError(null);
         } else {
-          setNombreFromDB(false);
+          // Si no se encuentra, error estricto
+          setNombre("");
+          setDniError("El DNI no está registrado como conductor.");
         }
       } catch (e: any) {
         if (!cancelado) {
@@ -530,7 +552,6 @@ export default function Solicitar() {
             "Error buscando conductor por DNI:",
             e?.message ?? e
           );
-          setNombreFromDB(false);
         }
       } finally {
         if (!cancelado) {
@@ -543,6 +564,32 @@ export default function Solicitar() {
       cancelado = true;
     };
   }, [dni]);
+
+  // Validar CECO
+  const validateCeco = async () => {
+    if (!ceco.trim()) {
+      setCecoError("El CECO es obligatorio.");
+      return;
+    }
+    if (ceco.trim().length !== 10) {
+      setCecoError("El CECO debe tener 10 dígitos.");
+      return;
+    }
+    try {
+      setCecoError(null);
+      const { data, error } = await supabase
+        .from("cecos")
+        .select("id")
+        .eq("codigo", ceco.trim())
+        .single();
+
+      if (error || !data) {
+        setCecoError("El CECO no existe en la base de datos.");
+      }
+    } catch (err) {
+      setCecoError("Error validando CECO.");
+    }
+  };
 
   /* =========================
      JSX
@@ -700,7 +747,6 @@ export default function Solicitar() {
                   onChange={(e) => {
                     const v = e.target.value.replace(/\D+/g, "").slice(0, 8);
                     setDni(v);
-                    if (v.length !== 8) setNombreFromDB(false);
                     if (v.length === 0) setNombre("");
                   }}
                   className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
@@ -711,6 +757,11 @@ export default function Solicitar() {
                     Buscando conductor…
                   </p>
                 )}
+                {dniError && (
+                  <p className="mt-1 text-xs text-rose-600 font-medium">
+                    {dniError}
+                  </p>
+                )}
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-medium text-gray-700">
@@ -718,25 +769,35 @@ export default function Solicitar() {
                 </label>
                 <input
                   value={nombre}
-                  readOnly={nombreFromDB}
-                  onChange={(e) => {
-                    if (!nombreFromDB) setNombre(e.target.value);
-                  }}
-                  className={
-                    "mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors " +
-                    (nombreFromDB
-                      ? "bg-gray-100 cursor-not-allowed"
-                      : "")
-                  }
-                  placeholder="Nombre y apellidos"
+                  readOnly
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none bg-gray-100 cursor-not-allowed transition-colors"
+                  placeholder="Se completará automáticamente"
                 />
-                {nombreFromDB && (
-                  <p className="mt-1 text-xs text-gray-500">
-                    Nombre cargado desde la base de conductores (no
-                    editable).
-                  </p>
-                )}
               </div>
+            </div>
+
+            {/* Nuevo campo CECO */}
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                CECO
+              </label>
+              <input
+                inputMode="numeric"
+                maxLength={10}
+                value={ceco}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 10);
+                  setCeco(val);
+                  setCecoError(null);
+                }}
+                onBlur={validateCeco}
+                className={`mt-1 w-full rounded-xl border px-3 py-2 text-sm outline-none transition-colors ${cecoError ? "border-rose-300 focus:border-rose-500" : "border-gray-200 focus:border-gray-400"
+                  }`}
+                placeholder="Centro de Costo (Numérico)"
+              />
+              {cecoError && (
+                <p className="mt-1 text-xs text-rose-600 font-medium">{cecoError}</p>
+              )}
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -1181,6 +1242,6 @@ export default function Solicitar() {
         {/* Toast global */}
         <Toast toast={toast} onClose={() => setToast(null)} />
       </div>
-    </div>
+    </div >
   );
 }

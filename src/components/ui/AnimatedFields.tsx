@@ -45,7 +45,7 @@ export const AnimatedInput: React.FC<
           {...bind}
           autoComplete="off"
           spellCheck={false}
-          className="w-full rounded-lg border px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-900"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-400"
         />
       </motion.div>
     </AnimatedField>
@@ -73,7 +73,7 @@ export const AnimatedTextArea: React.FC<
           rows={rows}
           autoComplete="off"
           spellCheck={false}
-          className="w-full rounded-lg border px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-900"
+          className="w-full rounded-lg border border-gray-200 px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-400"
         />
       </motion.div>
     </AnimatedField>
@@ -83,7 +83,7 @@ export const AnimatedTextArea: React.FC<
 // SELECT (ACEPTA children)
 export const AnimatedSelect: React.FC<
   { label?: string; children?: React.ReactNode } &
-    Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "className">
+  Omit<React.SelectHTMLAttributes<HTMLSelectElement>, "className">
 > = ({ label, children, ...props }) => {
   const { focused, bind } = useFocus();
   return (
@@ -99,7 +99,7 @@ export const AnimatedSelect: React.FC<
         <select
           {...props}
           {...bind}
-          className="w-full rounded-lg border bg-white px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-900"
+          className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 outline-none transition-[background-color,border-color] duration-150 focus:border-gray-400"
         >
           {children}
         </select>

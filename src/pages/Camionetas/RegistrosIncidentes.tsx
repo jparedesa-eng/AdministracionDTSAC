@@ -18,8 +18,16 @@ import {
   FileSignature,
   FileCheck2,
   Ban,
-  FileSpreadsheet,
+
+  Download,
   Loader2,
+  Send,
+  CheckCircle2,
+  XCircle,
+  ChevronLeft,
+  ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { camionetasStore } from "../../store/camionetasStore";
@@ -252,6 +260,7 @@ export default function RegistrosIncidentes({
     hoyMenosDiasYYYYMMDD(15)
   );
   const [fHasta, setFHasta] = React.useState<string>(hoyYYYYMMDD());
+  const [fHistorico, setFHistorico] = React.useState<boolean>(false);
   const [fQ, setFQ] = React.useState<string>("");
 
   // UI staging de filtros
@@ -265,6 +274,7 @@ export default function RegistrosIncidentes({
     hoyMenosDiasYYYYMMDD(15)
   );
   const [uiHasta, setUiHasta] = React.useState<string>(hoyYYYYMMDD());
+  const [uiHistorico, setUiHistorico] = React.useState<boolean>(false);
   const [uiQ, setUiQ] = React.useState<string>("");
 
   /* Excel (export) */
@@ -303,15 +313,15 @@ export default function RegistrosIncidentes({
   /* Cargar remoto (según filtros activos) */
   const cargarRemoto = React.useCallback(async () => {
     const rows = await incidentesStore.sync({
-      desde: fDesde,
-      hasta: fHasta,
+      desde: fHistorico ? undefined : fDesde,
+      hasta: fHistorico ? undefined : fHasta,
       placa: fPlaca !== "Todas" ? fPlaca : undefined,
       estado: fEstado === "Todos" ? undefined : fEstado,
       tipo: fTipo === "Todos" ? undefined : (fTipo as TipoIncidente),
       texto: fQ || undefined,
     });
     setIncidentes(rows);
-  }, [fDesde, fHasta, fPlaca, fEstado, fTipo, fQ]);
+  }, [fDesde, fHasta, fHistorico, fPlaca, fEstado, fTipo, fQ]);
 
   React.useEffect(() => {
     cargarRemoto();
@@ -332,12 +342,13 @@ export default function RegistrosIncidentes({
     setFTipo(uiTipo);
     setFDesde(uiDesde);
     setFHasta(uiHasta);
+    setFHistorico(uiHistorico);
     setFQ(uiQ);
     setPage(1);
 
     const rows = await incidentesStore.sync({
-      desde: uiDesde,
-      hasta: uiHasta,
+      desde: uiHistorico ? undefined : uiDesde,
+      hasta: uiHistorico ? undefined : uiHasta,
       placa: uiPlaca !== "Todas" ? uiPlaca : undefined,
       estado: uiEstado === "Todos" ? undefined : uiEstado,
       tipo: uiTipo === "Todos" ? undefined : (uiTipo as TipoIncidente),
@@ -346,7 +357,7 @@ export default function RegistrosIncidentes({
     setIncidentes(rows);
     pushToast({
       title: "Filtros aplicados",
-      message: `Rango ${uiDesde} a ${uiHasta}${uiPlaca !== "Todas" ? ` · Placa ${uiPlaca}` : ""
+      message: `${uiHistorico ? "Histórico completo" : `Rango ${uiDesde} a ${uiHasta}`}${uiPlaca !== "Todas" ? ` · Placa ${uiPlaca}` : ""
         }`,
       kind: "info",
     });
@@ -483,8 +494,8 @@ export default function RegistrosIncidentes({
         setFSoloPendientes(false);
         setUiSoloPendientes(false);
         const rows = await incidentesStore.sync({
-          desde: fDesde,
-          hasta: fHasta,
+          desde: fHistorico ? undefined : fDesde,
+          hasta: fHistorico ? undefined : fHasta,
           placa: fPlaca !== "Todas" ? fPlaca : undefined,
           estado: fEstado === "Todos" ? undefined : fEstado,
           tipo: fTipo === "Todos" ? undefined : (fTipo as TipoIncidente),
@@ -499,7 +510,7 @@ export default function RegistrosIncidentes({
         });
       }
     },
-    [fSoloPendientes, fDesde, fHasta, fPlaca, fEstado, fTipo, fQ, pushToast]
+    [fSoloPendientes, fDesde, fHasta, fHistorico, fPlaca, fEstado, fTipo, fQ, pushToast]
   );
 
   // Confirmación para Notificar
@@ -650,6 +661,19 @@ export default function RegistrosIncidentes({
     (i) => i.estado === "Desestimado"
   ).length;
 
+  /* Cálculo de totales */
+  const totalPEN = React.useMemo(() => {
+    return dataFiltrada
+      .filter((r) => r.moneda === "PEN" && r.monto)
+      .reduce((acc, r) => acc + (r.monto || 0), 0);
+  }, [dataFiltrada]);
+
+  const totalUSD = React.useMemo(() => {
+    return dataFiltrada
+      .filter((r) => r.moneda === "USD" && r.monto)
+      .reduce((acc, r) => acc + (r.monto || 0), 0);
+  }, [dataFiltrada]);
+
   /* ----- NAV HORIZONTAL SOLO DENTRO DE LA TABLA (flexible) ----- */
   const scrollRef = React.useRef<HTMLDivElement>(null);
   const [, setScrollLeft] = React.useState(0);
@@ -697,6 +721,11 @@ export default function RegistrosIncidentes({
   const dragScrollStartRef = React.useRef(0);
 
   const onPointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Si el usuario hace clic en un botón, input, etc., no iniciamos el drag
+    if ((e.target as HTMLElement).closest("button, input, select, a")) {
+      return;
+    }
+
     const el = scrollRef.current;
     if (!el) return;
     isDraggingRef.current = true;
@@ -759,7 +788,7 @@ export default function RegistrosIncidentes({
       const workbook = XLSX.utils.book_new();
       XLSX.utils.book_append_sheet(workbook, sheet, "Incidentes");
 
-      const filename = `Incidentes_${fDesde}_a_${fHasta}${fPlaca !== "Todas" ? `_placa_${fPlaca}` : ""
+      const filename = `Incidentes_${fHistorico ? "HISTORICO" : `${fDesde}_a_${fHasta}`}${fPlaca !== "Todas" ? `_placa_${fPlaca}` : ""
         }${fSoloPendientes ? `_solo_pendientes` : ""}.xlsx`;
 
       XLSX.writeFile(workbook, filename);
@@ -796,52 +825,103 @@ export default function RegistrosIncidentes({
               Flujo: Pendiente → Notificado → Facturado · (Desestimar)
             </p>
           </div>
-          <div className="flex items-center gap-3">
-            <div className="hidden text-sm text-gray-500 md:flex md:items-center md:gap-3">
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-50 px-2 py-1 text-xs ring-1 ring-gray-200">
-                Pendientes: <strong>{pendientes}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-blue-50 px-2 py-1 text-xs ring-1 ring-blue-200">
-                Notificados: <strong>{notificados}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-1 text-xs ring-1 ring-emerald-200">
-                Facturados: <strong>{facturados}</strong>
-              </span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-1 text-xs ring-1 ring-slate-200">
-                Desestimados: <strong>{desestimados}</strong>
-              </span>
+
+        </div>
+      </div>
+
+      {/* Stats Bar (Totales + Conteos) - GRID DE TARJETAS INDIVIDUALES */}
+      <div className="mb-6 grid grid-cols-2 gap-4 sm:grid-cols-4 lg:grid-cols-8">
+        {/* Total Soles */}
+        <div className="col-span-2 flex flex-col justify-center rounded-2xl border border-blue-100 bg-blue-50/50 p-4 sm:col-span-2">
+          <div className="mb-2 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-blue-100 text-blue-600">
+              <Banknote className="h-5 w-5" />
             </div>
-            <button
-              type="button"
-              onClick={abrirNuevo}
-              className="btn-brand"
-            >
-              <Plus className="h-4 w-4" /> Nuevo
-            </button>
+            <p className="text-sm font-semibold text-blue-900">Total Soles</p>
           </div>
+          <p className="text-2xl font-bold text-blue-700">
+            S/{" "}
+            {totalPEN.toLocaleString("es-PE", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+        </div>
+
+        {/* Total Dólares */}
+        <div className="col-span-2 flex flex-col justify-center rounded-2xl border border-emerald-100 bg-emerald-50/50 p-4 sm:col-span-2">
+          <div className="mb-2 flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-100 text-emerald-600">
+              <Banknote className="h-5 w-5" />
+            </div>
+            <p className="text-sm font-semibold text-emerald-900">Total Dólares</p>
+          </div>
+          <p className="text-2xl font-bold text-emerald-700">
+            ${" "}
+            {totalUSD.toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+              maximumFractionDigits: 2,
+            })}
+          </p>
+        </div>
+
+        {/* Pendientes */}
+        <div className="flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-gray-50 text-gray-600">
+            <Filter className="h-4 w-4" />
+          </div>
+          <p className="text-xs font-medium text-gray-500">Pendientes</p>
+          <p className="text-lg font-bold text-gray-900">{pendientes}</p>
+        </div>
+
+        {/* Notificados */}
+        <div className="flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+            <Send className="h-4 w-4" />
+          </div>
+          <p className="text-xs font-medium text-gray-500">Notificados</p>
+          <p className="text-lg font-bold text-gray-900">{notificados}</p>
+        </div>
+
+        {/* Facturados */}
+        <div className="flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+            <CheckCircle2 className="h-4 w-4" />
+          </div>
+          <p className="text-xs font-medium text-gray-500">Facturados</p>
+          <p className="text-lg font-bold text-gray-900">{facturados}</p>
+        </div>
+
+        {/* Desestimados */}
+        <div className="flex flex-col justify-center rounded-2xl border border-gray-100 bg-white p-4">
+          <div className="mb-2 flex h-8 w-8 items-center justify-center rounded-full bg-slate-50 text-slate-600">
+            <XCircle className="h-4 w-4" />
+          </div>
+          <p className="text-xs font-medium text-gray-500">Desestimados</p>
+          <p className="text-lg font-bold text-gray-900">{desestimados}</p>
         </div>
       </div>
 
       {/* Filtros */}
       <div className="rounded-2xl border border-gray-200 bg-white px-6 py-4">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          <label className="inline-flex items-center gap-2 text-sm text-gray-700">
-            <Filter className="h-4 w-4 text-gray-400" />
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+          <label className="relative inline-flex cursor-pointer items-center">
             <input
               type="checkbox"
-              className="h-4 w-4 rounded border-gray-300"
+              className="peer sr-only"
               checked={uiSoloPendientes}
-              onChange={(e) =>
-                setUiSoloPendientes(e.currentTarget.checked)
-              }
+              onChange={(e) => setUiSoloPendientes(e.currentTarget.checked)}
             />
-            Ver solo pendientes
+            <div className="peer relative h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-[#ff0000] peer-checked:after:translate-x-5 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100"></div>
+            <span className="ml-3 text-sm font-medium text-gray-700">
+              Ver solo pendientes
+            </span>
           </label>
 
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-700">Placa:</span>
             <select
-              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
               value={uiPlaca}
               onChange={(e) => setUiPlaca(e.currentTarget.value)}
             >
@@ -857,7 +937,7 @@ export default function RegistrosIncidentes({
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-700">Estado:</span>
             <select
-              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
               value={uiEstado}
               onChange={(e) =>
                 setUiEstado(e.currentTarget.value as FilterEstado)
@@ -874,7 +954,7 @@ export default function RegistrosIncidentes({
           <div className="flex items-center gap-2">
             <span className="text-sm text-gray-700">Tipo:</span>
             <select
-              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
               value={uiTipo}
               onChange={(e) =>
                 setUiTipo(e.currentTarget.value as FilterTipo)
@@ -887,41 +967,62 @@ export default function RegistrosIncidentes({
             </select>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">Desde:</span>
-            <input
-              type="date"
-              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-              value={uiDesde}
-              onChange={(e) => setUiDesde(e.currentTarget.value)}
-            />
-          </div>
+          {/* Grupo de fechas + Switch */}
+          <div className="flex flex-col gap-2 rounded-xl border border-gray-100 bg-gray-50 p-3 sm:flex-row sm:items-center lg:col-span-2">
+            <div className="flex flex-1 items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Desde:</span>
+              <input
+                type="date"
+                disabled={uiHistorico}
+                className={`w-full min-w-[130px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 ${uiHistorico ? "cursor-not-allowed opacity-50" : ""
+                  }`}
+                value={uiDesde}
+                onChange={(e) => setUiDesde(e.currentTarget.value)}
+              />
+            </div>
+            <div className="flex flex-1 items-center gap-2">
+              <span className="text-sm font-medium text-gray-600">Hasta:</span>
+              <input
+                type="date"
+                disabled={uiHistorico}
+                className={`w-full min-w-[130px] rounded-lg border border-gray-200 bg-white px-2 py-1.5 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100 ${uiHistorico ? "cursor-not-allowed opacity-50" : ""
+                  }`}
+                value={uiHasta}
+                onChange={(e) => setUiHasta(e.currentTarget.value)}
+              />
+            </div>
 
-          <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-700">Hasta:</span>
-            <input
-              type="date"
-              className="flex-1 rounded-lg border border-gray-200 bg-white px-2 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-200"
-              value={uiHasta}
-              onChange={(e) => setUiHasta(e.currentTarget.value)}
-            />
+            <div className="mt-2 h-px bg-gray-200 sm:mt-0 sm:h-8 sm:w-px" />
+
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={uiHistorico}
+                onChange={(e) => setUiHistorico(e.currentTarget.checked)}
+              />
+              <div className="peer relative h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:shadow-sm after:transition-all after:content-[''] peer-checked:bg-[#ff0000] peer-checked:after:translate-x-5 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-red-100"></div>
+              <span className="ml-3 text-sm font-medium text-gray-700">
+                Histórico
+              </span>
+            </label>
           </div>
 
           <div className="relative">
             <Search className="pointer-events-none absolute left-2 top-2.5 h-4 w-4 text-gray-400" />
             <input
-              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm outline-none focus:ring-2 focus:ring-blue-200"
+              className="w-full rounded-lg border border-gray-200 bg-white py-2 pl-8 pr-3 text-sm outline-none focus:border-blue-300 focus:ring-4 focus:ring-blue-100"
               placeholder="Buscar por placa, responsable o descripción"
               value={uiQ}
               onChange={(e) => setUiQ(e.currentTarget.value)}
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-4">
             <button
               type="button"
               onClick={aplicarFiltros}
-              className="btn-brand w-full md:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-gray-600 px-4 py-2 text-sm font-medium text-white transition-colors hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-gray-500 focus:ring-offset-2 md:w-auto"
             >
               Aplicar
             </button>
@@ -929,15 +1030,14 @@ export default function RegistrosIncidentes({
               type="button"
               onClick={exportExcelIncidentes}
               disabled={exportingExcel}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-60 md:w-auto"
-              title="Exportar a Excel los registros filtrados"
+              className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-emerald-600 text-white transition-colors hover:bg-emerald-700 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:opacity-60"
+              title="Descargar Excel"
             >
               {exportingExcel ? (
                 <Loader2 className="h-4 w-4 animate-spin" />
               ) : (
-                <FileSpreadsheet className="h-4 w-4" />
+                <Download className="h-4 w-4" />
               )}
-              {exportingExcel ? "Exportando..." : "Excel"}
             </button>
           </div>
         </div>
@@ -948,7 +1048,7 @@ export default function RegistrosIncidentes({
         className="max-w-full overflow-hidden rounded-2xl border border-gray-200 bg-white"
         style={{ contain: "inline-size" }}
       >
-        <div className="border-b border-gray-100 px-6 py-5">
+        <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5">
           <div className="flex items-center gap-2">
             <AlertTriangle className="h-5 w-5 text-gray-400" />
             <div>
@@ -960,6 +1060,14 @@ export default function RegistrosIncidentes({
               </p>
             </div>
           </div>
+          <button
+            type="button"
+            onClick={abrirNuevo}
+            className="inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors hover:opacity-90 focus:outline-none focus:ring-2 focus:ring-offset-2"
+            style={{ backgroundColor: "#ff0000" }}
+          >
+            <Plus className="h-4 w-4" /> Nuevo
+          </button>
         </div>
 
         {/* Área scrolleable SOLO de la tabla */}
@@ -1201,17 +1309,14 @@ export default function RegistrosIncidentes({
         </div>
 
         {/* Paginación (fuera del scroll) */}
-        <div className="border-t border-gray-100 bg-white px-6 py-3 text-sm">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="text-gray-500">
-              Mostrando{" "}
-              <strong>{total === 0 ? 0 : startIdx + 1}</strong>–
-              <strong>{endIdx}</strong> de <strong>{total}</strong>
-            </div>
-            <div className="flex items-center gap-3">
-              <label className="text-gray-600">Filas:</label>
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 bg-white px-6 py-4 text-sm">
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-medium uppercase text-gray-400">
+                Filas:
+              </span>
               <select
-                className="rounded-lg border border-gray-200 bg-white px-2 py-1 outline-none focus:ring-2 focus:ring-blue-200"
+                className="cursor-pointer rounded border-none bg-transparent py-1 pl-2 pr-6 text-sm text-gray-500 focus:ring-0 hover:text-gray-700"
                 value={pageSize}
                 onChange={(e) => {
                   setPageSize(Number(e.currentTarget.value));
@@ -1224,30 +1329,51 @@ export default function RegistrosIncidentes({
                   </option>
                 ))}
               </select>
-              <div className="flex items-center gap-2">
-                <span className="text-gray-600 text-sm">
-                  Página {pageSafe} de {totalPages}
-                </span>
-                <div className="flex items-center rounded-lg border border-gray-200 bg-white">
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                    disabled={pageSafe === 1}
-                    className="px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50 border-r"
-                  >
-                    Anterior
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                    disabled={pageSafe === totalPages}
-                    className="px-3 py-1.5 text-sm hover:bg-gray-50 disabled:opacity-50"
-                  >
-                    Siguiente
-                  </button>
-                </div>
-              </div>
             </div>
+            <div className="text-xs text-gray-400">
+              Mostrando <strong>{total === 0 ? 0 : startIdx + 1}</strong> –{" "}
+              <strong>{endIdx}</strong> de <strong>{total}</strong>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={pageSafe === 1}
+              className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+              title="Primera Página"
+            >
+              <ChevronsLeft className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={pageSafe === 1}
+              className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+              title="Página Anterior"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <span className="px-4 text-xs font-medium text-gray-400">
+              {pageSafe} / {totalPages}
+            </span>
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={pageSafe === totalPages}
+              className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+              title="Página Siguiente"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={pageSafe === totalPages}
+              className="rounded p-2 text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+              title="Última Página"
+            >
+              <ChevronsRight className="h-4 w-4" />
+            </button>
           </div>
         </div>
       </div>
@@ -1262,7 +1388,7 @@ export default function RegistrosIncidentes({
               aria-hidden
             />
             <div className="absolute inset-0 grid place-items-center p-4">
-              <div className="w-full max-w-3xl rounded-2xl border bg-white shadow-xl">
+              <div className="w-full max-w-3xl rounded-2xl bg-white">
                 <div className="flex items-center justify-between border-b px-5 py-4">
                   <h3 className="text-lg font-semibold">
                     Nuevo incidente
@@ -1469,7 +1595,7 @@ export default function RegistrosIncidentes({
               aria-hidden
             />
             <div className="absolute inset-0 grid place-items-center p-4">
-              <div className="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+              <div className="w-full max-w-2xl rounded-2xl bg-white">
                 <div className="flex items-center justify-between border-b px-5 py-4">
                   <h3 className="text-lg font-semibold">
                     Editar registro
@@ -1611,7 +1737,7 @@ export default function RegistrosIncidentes({
               aria-hidden
             />
             <div className="absolute inset-0 grid place-items-center p-4">
-              <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+              <div className="w-full max-w-sm rounded-2xl bg-white p-6 text-center">
                 <div className="flex items-center justify-between border-b px-5 py-4">
                   <h3 className="text-lg font-semibold">
                     Asignar costo
@@ -1686,7 +1812,7 @@ export default function RegistrosIncidentes({
               aria-hidden
             />
             <div className="absolute inset-0 grid place-items-center p-4">
-              <div className="w-full max-w-md rounded-2xl border bg-white shadow-xl">
+              <div className="w-full max-w-md rounded-2xl bg-white">
                 <div className="flex items-center justify-between border-b px-5 py-4">
                   <h3 className="text-lg font-semibold">
                     Facturar caso
