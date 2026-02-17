@@ -14,7 +14,13 @@ import {
   AlertTriangle,
   XCircle,
   AlertCircle,
+  UserPlus,
+  History,
+  ChevronsLeft,
+  ChevronsRight,
 } from "lucide-react";
+import { camionetasStore, type HistorialResponsable } from "../../store/camionetasStore";
+import { searchByDni } from "../../store/personalStore";
 import { supabase } from "../../supabase/supabaseClient";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
@@ -291,7 +297,8 @@ async function apiFetchVehiculoStats() {
    Página principal
 ========================= */
 export default function Inventario() {
-  const PAGE_SIZE = 10;
+  // const PAGE_SIZE = 10; // Removed constant
+  const [rowsPerPage, setRowsPerPage] = React.useState(10);
 
   // Filtros / control
   const [q, setQ] = React.useState("");
@@ -353,11 +360,32 @@ export default function Inventario() {
     docVencida: 0,
   });
 
+  // Estado para Asignación
+  const [assignOpen, setAssignOpen] = React.useState(false);
+  const [assignLoading, setAssignLoading] = React.useState(false);
+  const [assignDraft, setAssignDraft] = React.useState({
+    vehiculoId: "",
+    placa: "",
+    responsable: "",
+    dniResponsable: "",
+    fechaInicio: new Date().toISOString().slice(0, 10),
+    fechaFin: "",
+    tipoAsignacion: "Indefinida" as "Indefinida" | "Rango",
+    observacion: "",
+    isLocked: false, // New state for locking name
+  });
+
+  // Estado para Historial
+  const [historyOpen, setHistoryOpen] = React.useState(false);
+  const [historyLoading, setHistoryLoading] = React.useState(false);
+  const [historyData, setHistoryData] = React.useState<HistorialResponsable[]>([]);
+  const [historyVehiculo, setHistoryVehiculo] = React.useState<Vehiculo | null>(null);
+
   // Toast global
   const [toast, setToast] = React.useState<ToastState>(null);
 
   const PAGE_TOTAL_MIN = 1;
-  const totalPages = Math.max(PAGE_TOTAL_MIN, Math.ceil(total / PAGE_SIZE));
+  const totalPages = rowsPerPage === 0 ? 1 : Math.max(PAGE_TOTAL_MIN, Math.ceil(total / rowsPerPage));
   const pageSafe = Math.min(page, totalPages);
 
   const load = React.useCallback(async () => {
@@ -368,7 +396,7 @@ export default function Inventario() {
         q,
         estado: estadoFiltro,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize: rowsPerPage === 0 ? 10000 : rowsPerPage, // Handle "All"
       });
       setRows(res.rows);
       setTotal(res.total);
@@ -382,7 +410,7 @@ export default function Inventario() {
     } finally {
       setLoading(false);
     }
-  }, [q, estadoFiltro, page]);
+  }, [q, estadoFiltro, page, rowsPerPage]);
 
   const loadStats = React.useCallback(async () => {
     try {
@@ -576,6 +604,106 @@ export default function Inventario() {
     }
   };
 
+  /* Asignación y Historial Handlers */
+  const openAssign = (v: Vehiculo) => {
+    setAssignDraft({
+      vehiculoId: v.id,
+      placa: v.placa,
+      responsable: "",
+      dniResponsable: "",
+      fechaInicio: new Date().toISOString().slice(0, 10),
+      fechaFin: "",
+      tipoAsignacion: "Indefinida",
+      observacion: "",
+      isLocked: false,
+    });
+    setAssignOpen(true);
+  };
+
+  const handleAssignDniChange = async (val: string) => {
+    // 1. Update DNI in draft
+    setAssignDraft((prev) => ({ ...prev, dniResponsable: val }));
+
+    // 2. Logic: if 8 digits, search. If delete, clear name/unlock.
+    if (val.length === 8) {
+      setAssignLoading(true); // Reuse loading or add searching state? Reuse for now implies blocking.
+      try {
+        const found = await searchByDni(val);
+        if (found) {
+          setAssignDraft((prev) => ({
+            ...prev,
+            dniResponsable: val,
+            responsable: found.nombre,
+            isLocked: true
+          }));
+          setToast({ type: "success", message: "Personal encontrado." });
+        } else {
+          // Not found: let user type name
+          setAssignDraft((prev) => ({ ...prev, isLocked: false }));
+        }
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setAssignLoading(false);
+      }
+    } else {
+      // If user deletes any digit (length < 8), clear name and unlock
+      // "si se borra un numero del dni borra el nombre"
+      // Check if we are coming from a locked state or just typing?
+      // Strict interpretation: if invalid DNI, clear name.
+      // But maybe user is typing... let's just unlock and clear if it WAS locked?
+      // Or just always clear if length < 8? That might be annoying if typing manually.
+      // "si se borra un numero del dni borra el nombre" -> implies if I had a full DNI and I delete one, clear name.
+      // To be safe and compliant: if length changed and is < 8, unlock.
+      // If it WAS 8 and now is 7 (deletion), clear name.
+      // Simpler: If length < 8, unlock. If locked, clear name.
+      setAssignDraft((prev) => {
+        if (prev.isLocked) {
+          return { ...prev, dniResponsable: val, responsable: "", isLocked: false };
+        }
+        return { ...prev, dniResponsable: val, isLocked: false };
+      });
+    }
+  };
+
+  const handleAssignSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAssignLoading(true);
+    try {
+      await camionetasStore.asignarResponsable({
+        vehiculoId: assignDraft.vehiculoId,
+        responsable: assignDraft.responsable,
+        dniResponsable: assignDraft.dniResponsable,
+        fechaInicio: new Date(assignDraft.fechaInicio).toISOString(),
+        fechaFin: assignDraft.fechaFin ? new Date(assignDraft.fechaFin).toISOString() : null,
+        tipoAsignacion: assignDraft.tipoAsignacion,
+        observacion: assignDraft.observacion,
+      });
+
+      setToast({ type: "success", message: "Responsable asignado correctamente." });
+      setAssignOpen(false);
+      load(); // Reload table to show new responsible
+    } catch (error: any) {
+      setToast({ type: "error", message: error.message || "Error al asignar responsable." });
+    } finally {
+      setAssignLoading(false);
+    }
+  };
+
+  const openHistory = async (v: Vehiculo) => {
+    setHistoryVehiculo(v);
+    setHistoryOpen(true);
+    setHistoryLoading(true);
+    try {
+      const data = await camionetasStore.fetchHistorial(v.id);
+      setHistoryData(data);
+    } catch (error: any) {
+      setToast({ type: "error", message: "Error cargando historial." });
+    } finally {
+      setHistoryLoading(false);
+    }
+  };
+
   // KPI: usar kpiStats en lugar de rows.filter
   const { disponible, mantenimiento, inactivo, docVencida } = kpiStats;
 
@@ -702,11 +830,9 @@ export default function Inventario() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3">Placa</th>
+                <th className="px-4 py-3">Placa / Info</th>
                 <th className="px-4 py-3">Marca / Modelo</th>
-                <th className="px-4 py-3">Tracción</th>
                 <th className="px-4 py-3">Volante</th>
-                <th className="px-4 py-3">Color</th>
                 <th className="px-4 py-3">Responsable</th>
                 <th className="px-4 py-3">Proveedor</th>
                 <th className="px-4 py-3">Fecha Ingreso</th>
@@ -720,7 +846,7 @@ export default function Inventario() {
               {loading && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -734,7 +860,7 @@ export default function Inventario() {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={10}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     {errMsg ?? "No se encontraron vehículos."}
@@ -749,9 +875,14 @@ export default function Inventario() {
                     className="group hover:bg-gray-50/80 transition-colors"
                   >
                     <td className="px-4 py-3">
-                      <span className="font-bold text-gray-900 text-base">
-                        {v.placa}
-                      </span>
+                      <div className="flex flex-col">
+                        <span className="font-bold text-gray-900 text-base">
+                          {v.placa}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {v.color} • {v.traccion}
+                        </span>
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex flex-col">
@@ -761,11 +892,9 @@ export default function Inventario() {
                         <span className="text-xs text-gray-500">{v.modelo}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{v.traccion}</td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
                       {v.volante === "Si" ? "Sí" : "No"}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">{v.color}</td>
                     <td className="px-4 py-3">
                       {v.responsable ? (
                         <div className="flex flex-col">
@@ -798,41 +927,57 @@ export default function Inventario() {
                       <EstadoBadge estado={v.estado} />
                     </td>
                     <td className="px-4 py-3">
-                      <div className="flex items-center justify-end gap-2">
-                        {/* Botón cambiar volante */}
-                        <button
-                          type="button"
-                          onClick={() => openVolanteModal(v)}
-                          disabled={volanteLoadingId === v.id}
-                          className="rounded-lg border p-2 hover:bg-gray-50 disabled:opacity-60"
-                          title="Cambiar volante"
-                          aria-label="Cambiar volante"
-                        >
-                          {volanteLoadingId === v.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <RefreshCw className="h-4 w-4" />
-                          )}
-                        </button>
+                      <div className="flex items-center justify-end gap-1">
+                        <div className="flex items-center gap-1 rounded-lg bg-gray-50 border border-gray-100 p-1">
+                          <button
+                            type="button"
+                            onClick={() => openAssign(v)}
+                            className="rounded p-1.5 text-indigo-600 hover:bg-white hover:shadow-sm transition-all"
+                            title="Asignar Responsable"
+                          >
+                            <UserPlus className="h-4 w-4" />
+                          </button>
+                          <div className="h-4 w-px bg-gray-200" />
+                          <button
+                            type="button"
+                            onClick={() => openHistory(v)}
+                            className="rounded p-1.5 text-gray-500 hover:bg-white hover:text-gray-900 hover:shadow-sm transition-all"
+                            title="Ver Historial"
+                          >
+                            <History className="h-4 w-4" />
+                          </button>
+                        </div>
 
-                        {/* Botón cambiar estado */}
-                        <button
-                          type="button"
-                          onClick={() => openChangeStatus(v)}
-                          className="rounded-lg border p-2 hover:bg-gray-50"
-                          title="Cambiar estado"
-                          aria-label="Cambiar estado"
-                        >
-                          <Shuffle className="h-4 w-4" />
-                        </button>
+                        <div className="flex items-center gap-1 rounded-lg bg-gray-50 border border-gray-100 p-1">
+                          <button
+                            type="button"
+                            onClick={() => openVolanteModal(v)}
+                            disabled={volanteLoadingId === v.id}
+                            className="rounded p-1.5 text-violet-600 hover:bg-white hover:shadow-sm transition-all disabled:opacity-50"
+                            title="Cambiar volante"
+                          >
+                            {volanteLoadingId === v.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
+                          </button>
+                          <div className="h-4 w-px bg-gray-200" />
+                          <button
+                            type="button"
+                            onClick={() => openChangeStatus(v)}
+                            className="rounded p-1.5 text-orange-600 hover:bg-white hover:shadow-sm transition-all"
+                            title="Cambiar estado"
+                          >
+                            <Shuffle className="h-4 w-4" />
+                          </button>
+                        </div>
 
-                        {/* Botón editar */}
                         <button
                           type="button"
                           onClick={() => openEdit(v)}
-                          className="rounded-lg border p-2 hover:bg-gray-50"
+                          className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-blue-600 hover:bg-white hover:shadow-sm transition-all ml-1"
                           title="Editar"
-                          aria-label="Editar"
                         >
                           <PencilLine className="h-4 w-4" />
                         </button>
@@ -844,32 +989,64 @@ export default function Inventario() {
           </table>
         </div>
 
-        {/* Paginación */}
-        <div className="flex items-center justify-between border-t bg-white px-4 py-3 text-sm text-gray-600">
-          <div>
-            Página <span className="font-medium">{pageSafe}</span> de{" "}
-            <span className="font-medium">
-              {Math.max(PAGE_TOTAL_MIN, totalPages)}
-            </span>
-          </div>
+        {/* Paginación - Telefonia Style */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
           <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={pageSafe <= 1 || loading}
-              className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-gray-50"
+            <span className="text-xs text-gray-400 font-medium uppercase">
+              Filas:
+            </span>
+            <select
+              className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setPage(1);
+              }}
             >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={pageSafe === 1 || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Primera Página"
+            >
+              <ChevronsLeft className="h-4 w-4" />
             </button>
             <button
-              type="button"
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={pageSafe >= totalPages || loading}
-              className="inline-flex items-center gap-1 rounded-xl border bg-white px-3 py-1.5 disabled:opacity-50 hover:bg-gray-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={pageSafe === 1 || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Página Anterior"
             >
-              Siguiente
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <span className="text-xs font-medium px-4 text-gray-400">
+              {pageSafe} / {Math.max(PAGE_TOTAL_MIN, totalPages)}
+            </span>
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={pageSafe === totalPages || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Página Siguiente"
+            >
               <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={pageSafe === totalPages || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Última Página"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -982,30 +1159,29 @@ export default function Inventario() {
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Responsable asignado
+                  Responsable asignado (Lectura)
                 </label>
                 <input
                   value={editDraft.responsable}
-                  onChange={(e) =>
-                    handleEditChange("responsable", e.target.value)
-                  }
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  placeholder="Juan Pérez"
+                  readOnly
+                  disabled
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 shadow-sm outline-none"
+                  placeholder="Sin asignar"
                 />
+                <p className="mt-1 text-xs text-gray-400">
+                  Gestione desde la tabla.
+                </p>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  DNI Responsable
+                  DNI Responsable (Lectura)
                 </label>
                 <input
                   value={editDraft.dniResponsable}
-                  maxLength={8}
-                  onChange={(e) => {
-                    const val = e.target.value.replace(/\D/g, "").slice(0, 8);
-                    handleEditChange("dniResponsable", val);
-                  }}
-                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                  placeholder="12345678"
+                  readOnly
+                  disabled
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 shadow-sm outline-none"
+                  placeholder="-"
                 />
               </div>
               <div>
@@ -1271,11 +1447,10 @@ export default function Inventario() {
               </label>
               <input
                 value={createDraft.responsable}
-                onChange={(e) =>
-                  handleCreateChange("responsable", e.target.value)
-                }
-                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="Juan Pérez"
+                readOnly
+                disabled
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 shadow-sm outline-none"
+                placeholder="Se asigna después de crear"
               />
             </div>
             <div>
@@ -1284,13 +1459,10 @@ export default function Inventario() {
               </label>
               <input
                 value={createDraft.dniResponsable}
-                maxLength={8}
-                onChange={(e) => {
-                  const val = e.target.value.replace(/\D/g, "").slice(0, 8);
-                  handleCreateChange("dniResponsable", val);
-                }}
-                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
-                placeholder="12345678"
+                readOnly
+                disabled
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-gray-100 px-3 py-2 text-sm text-gray-500 shadow-sm outline-none"
+                placeholder="-"
               />
             </div>
             <div>
@@ -1450,6 +1622,187 @@ export default function Inventario() {
             </div>
           </>
         )}
+      </Modal>
+
+      {/* Modal Asignar Responsable */}
+      <Modal
+        open={assignOpen}
+        title="Asignar Responsable"
+        size="md"
+        onClose={() => setAssignOpen(false)}
+      >
+        <form onSubmit={handleAssignSubmit} className="space-y-4">
+          <div className="rounded-lg bg-gray-50 p-3 text-sm text-gray-700">
+            Asignando a: <span className="font-bold">{assignDraft.placa}</span>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700">DNI Responsable</label>
+              <input
+                value={assignDraft.dniResponsable}
+                maxLength={8}
+                onChange={(e) => {
+                  const val = e.target.value.replace(/\D/g, "").slice(0, 8);
+                  handleAssignDniChange(val);
+                }}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                placeholder="12345678"
+              />
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Responsable</label>
+              <input
+                value={assignDraft.responsable}
+                disabled={assignDraft.isLocked}
+                readOnly={assignDraft.isLocked}
+                onChange={(e) =>
+                  setAssignDraft({ ...assignDraft, responsable: e.target.value })
+                }
+                className={`mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 ${assignDraft.isLocked ? "bg-gray-100 text-gray-500" : ""
+                  }`}
+                placeholder="Nombre completo"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Tipo Asignación</label>
+              <select
+                value={assignDraft.tipoAsignacion}
+                onChange={(e) =>
+                  setAssignDraft({
+                    ...assignDraft,
+                    tipoAsignacion: e.target.value as "Indefinida" | "Rango",
+                  })
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value="Indefinida">Indefinida</option>
+                <option value="Rango">Rango de Fechas</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Fecha Inicio</label>
+              <input
+                type="date"
+                value={assignDraft.fechaInicio}
+                onChange={(e) =>
+                  setAssignDraft({ ...assignDraft, fechaInicio: e.target.value })
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                required
+              />
+            </div>
+          </div>
+
+          {assignDraft.tipoAsignacion === "Rango" && (
+            <div>
+              <label className="text-sm font-medium text-gray-700">Fecha Fin</label>
+              <input
+                type="date"
+                value={assignDraft.fechaFin}
+                onChange={(e) =>
+                  setAssignDraft({ ...assignDraft, fechaFin: e.target.value })
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                required
+              />
+            </div>
+          )}
+
+          <div>
+            <label className="text-sm font-medium text-gray-700">Observación</label>
+            <textarea
+              value={assignDraft.observacion}
+              onChange={(e) =>
+                setAssignDraft({ ...assignDraft, observacion: e.target.value })
+              }
+              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              rows={2}
+              placeholder="Detalles adicionales..."
+            />
+          </div>
+
+          <div className="mt-4 flex justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => setAssignOpen(false)}
+              className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={assignLoading}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
+            >
+              {assignLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                "Guardar Asignación"
+              )}
+            </button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal Historial Responsables */}
+      <Modal
+        open={historyOpen}
+        title={`Historial: ${historyVehiculo?.placa || ""}`}
+        size="lg"
+        onClose={() => setHistoryOpen(false)}
+      >
+        <div className="max-h-[60vh] overflow-y-auto">
+          {historyLoading ? (
+            <div className="flex justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+            </div>
+          ) : historyData.length === 0 ? (
+            <p className="py-8 text-center text-sm text-gray-500">
+              No hay historial registrado.
+            </p>
+          ) : (
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
+                <tr>
+                  <th className="px-3 py-2">Responsable</th>
+                  <th className="px-3 py-2">DNI</th>
+                  <th className="px-3 py-2">Inicio</th>
+                  <th className="px-3 py-2">Fin</th>
+                  <th className="px-3 py-2">Tipo</th>
+                  <th className="px-3 py-2">Obs</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100 border-t border-gray-100">
+                {historyData.map((h) => (
+                  <tr key={h.id} className="hover:bg-gray-50">
+                    <td className="px-3 py-2 font-medium text-gray-900">
+                      {h.responsable}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{h.dniResponsable || "-"}</td>
+                    <td className="px-3 py-2 text-gray-500">
+                      {new Date(h.fechaInicio).toLocaleDateString()}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">
+                      {h.fechaFin ? new Date(h.fechaFin).toLocaleDateString() : "-"}
+                    </td>
+                    <td className="px-3 py-2 text-gray-500">{h.tipoAsignacion}</td>
+                    <td className="px-3 py-2 text-gray-500 italic">
+                      {h.observacion || "-"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
       </Modal>
 
       {/* Toast global */}

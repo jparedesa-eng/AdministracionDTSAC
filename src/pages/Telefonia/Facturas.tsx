@@ -329,7 +329,7 @@ export default function FacturasTelefonia() {
                     <div className="w-full md:w-32">
                         <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Año</label>
                         <select
-                            className="w-full rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                            className="w-full rounded-lg border border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
                             value={yearFilter}
                             onChange={(e) => setYearFilter(e.target.value)}
                         >
@@ -344,7 +344,7 @@ export default function FacturasTelefonia() {
                     <div className="w-full md:w-48">
                         <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Proveedor</label>
                         <select
-                            className="w-full rounded-lg border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                            className="w-full rounded-lg border border-gray-300 text-sm focus:ring-indigo-500 focus:border-indigo-500 p-2"
                             value={providerFilter}
                             onChange={(e) => setProviderFilter(e.target.value)}
                         >
@@ -363,7 +363,7 @@ export default function FacturasTelefonia() {
                             </div>
                             <input
                                 type="text"
-                                className="block w-full rounded-lg border-gray-300 pl-9 p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
+                                className="block w-full rounded-lg border border-gray-300 pl-9 p-2 text-sm focus:ring-indigo-500 focus:border-indigo-500"
                                 placeholder="Nº Factura..."
                                 value={searchQuery}
                                 onChange={(e) => setSearchQuery(e.target.value)}

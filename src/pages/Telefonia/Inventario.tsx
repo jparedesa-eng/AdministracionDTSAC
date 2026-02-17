@@ -1447,12 +1447,13 @@ export default function InventarioTelefonia() {
                                     {activeTab === "equipos" && (
                                         <tr>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo</th>
-                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">F. Compra</th>
+                                            {/* Removed F. Compra */}
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Categoria</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
-                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Asignado A</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Resp del Equipo</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Usuario Final</th>
 
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fin Periodo</th>
                                             <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
@@ -1497,17 +1498,19 @@ export default function InventarioTelefonia() {
                                                         {item.pantalla && <span className="bg-gray-100 px-1 rounded border border-gray-200">{item.pantalla}</span>}
                                                     </div>
                                                 )}
-                                                <div className="mt-1">
+                                                <div className="mt-1 flex items-center gap-2">
                                                     <span className="inline-flex items-center px-2 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-100">
                                                         {item.condicion || "CONDICION"}
                                                     </span>
+                                                    {item.fecha_compra && (
+                                                        <span className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                            <Calendar className="w-3 h-3" />
+                                                            {new Date(item.fecha_compra + 'T00:00:00').toLocaleDateString()}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
-                                            <td className="px-6 py-4">
-                                                <div className="text-sm text-gray-600">
-                                                    {item.fecha_compra ? new Date(item.fecha_compra + 'T00:00:00').toLocaleDateString() : "-"}
-                                                </div>
-                                            </td>
+                                            {/* Removed F. Compra Cell */}
                                             <td className="px-6 py-4">
                                                 <div className="flex flex-col gap-2 items-center">
                                                     <EstadoBadge estado={item.estado} />
@@ -1563,6 +1566,17 @@ export default function InventarioTelefonia() {
                                                             <Calendar className="w-3 h-3" />
                                                             {new Date(item.asignacion_activa.fecha_entrega || '').toLocaleDateString()}
                                                         </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
+                                            {/* New Usuario Final Column */}
+                                            <td className="px-6 py-4">
+                                                {(item.estado === "Asignado" || item.estado === "Para Devolucion" || item.estado === "Para Revisión") && item.asignacion_activa && (item.asignacion_activa.usuario_final_nombre || item.asignacion_activa.usuario_final_dni) ? (
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">{item.asignacion_activa.usuario_final_nombre || "Sin Nombre"}</div>
+                                                        <div className="text-xs text-gray-500 font-mono">{item.asignacion_activa.usuario_final_dni || "Sin DNI"}</div>
                                                     </div>
                                                 ) : (
                                                     <span className="text-gray-300">-</span>
@@ -1987,19 +2001,7 @@ export default function InventarioTelefonia() {
 
                                     setResponsableData(newData);
 
-                                    // Real-time Check
-                                    if (sameAsResponsable && val.length === 8) {
-                                        const check = await telefoniaStore.checkActiveAssignment(val);
-                                        if (check.exists) {
-                                            setFormErrors(prev => ({ ...prev, responsable_dni_error: check.message || "Usuario ya tiene asignación." }));
-                                        } else {
-                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
-                                        }
-                                    } else {
-                                        if (formErrors.responsable_dni_error) {
-                                            setFormErrors(prev => { const n = { ...prev }; delete n.responsable_dni_error; return n; });
-                                        }
-                                    }
+                                    // Removed validation as per user request (only validate final user)
                                 }}
                                 placeholder="DNI Responsable"
                             />

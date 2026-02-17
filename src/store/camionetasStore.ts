@@ -18,11 +18,14 @@ export type EstadoSolicitud =
   | "Vencido";
 
 export interface Vehiculo {
+  id?: string; // Added id
   placa: string;
   marca?: string | null;
   modelo?: string | null;
   color?: string | null;
   responsableAsignado?: string | null;
+  responsable?: string | null; // Added to match other parts
+  dniResponsable?: string | null; // Added
   proveedor?: string | null;
   traccion?: "4x2" | "4x4" | null;
   revTecnica?: string | null;
@@ -64,11 +67,14 @@ export interface Solicitud {
  * Mapeos DB <-> App
  * ========================= */
 type VehiculoRow = {
+  id: string; // Added
   placa: string;
   marca: string | null;
   modelo: string | null;
   color: string | null;
   responsable_asignado: string | null;
+  responsable: string | null; // Added
+  dni_responsable: string | null; // Added
   proveedor: string | null;
   traccion: "4x2" | "4x4" | null;
   rev_tecnica: string | null;
@@ -84,11 +90,14 @@ type VehiculoRow = {
 
 function vFromRow(r: VehiculoRow): Vehiculo {
   return {
+    id: r.id,
     placa: r.placa,
     marca: r.marca,
     modelo: r.modelo,
     color: r.color,
     responsableAsignado: r.responsable_asignado,
+    responsable: r.responsable, // Mapped
+    dniResponsable: r.dni_responsable, // Mapped
     proveedor: r.proveedor,
     traccion: r.traccion,
     revTecnica: r.rev_tecnica,
@@ -104,12 +113,15 @@ function vFromRow(r: VehiculoRow): Vehiculo {
 
 function vToRow(v: Partial<Vehiculo>): Partial<VehiculoRow> {
   const out: Partial<VehiculoRow> = {};
+  if (v.id !== undefined) out.id = v.id;
   if (v.placa !== undefined) out.placa = v.placa;
   if (v.marca !== undefined) out.marca = v.marca ?? null;
   if (v.modelo !== undefined) out.modelo = v.modelo ?? null;
   if (v.color !== undefined) out.color = v.color ?? null;
   if (v.responsableAsignado !== undefined)
     out.responsable_asignado = v.responsableAsignado ?? null;
+  if (v.responsable !== undefined) out.responsable = v.responsable ?? null;
+  if (v.dniResponsable !== undefined) out.dni_responsable = v.dniResponsable ?? null;
   if (v.proveedor !== undefined) out.proveedor = v.proveedor ?? null;
   if (v.traccion !== undefined) out.traccion = v.traccion ?? null;
   if (v.revTecnica !== undefined) out.rev_tecnica = v.revTecnica ?? null;
@@ -626,4 +638,108 @@ export const camionetasStore = {
       await this.syncSolicitudes();
     }
   },
+
+  /* =========================================================
+   * Historial de Responsables
+   * ======================================================= */
+  async fetchHistorial(vehiculoId: string): Promise<HistorialResponsable[]> {
+    const { data, error } = await supabase
+      .from("vehiculos_historial_responsables")
+      .select("*")
+      .eq("vehiculo_id", vehiculoId)
+      .order("fecha_inicio", { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      vehiculoId: r.vehiculo_id,
+      responsable: r.responsable,
+      dniResponsable: r.dni_responsable,
+      fechaInicio: r.fecha_inicio,
+      fechaFin: r.fecha_fin,
+      tipoAsignacion: r.tipo_asignacion,
+      observacion: r.observacion,
+      createdAt: r.created_at,
+    }));
+  },
+
+  async asignarResponsable(payload: {
+    vehiculoId: string;
+    responsable: string;
+    dniResponsable: string;
+    fechaInicio: string;
+    fechaFin?: string | null;
+    tipoAsignacion: "Indefinida" | "Rango";
+    observacion?: string;
+  }): Promise<void> {
+    // 1. Insert history record
+    const { error: histError } = await supabase
+      .from("vehiculos_historial_responsables")
+      .insert([
+        {
+          vehiculo_id: payload.vehiculoId,
+          responsable: payload.responsable,
+          dni_responsable: payload.dniResponsable,
+          fecha_inicio: payload.fechaInicio, // ISO
+          fecha_fin: payload.fechaFin ?? null, // ISO or null
+          tipo_asignacion: payload.tipoAsignacion,
+          observacion: payload.observacion ?? null,
+        },
+      ]);
+
+    if (histError) throw histError;
+
+    // 2. Update vehicle current responsible
+    // Note: If assignment is future-dated, we might NOT want to update the vehicle immediately?
+    // User request: "fecha de asignación".
+    // Usually "Assign" means "Effective from...".
+    // If fechaInicio is <= NOW, we update current.
+    // However, for simplicity and "Assignment" semantics, we usually update the current holder if it's the latest assignment.
+    // For now, we will update the vehicle record with the new responsible.
+
+    // We only update the vehicle core table if the assignment effectively starts now or in the past (active).
+    // Or simpler: The user wants to set the responsible. We update the table.
+    // If there is conflict with future dates, that's complex logic.
+    // We'll update the vehicle table to reflect this new assignment as the "current" one.
+
+    // We only update the vehicle core table if the assignment effectively starts now or in the past (active).
+    // Or simpler: The user wants to set the responsible. We update the table.
+    // If there is conflict with future dates, that's complex logic.
+    // We'll update the vehicle table to reflect this new assignment as the "current" one.
+
+    // Direct update by ID
+    const { error: updError } = await supabase
+      .from("vehiculos")
+      .update({
+        responsable: payload.responsable,
+        dni_responsable: payload.dniResponsable,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", payload.vehiculoId);
+
+    if (updError) throw updError;
+
+    // Update local state
+    const idx = this.inventario.findIndex((v) => v.id === payload.vehiculoId);
+    if (idx >= 0) {
+      this.inventario[idx] = {
+        ...this.inventario[idx],
+        responsable: payload.responsable,
+        dniResponsable: payload.dniResponsable,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  },
 };
+
+export interface HistorialResponsable {
+  id: string;
+  vehiculoId: string;
+  responsable: string;
+  dniResponsable: string | null;
+  fechaInicio: string;
+  fechaFin: string | null;
+  tipoAsignacion: "Indefinida" | "Rango";
+  observacion: string | null;
+  createdAt: string;
+}
