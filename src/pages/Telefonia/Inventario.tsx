@@ -245,7 +245,13 @@ export default function InventarioTelefonia() {
             // Find Ticket
             let ticket = telefoniaStore.solicitudes.find(s => s.id === assign.solicitud_id);
 
-            // If not found in store (rare), we can't edit without ticket data.
+            // [OPT] If not found locally, fetch on demand
+            if (!ticket) {
+                const fetched = await telefoniaStore.fetchSolicitudById(assign.solicitud_id);
+                if (fetched) ticket = fetched;
+            }
+
+            // If still not found
             if (!ticket) throw new Error("No se encontraron los detalles del ticket (Solicitud) de esta asignación.");
 
             setEditAssignData({
@@ -339,15 +345,28 @@ export default function InventarioTelefonia() {
     const loadData = async (isRefresh = false) => {
         if (!isRefresh) setLoading(true);
         try {
+            // [OPT] 1. Fetch Active Assignments ONCE (Heavy)
+            let assignments: any[] = [];
+            try {
+                assignments = await telefoniaStore.fetchActiveAssignments();
+            } catch (e) {
+                console.warn("Error fetching assignments, proceeding without them", e);
+            }
+
+            // [OPT] 2. Fetch Equipment (Uses assignments)
+            await telefoniaStore.fetchEquipos(isRefresh, assignments);
+
+            // [OPT] 3. Fetch Chips (Uses assignments AND loaded Equipment for indirect links)
+            await telefoniaStore.fetchChips(assignments);
+
+            // [OPT] 4. Fetch Others (Parallel)
             await Promise.all([
-                telefoniaStore.fetchEquipos(isRefresh), // Pass isRefresh
-                telefoniaStore.fetchChips(),
                 telefoniaStore.fetchPlanes(),
                 telefoniaStore.fetchModelos(),
                 telefoniaStore.fetchPuestos(),
                 telefoniaStore.fetchProyectos(),
-                telefoniaStore.fetchFacturas(), // [NEW] Fetch Invoices
-                telefoniaStore.fetchSolicitudes(), // [NEW] Fetch Tickets for linking
+                telefoniaStore.fetchFacturasHeaders(), // [NEW] Fetch Headers Only
+                // telefoniaStore.fetchSolicitudes(), // [REMOVED] On demand
             ]);
 
         } catch (e: any) {
@@ -624,8 +643,16 @@ export default function InventarioTelefonia() {
             }
 
             // [NEW] Validation: Invoice Quota
+            // [NEW] Validation: Invoice Quota
             if (draftEquipo.factura_id) {
-                const factura = telefoniaStore.facturas.find(f => f.id === draftEquipo.factura_id);
+                let factura = telefoniaStore.facturas.find(f => f.id === draftEquipo.factura_id);
+
+                // [OPT] If items missing, fetch full invoice
+                if (factura && (!factura.items || factura.items.length === 0)) {
+                    const fullFactura = await telefoniaStore.fetchFacturaWithItems(draftEquipo.factura_id);
+                    if (fullFactura) factura = fullFactura;
+                }
+
                 if (factura) {
                     // Find item for this model
                     const item = factura.items?.find(i => i.nombre_modelo === draftEquipo.modelo);

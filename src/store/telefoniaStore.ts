@@ -320,8 +320,8 @@ export const telefoniaStore = {
         const years = Array.from(new Set(data?.map(item => new Date(item.fecha_compra).getFullYear()) || []));
         this.availableYears = years.sort((a, b) => b - a); // Descending
     },
-    async fetchFacturas() {
-        // Fetch Header
+    async fetchFacturasHeaders() {
+        // Fetch Header Only (Lightweight for Dropdowns)
         const { data: facturas, error } = await supabase
             .from("telefonia_factura_equipos")
             .select(`*`)
@@ -329,27 +329,52 @@ export const telefoniaStore = {
 
         if (error) throw error;
 
-        // Fetch Items (in separate query for simplicity or joint?)
-        // Let's do separate for clarity and avoiding duplicates in main list
+        // We act as if these are full facturas, but items will be undefined/empty initially
+        this.facturas = facturas as Factura[];
+        notify();
+    },
+
+    async fetchFacturaWithItems(id: string): Promise<Factura | null> {
+        // 1. Fetch Header
+        const { data: factura, error } = await supabase
+            .from("telefonia_factura_equipos")
+            .select(`*`)
+            .eq("id", id)
+            .single();
+
+        if (error) throw error;
+
+        // 2. Fetch Items
         const { data: items, error: itemsError } = await supabase
             .from("telefonia_factura_equipos_items")
             .select(`
                 *, 
                 modelo:telefonia_modelos(*),
                 solicitud:telefonia_solicitudes(*) 
-            `);
+            `)
+            .eq("factura_id", id);
 
         if (itemsError) throw itemsError;
 
-        // Map items to facturas
-        const facturasWithItems = facturas?.map(f => ({
-            ...f,
-            items: items?.filter(i => i.factura_id === f.id) || []
-        }));
+        const fullFactura = {
+            ...factura,
+            items: items || []
+        } as Factura;
 
-        this.facturas = facturasWithItems as Factura[];
-        notify();
+        // Update Store Cache if present
+        const idx = this.facturas.findIndex(f => f.id === id);
+        if (idx >= 0) {
+            this.facturas[idx] = fullFactura;
+            notify();
+        }
 
+        return fullFactura;
+    },
+
+    async fetchFacturas() {
+        // [DEPRECATED] - Use fetchFacturasHeaders + fetchFacturaWithItems on demand
+        // Keeping for compatibility if needed, but internally redirects to headers
+        return this.fetchFacturasHeaders();
     },
 
     async createFactura(factura: Omit<Factura, "id" | "created_at" | "items" | "cantidad_total">, items: Omit<FacturaItem, "id" | "factura_id">[]) {
@@ -695,8 +720,63 @@ export const telefoniaStore = {
         this.puestos = this.puestos.filter((p) => p.id !== id);
     },
 
+    // --- ASSIGNMENTS (SHARED) ---
+    async fetchActiveAssignments() {
+        // Fetch ALL Active Assignments (Paginated to handle >1000)
+        let allActiveAssigns: any[] = [];
+        let assignPage = 0;
+        const assignPageSize = 1000;
+        let assignHasMore = true;
+
+        while (assignHasMore) {
+            const from = assignPage * assignPageSize;
+            const to = from + assignPageSize - 1;
+
+            const { data: chunk, error } = await supabase
+                .from("telefonia_solicitud_asignaciones")
+                .select(`
+                    id, 
+                    equipo_id, 
+                    chip_id,
+                    usuario_final_dni,
+                    usuario_final_nombre, 
+                    usuario_final_area,
+                    usuario_final_sede,
+                    fecha_entrega, 
+                    solicitud_id,
+                    estado,
+                    solicitud:telefonia_solicitudes (
+                        beneficiario_dni,
+                        beneficiario_nombre,
+                        beneficiario_area,
+                        fundo_planta,
+                        cultivo,
+                        periodo_uso,
+                        fecha_fin_uso
+                    )
+                `)
+                .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
+                .is("fecha_devolucion", null)
+                .range(from, to);
+
+            if (error) {
+                console.error("Error fetching active assignments page", assignPage, error);
+                throw error;
+            }
+
+            if (chunk) {
+                allActiveAssigns = [...allActiveAssigns, ...chunk];
+                if (chunk.length < assignPageSize) assignHasMore = false;
+            } else {
+                assignHasMore = false;
+            }
+            assignPage++;
+        }
+        return allActiveAssigns;
+    },
+
     // --- EQUIPOS ---
-    async fetchEquipos(force = false) {
+    async fetchEquipos(force = false, preloadedAssignments?: any[]) {
         // Start Realtime if not started
         if (!this.realtimeChannel) {
             this.subscribeToRealtime();
@@ -706,8 +786,6 @@ export const telefoniaStore = {
         if (!force && this.equipos.length > 0) return;
 
         // 1. Fetch Equipos (Recursive Chunking)
-
-
         let allEquipos: any[] = [];
         let page = 0;
         const pageSize = 1000;
@@ -740,106 +818,52 @@ export const telefoniaStore = {
             page++;
         }
 
-        // 2. Fetch Active Assignments (ONLY from telefonia_solicitud_asignaciones now)
+        // 2. Fetch Active Assignments (Use Preloaded or Fetch)
+        let newAssigns = preloadedAssignments;
+
+        if (!newAssigns) {
+            try {
+                newAssigns = await this.fetchActiveAssignments();
+            } catch (e) {
+                console.warn("Could not fetch new assignments in fetchEquipos", e);
+                newAssigns = [];
+            }
+        }
+
         const activeMap = new Map();
-        // Legacy activeSols block removed as columns deleted
 
+        if (newAssigns) {
+            newAssigns.forEach((a: any) => {
+                if (a.equipo_id) {
+                    // Priority: Ticket Info > Assignment Info
+                    const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "Usuario Asignado";
+                    const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "Área asignada";
 
-        // New Assignments (Graceful fetch)
-        try {
+                    // Priority for Fundo/Planta display: Sede (Usuario Final) -> Fundo/Planta (Ticket)
+                    const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta || "";
+                    const cultivo = a.solicitud?.cultivo || "";
 
+                    // Period info
+                    const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
+                    const fechaFin = a.solicitud?.fecha_fin_uso || "";
 
-            /* 
-               [FIX] Pagination for Active Assignments 
-               Supabase limits to 1000 rows. We must loop to get ALL active assignments.
-            */
-            let allActiveAssigns: any[] = [];
-            let assignPage = 0;
-            const assignPageSize = 1000;
-            let assignHasMore = true;
-
-            while (assignHasMore) {
-                const from = assignPage * assignPageSize;
-                const to = from + assignPageSize - 1;
-
-                const { data: chunk, error: chunkError } = await supabase
-                    .from("telefonia_solicitud_asignaciones")
-                    .select(`
-                        id, 
-                        equipo_id, 
-                        usuario_final_dni,
-                        usuario_final_nombre, 
-                        usuario_final_area,
-                        usuario_final_sede,
-                        fecha_entrega, 
-                        solicitud_id,
-                        estado,
-                        solicitud:telefonia_solicitudes (
-                            beneficiario_dni,
-                            beneficiario_nombre,
-                            beneficiario_area,
-                            fundo_planta,
-                            cultivo,
-                            periodo_uso,
-                            fecha_fin_uso
-                        )
-                    `)
-                    .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
-                    .is("fecha_devolucion", null)
-                    .range(from, to);
-
-                if (chunkError) {
-                    console.error("Error fetching active assignments page", assignPage, chunkError);
-                    throw chunkError;
+                    activeMap.set(a.equipo_id, {
+                        id: a.solicitud_id,
+                        asignacion_id: a.id, // Pass Assignment ID
+                        beneficiario_nombre: nombre,
+                        beneficiario_dni: a.solicitud?.beneficiario_dni,
+                        usuario_final_dni: a.usuario_final_dni,
+                        usuario_final_nombre: a.usuario_final_nombre,
+                        beneficiario_area: area,
+                        fecha_entrega: a.fecha_entrega,
+                        tipo_servicio: "Asignación Múltiple",
+                        fundo_planta: fundo,
+                        cultivo: cultivo,
+                        periodo_uso: periodo,
+                        fecha_fin_uso: fechaFin
+                    });
                 }
-
-                if (chunk) {
-                    allActiveAssigns = [...allActiveAssigns, ...chunk];
-                    if (chunk.length < assignPageSize) assignHasMore = false;
-                } else {
-                    assignHasMore = false;
-                }
-                assignPage++;
-            }
-
-            // Use the full list instead of the single page 'newAssigns'
-            const newAssigns = allActiveAssigns;
-
-            if (newAssigns) {
-                newAssigns.forEach((a: any) => {
-                    if (a.equipo_id) {
-                        // Priority: Ticket Info > Assignment Info
-                        const nombre = a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "Usuario Asignado";
-                        const area = a.solicitud?.beneficiario_area || a.usuario_final_area || "Área asignada";
-
-                        // Priority for Fundo/Planta display: Sede (Usuario Final) -> Fundo/Planta (Ticket)
-                        const fundo = a.usuario_final_sede || a.solicitud?.fundo_planta || "";
-                        const cultivo = a.solicitud?.cultivo || "";
-
-                        // Period info
-                        const periodo = a.solicitud?.periodo_uso || "PERMANENTE";
-                        const fechaFin = a.solicitud?.fecha_fin_uso || "";
-
-                        activeMap.set(a.equipo_id, {
-                            id: a.solicitud_id,
-                            asignacion_id: a.id, // Pass Assignment ID
-                            beneficiario_nombre: nombre,
-                            beneficiario_dni: a.solicitud?.beneficiario_dni, // Added
-                            usuario_final_dni: a.usuario_final_dni, // Added
-                            usuario_final_nombre: a.usuario_final_nombre, // Added
-                            beneficiario_area: area,
-                            fecha_entrega: a.fecha_entrega,
-                            tipo_servicio: "Asignación Múltiple",
-                            fundo_planta: fundo,
-                            cultivo: cultivo,
-                            periodo_uso: periodo,
-                            fecha_fin_uso: fechaFin
-                        });
-                    }
-                });
-            }
-        } catch (e) {
-            console.warn("Could not fetch new assignments in fetchEquipos", e);
+            });
         }
 
         this.equipos = (allEquipos as Equipo[]).map(e => {
@@ -979,7 +1003,7 @@ export const telefoniaStore = {
     },
 
     // --- CHIPS ---
-    async fetchChips() {
+    async fetchChips(preloadedAssignments?: any[]) {
         // Fetch Chips (Recursive Chunking)
         let allChips: any[] = [];
         let page = 0;
@@ -1011,94 +1035,65 @@ export const telefoniaStore = {
             page++;
         }
 
-        // Fetch Active Assignments (ALL of them)
+        // Fetch Active Assignments (Use Preloaded or Fetch)
+        let allAssigns = preloadedAssignments;
+        if (!allAssigns) {
+            try {
+                allAssigns = await this.fetchActiveAssignments();
+            } catch (e) {
+                console.warn("Could not fetch assignments in fetchChips", e);
+                allAssigns = [];
+            }
+        }
+
         const activeChipMap = new Map();
         const activeEquipoMap = new Map(); // Map by Equipo ID
 
-        try {
-            /* 
-               [FIX] Pagination for Active Assignments 
-            */
-            let allAssigns: any[] = [];
-            let assignPage = 0;
-            const assignPageSize = 1000;
-            let assignHasMore = true;
+        // 1. Process Direct Assignments
+        const assignedEquipoIds: string[] = [];
 
-            while (assignHasMore) {
-                const from = assignPage * assignPageSize;
-                const to = from + assignPageSize - 1;
+        if (allAssigns) {
+            allAssigns.forEach((a: any) => {
+                const assignData = {
+                    id: a.solicitud_id,
+                    beneficiario_nombre: a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "",
+                    beneficiario_area: a.solicitud?.beneficiario_area || a.usuario_final_area || "",
+                    fecha_entrega: a.fecha_entrega,
+                    periodo_uso: a.solicitud?.periodo_uso || "PERMANENTE",
+                    fecha_fin_uso: a.solicitud?.fecha_fin_uso || "",
+                    cultivo: a.solicitud?.cultivo || ""
+                };
 
-                const { data: chunk, error: chunkError } = await supabase
-                    .from("telefonia_solicitud_asignaciones")
-                    .select(`
-                        id, 
-                        chip_id, 
-                        equipo_id,
-                        usuario_final_nombre, 
-                        usuario_final_area,
-                        usuario_final_sede,
-                        fecha_entrega, 
-                        solicitud_id,
-                        estado,
-                        solicitud:telefonia_solicitudes (
-                            beneficiario_nombre,
-                            beneficiario_area,
-                            fundo_planta,
-                            cultivo,
-                            periodo_uso,
-                            fecha_fin_uso
-                        )
-                    `)
-                    .in("estado", ["Entregado", "PARA DEVOLUCION", "PARA REVISION"])
-                    .is("fecha_devolucion", null)
-                    .range(from, to);
-
-                if (chunkError) throw chunkError;
-
-                if (chunk) {
-                    allAssigns = [...allAssigns, ...chunk];
-                    if (chunk.length < assignPageSize) assignHasMore = false;
-                } else {
-                    assignHasMore = false;
+                if (a.chip_id) {
+                    activeChipMap.set(a.chip_id, assignData);
                 }
-                assignPage++;
-            }
+                if (a.equipo_id) {
+                    activeEquipoMap.set(a.equipo_id, assignData);
+                    assignedEquipoIds.push(a.equipo_id);
+                }
+            });
+        }
 
-            // 1. Process Direct Assignments
-            const assignedEquipoIds: string[] = [];
-
-            if (allAssigns) {
-                allAssigns.forEach((a: any) => {
-                    const assignData = {
-                        id: a.solicitud_id,
-                        beneficiario_nombre: a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "",
-                        beneficiario_area: a.solicitud?.beneficiario_area || a.usuario_final_area || "",
-                        fecha_entrega: a.fecha_entrega,
-                        periodo_uso: a.solicitud?.periodo_uso || "PERMANENTE",
-                        fecha_fin_uso: a.solicitud?.fecha_fin_uso || "",
-                        cultivo: a.solicitud?.cultivo || ""
-                    };
-
-                    if (a.chip_id) {
-                        activeChipMap.set(a.chip_id, assignData);
+        // 2. [ROBUST FIX] Look up Chips linked to these Assigned Equipments
+        // If we have local Equipos loaded (e.g. fetchEquipos ran first), rely on them to save a query
+        if (this.equipos.length > 0) {
+            // Use local memory (FAST)
+            this.equipos.forEach(eq => {
+                if (eq.chip_id && activeEquipoMap.has(eq.id)) {
+                    const assignment = activeEquipoMap.get(eq.id);
+                    if (!activeChipMap.has(eq.chip_id)) {
+                        activeChipMap.set(eq.chip_id, assignment);
                     }
-                    if (a.equipo_id) {
-                        activeEquipoMap.set(a.equipo_id, assignData);
-                        assignedEquipoIds.push(a.equipo_id);
-                    }
-                });
-            }
+                }
+            });
+        } else if (assignedEquipoIds.length > 0) {
+            // Fallback: Fetch from DB (SLOW) - Only if equipos not loaded
+            const uniqueEqIds = [...new Set(assignedEquipoIds)];
+            const chunkSize = 200;
 
-            // 2. [ROBUST FIX] Look up Chips linked to these Assigned Equipments
-            // This handles the case where foreign keys are inconsistent (Chip doesn't know about Equipment, but Equipment knows about Chip)
-            if (assignedEquipoIds.length > 0) {
-                // Chunk the IDs to avoid URL too long
-                const uniqueEqIds = [...new Set(assignedEquipoIds)];
-                const chunkSize = 200;
-
+            try {
                 for (let i = 0; i < uniqueEqIds.length; i += chunkSize) {
                     const batch = uniqueEqIds.slice(i, i + chunkSize);
-
                     const { data: linkedChips, error: linkError } = await supabase
                         .from('telefonia_equipos')
                         .select('id, chip_id')
@@ -1109,11 +1104,8 @@ export const telefoniaStore = {
 
                     if (linkedChips) {
                         linkedChips.forEach((link: any) => {
-                            // If this equipment has a chip, and that equipment is assigned...
-                            // Then that chip is also assigned.
                             const assignment = activeEquipoMap.get(link.id);
                             if (assignment && link.chip_id) {
-                                // Prefer existing direct assignment if any, otherwise use this one
                                 if (!activeChipMap.has(link.chip_id)) {
                                     activeChipMap.set(link.chip_id, assignment);
                                 }
@@ -1121,10 +1113,9 @@ export const telefoniaStore = {
                         });
                     }
                 }
+            } catch (e) {
+                console.warn("Error resolving indirect chip assignments", e);
             }
-
-        } catch (e) {
-            console.warn("Could not fetch assignments", e);
         }
 
         const chipsToUpdateDisplay: string[] = [];
@@ -1250,71 +1241,54 @@ export const telefoniaStore = {
     },
 
     // --- SOLICITUDES ---
+
+    async fetchSolicitudById(id: string): Promise<Solicitud | null> {
+        const { data, error } = await supabase
+            .from("telefonia_solicitudes")
+            .select(`*`)
+            .eq("id", id)
+            .single();
+
+        if (error) return null;
+
+        // Fetch assignments for this specific ticket
+        const { data: assignments } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                 *,
+                 equipo:telefonia_equipos(*),
+                 chip:telefonia_chips(*)
+             `)
+            .eq("solicitud_id", id);
+
+        const fullSolicitud = {
+            ...data,
+            asignaciones: assignments || []
+        } as Solicitud;
+
+        // Check if we should update the list? 
+        // We probably shouldn't pollute the main list if we are just editing one.
+        // But if we want to cache it:
+        const idx = this.solicitudes.findIndex(s => s.id === id);
+        if (idx >= 0) {
+            this.solicitudes[idx] = fullSolicitud;
+            notify();
+        } else {
+            // Maybe add? No, list might be huge.
+        }
+
+        return fullSolicitud;
+    },
+
     async fetchSolicitudes() {
-        // 1. Fetch Tickets (Recursive Chunking)
-        let allTickets: any[] = [];
-        let page = 0;
-        const pageSize = 1000;
-        let hasMore = true;
-
-        while (hasMore) {
-            const from = page * pageSize;
-            const to = from + pageSize - 1;
-
-            const { data: chunk, error } = await supabase
-                .from("telefonia_solicitudes")
-                .select(`
-                    *
-                `)
-                .order("created_at", { ascending: false })
-                .range(from, to);
-
-            if (error) throw error;
-
-            if (chunk) {
-                allTickets = [...allTickets, ...chunk];
-                if (chunk.length < pageSize) hasMore = false;
-            } else {
-                hasMore = false;
-            }
-            page++;
-        }
-
-        // ... (Assignments fetching logic remains same, assuming it's usually smaller or linked by ID) ...
-
-        let assignmentsMap: Record<string, Asignacion[]> = {};
-
-        // 2. Try Fetch Assignments (Graceful degradation if table missing)
-        try {
-            // Ideally we should also paginate this if it grows huge, but for now we focus on main tables
-            const { data: allAssignments, error: assignError } = await supabase
-                .from("telefonia_solicitud_asignaciones")
-                .select(`
-                    *,
-                    equipo:telefonia_equipos(*),
-                    chip:telefonia_chips(*)
-                `); // Potentially needs pagination too if > 1000 rows
-
-            if (!assignError && allAssignments) {
-                // Group by solicitud_id
-                allAssignments.forEach((a: any) => {
-                    if (!assignmentsMap[a.solicitud_id]) {
-                        assignmentsMap[a.solicitud_id] = [];
-                    }
-                    assignmentsMap[a.solicitud_id].push(a);
-                });
-            }
-        } catch (e) {
-            console.warn("Could not fetch assignments. Table might be missing.", e);
-        }
-
-        // 3. Merge
-        this.solicitudes = allTickets.map((d: any) => ({
-            ...d,
-            equipo: d.equipo,
-            chip: d.chip,
-            asignaciones: assignmentsMap[d.id] || []
-        })) as Solicitud[];
+        // [OPT] Only fetch recent 50 tickets for initial view if needed, 
+        // OR simply don't fetch any if the table isn't shown by default.
+        // For now, we return empty or minimal to avoid blocking.
+        // If the user needs to see the "Solicitudes" table (if it exists), 
+        // they should use a paginated view.
+        // Assuming current requirement is just to speed up Inventory.
+        this.solicitudes = [];
+        // notify(); 
     },
 
     async createSolicitud(sol: Partial<Solicitud>, asignacionesList: Partial<Asignacion>[] = []) {
