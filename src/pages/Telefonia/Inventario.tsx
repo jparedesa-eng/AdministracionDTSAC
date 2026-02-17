@@ -41,7 +41,7 @@ import {
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getGerenciasState, subscribeGerencias } from "../../store/gerenciasStore";
-import { getPersonalState, subscribePersonal } from "../../store/personalStore"; // NEW: Import Personal Store
+import { getPersonalState, subscribePersonal, searchByDni } from "../../store/personalStore"; // NEW: Import Personal Store
 import { useAuth } from "../../auth/AuthContext";
 import { BarcodeScanner } from "../../components/ui/BarcodeScanner";
 
@@ -123,6 +123,8 @@ export default function InventarioTelefonia() {
     const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
     const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "", sede: "" }); // Usuario Final
     const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
+    const [responsableLocked, setResponsableLocked] = useState(false);
+    const [usuarioFinalLocked, setUsuarioFinalLocked] = useState(false);
     const [asignacionTicketData, setAsignacionTicketData] = useState({
         ceco: "",
         justificacion: "Asignación Directa de Inventario",
@@ -399,7 +401,9 @@ export default function InventarioTelefonia() {
             cultivo: "",
             paquete_asignado: eq.chip?.plan?.nombre || "" // Auto-fill Plan
         });
-        setSameAsResponsable(true);
+        setSameAsResponsable(false);
+        setResponsableLocked(false);
+        setUsuarioFinalLocked(false);
         setOpenAsignacion(true);
     };
 
@@ -1983,25 +1987,29 @@ export default function InventarioTelefonia() {
                                 maxLength={8}
                                 onChange={async (e) => {
                                     const val = e.target.value.replace(/\D/g, '');
-
-                                    // Local update
                                     let newData = { ...responsableData, dni: val };
 
-                                    // Auto-fill Logic
                                     if (val.length === 8) {
                                         const person = getPersonalState().personal.find(p => p.dni === val);
                                         if (person) {
                                             newData.nombre = person.nombre;
-                                            // newData.area = person.gerenciaNombre || ""; // Removed
+                                            setResponsableLocked(true);
+                                        } else {
+                                            newData.nombre = "";
+                                            setResponsableLocked(false);
+                                            searchByDni(val).then(found => {
+                                                if (found) {
+                                                    setResponsableData(prev => prev.dni === val ? { ...prev, nombre: found.nombre } : prev);
+                                                    setResponsableLocked(true);
+                                                }
+                                            });
                                         }
                                     } else {
-                                        // If DNI is incomplete/edited, clear the name (reset)
                                         newData.nombre = "";
+                                        setResponsableLocked(false);
                                     }
 
                                     setResponsableData(newData);
-
-                                    // Removed validation as per user request (only validate final user)
                                 }}
                                 placeholder="DNI Responsable"
                             />
@@ -2009,11 +2017,11 @@ export default function InventarioTelefonia() {
                             <div className="relative">
                                 <input
                                     required
-                                    className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${getPersonalState().personal.some(p => p.dni === responsableData.dni && responsableData.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                    className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${responsableLocked ? "bg-gray-100 cursor-not-allowed" : ""
                                         }`}
                                     value={responsableData.nombre}
                                     placeholder="Nombre Responsable"
-                                    disabled={getPersonalState().personal.some(p => p.dni === responsableData.dni && responsableData.dni.length === 8)}
+                                    disabled={responsableLocked}
                                     onChange={(e) => {
                                         const val = e.target.value.toUpperCase();
                                         setResponsableData({ ...responsableData, nombre: val });
@@ -2091,20 +2099,26 @@ export default function InventarioTelefonia() {
                                     maxLength={8}
                                     onChange={async (e) => {
                                         const val = e.target.value.replace(/\D/g, '');
-
-                                        // Local Update
                                         let newData = { ...asignacionData, dni: val };
 
-                                        // Auto-fill Logic
                                         if (val.length === 8) {
                                             const person = getPersonalState().personal.find(p => p.dni === val);
                                             if (person) {
                                                 newData.nombre = person.nombre;
-                                                // newData.area = person.gerenciaNombre || ""; // Removed
+                                                setUsuarioFinalLocked(true);
+                                            } else {
+                                                newData.nombre = "";
+                                                setUsuarioFinalLocked(false);
+                                                searchByDni(val).then(found => {
+                                                    if (found) {
+                                                        setAsignacionData(prev => prev.dni === val ? { ...prev, nombre: found.nombre } : prev);
+                                                        setUsuarioFinalLocked(true);
+                                                    }
+                                                });
                                             }
                                         } else {
-                                            // If DNI is incomplete/edited, clear the name (reset)
                                             newData.nombre = "";
+                                            setUsuarioFinalLocked(false);
                                         }
 
                                         setAsignacionData(newData);
@@ -2127,11 +2141,11 @@ export default function InventarioTelefonia() {
                                 {formErrors.dni && <p className="text-xs text-red-600 mt-1 col-span-2">{formErrors.dni}</p>}
                                 <div className="relative">
                                     <input
-                                        className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${getPersonalState().personal.some(p => p.dni === asignacionData.dni && asignacionData.dni.length === 8) ? "bg-gray-100 cursor-not-allowed" : ""
+                                        className={`block w-full rounded-md border-gray-300 sm:text-sm border p-2 case-upper ${usuarioFinalLocked ? "bg-gray-100 cursor-not-allowed" : ""
                                             }`}
                                         value={asignacionData.nombre}
                                         placeholder="Nombre Usuario"
-                                        disabled={getPersonalState().personal.some(p => p.dni === asignacionData.dni && asignacionData.dni.length === 8)}
+                                        disabled={usuarioFinalLocked}
                                         onChange={(e) => {
                                             const val = e.target.value.toUpperCase();
                                             setAsignacionData({ ...asignacionData, nombre: val });
