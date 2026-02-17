@@ -682,28 +682,46 @@ export default function Solicitar() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Inicio de uso
+                  Inicio de uso <span className="text-red-500">*</span>
                 </label>
                 <div className="relative mt-1">
                   <Calendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
                     type="datetime-local"
                     value={usoInicioLocal}
-                    onChange={(e) => setUsoInicioLocal(e.target.value)}
+                    onChange={(e) => {
+                      const newStart = e.target.value;
+                      setUsoInicioLocal(newStart);
+
+                      // Al cambiar inicio, actualizamos fin para que tenga la misma fecha
+                      // pero mantenemos la hora que ya tenía fin (o reseteamos si se prefiere).
+                      // Aquí mantenemos la hora que tenía fin.
+                      if (newStart && usoFinLocal) {
+                        const datePart = newStart.slice(0, 10);
+                        const timePart = usoFinLocal.slice(11, 16);
+                        setUsoFinLocal(`${datePart}T${timePart}`);
+                      }
+                    }}
                     className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
                 </div>
               </div>
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Fin de uso
+                  Fin de uso <span className="text-red-500">*</span>
                 </label>
                 <div className="relative mt-1">
                   <Calendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
-                    type="datetime-local"
-                    value={usoFinLocal}
-                    onChange={(e) => setUsoFinLocal(e.target.value)}
+                    type="time"
+                    value={usoFinLocal.slice(11, 16)}
+                    onChange={(e) => {
+                      const timeStr = e.target.value;
+                      if (!timeStr) return;
+                      // Mantener la fecha de inicio, cambiar solo la hora
+                      const datePart = usoInicioLocal.slice(0, 10);
+                      setUsoFinLocal(`${datePart}T${timeStr}`);
+                    }}
                     className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
                 </div>
@@ -712,7 +730,7 @@ export default function Solicitar() {
 
             <div>
               <label className="text-sm font-medium text-gray-700">
-                Camioneta disponible
+                Camioneta disponible <span className="text-red-500">*</span>
               </label>
               <select
                 value={selectedPlaca}
@@ -738,7 +756,7 @@ export default function Solicitar() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  DNI Conductor
+                  DNI Conductor <span className="text-red-500">*</span>
                 </label>
                 <input
                   inputMode="numeric"
@@ -765,7 +783,7 @@ export default function Solicitar() {
               </div>
               <div className="md:col-span-2">
                 <label className="text-sm font-medium text-gray-700">
-                  Nombre Conductor
+                  Nombre Conductor <span className="text-red-500">*</span>
                 </label>
                 <input
                   value={nombre}
@@ -779,7 +797,7 @@ export default function Solicitar() {
             {/* Nuevo campo CECO */}
             <div>
               <label className="text-sm font-medium text-gray-700">
-                CECO
+                CECO <span className="text-red-500">*</span>
               </label>
               <input
                 inputMode="numeric"
@@ -803,7 +821,7 @@ export default function Solicitar() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Origen
+                  Origen <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={origen}
@@ -817,7 +835,7 @@ export default function Solicitar() {
 
               <div>
                 <label className="text-sm font-medium text-gray-700">
-                  Destino
+                  Destino <span className="text-red-500">*</span>
                 </label>
                 <select
                   value={destino}

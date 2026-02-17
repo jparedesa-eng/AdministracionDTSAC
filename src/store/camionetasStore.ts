@@ -278,14 +278,49 @@ export const camionetasStore = {
     if (usables.length === 0) return [];
 
     // Reservas que se solapan
+    // Importante: Hacemos join con solicitudes para ver si el ticket sigue activo.
+    // Si el ticket está 'Cerrada', 'Cancelado' o 'Rechazada', ignoramos esa reserva
+    // (aunque el rango de horas en reservas_vehiculo siga ocupado).
     const { data, error } = await supabase
       .from("reservas_vehiculo")
-      .select("placa, uso_inicio, uso_fin")
+      .select(`
+        placa,
+        uso_inicio,
+        uso_fin,
+        solicitudes (
+          estado
+        )
+      `)
       .lt("uso_inicio", fin)
       .gt("uso_fin", inicio);
     if (error) throw error;
 
-    const ocupadas = new Set<string>((data ?? []).map((r: any) => r.placa as string));
+    const ocupadas = new Set<string>();
+
+    if (data) {
+      for (const r of data) {
+        const s = (r as any).solicitudes;
+        // Si no hay solicitud linkeada (casos raros) o si el estado es activo:
+        // Activos: Pendiente, Asignada, Reservada, En uso.
+        // Inactivos (liberan): Cancelado, Rechazada, Cerrada, Vencido.
+
+        // Ojo: s puede ser un objeto o array dependiendo de la relación. Asumimos objeto (1:1 o N:1).
+        // Si es array, tomamos el primero.
+        const estado = Array.isArray(s) ? s[0]?.estado : s?.estado;
+
+        // Si no hay estado (data legacy sin solicitud id?), asumimos ocupado por seguridad.
+        if (!estado) {
+          ocupadas.add(r.placa as string);
+          continue;
+        }
+
+        const activo = ["Pendiente", "Asignada", "Reservada", "En uso"].includes(estado);
+        if (activo) {
+          ocupadas.add(r.placa as string);
+        }
+      }
+    }
+
     return usables.filter((v) => !ocupadas.has(v.placa)).map((v) => v.placa);
   },
 
@@ -499,20 +534,77 @@ export const camionetasStore = {
     }
   },
 
-  /** Entrega: SOLO cambia la solicitud a "En uso". No toca vehiculos.estado */
-  async marcarEntrega(id: string): Promise<void> {
+  /* =========================================================
+   * Garita Actions (Entregar / Devolver con lógica de disponibilidad)
+   * ======================================================= */
+
+  /**
+   * Entregar llave en garita -> Estado "En uso"
+   * Registra fecha/hora real de entrega.
+   */
+  async entregarVehiculoGarita(id: string): Promise<void> {
+    const ahoraISO = new Date().toISOString();
+
     const { data: sUpd, error: e1 } = await supabase
       .from("solicitudes")
-      .update({ estado: "En uso" })
+      .update({
+        estado: "En uso",
+        entrega_garita_at: ahoraISO,
+      })
       .eq("id", id)
       .select("*")
       .single();
+
     if (e1) throw e1;
 
     const s = sFromRow(sUpd as SolicitudRow);
-
     const idx = this.solicitudes.findIndex((x) => x.id === id);
     if (idx >= 0) this.solicitudes[idx] = s;
+  },
+
+  /**
+   * Terminar uso en garita -> Estado "Cerrada"
+   * Registra fecha/hora real de término.
+   * IMPORTANTE: Libera el horario en reservas_vehiculo estableciendo uso_fin = NOW()
+   */
+  async terminarUsoGarita(id: string): Promise<void> {
+    const ahoraISO = new Date().toISOString();
+
+    // 1. Actualizar solicitud
+    const { data: sUpd, error: e1 } = await supabase
+      .from("solicitudes")
+      .update({
+        estado: "Cerrada",
+        termino_uso_garita_at: ahoraISO,
+      })
+      .eq("id", id)
+      .select("*")
+      .single();
+
+    if (e1) throw e1;
+
+    // 2. Liberar disponibilidad: actualizar uso_fin en la reserva asociada
+    //    Para que si se devolvió antes, el resto del tiempo quede libre.
+    const { error: e2 } = await supabase
+      .from("reservas_vehiculo")
+      .update({
+        uso_fin: ahoraISO,
+      })
+      .eq("solicitud_id", id);
+
+    if (e2) {
+      console.warn("No se pudo liberar la reserva (update uso_fin)", e2);
+      // No lanzamos error fatal, ya se cerró el ticket. Pero es un warning.
+    }
+
+    const s = sFromRow(sUpd as SolicitudRow);
+    const idx = this.solicitudes.findIndex((x) => x.id === id);
+    if (idx >= 0) this.solicitudes[idx] = s;
+  },
+
+  /** Entrega: SOLO cambia la solicitud a "En uso". No toca vehiculos.estado */
+  async marcarEntrega(id: string): Promise<void> {
+    return this.entregarVehiculoGarita(id);
   },
 
   /** Devolución: cierra la solicitud más reciente para la placa. No toca vehiculos.estado */
@@ -528,18 +620,9 @@ export const camionetasStore = {
 
     const target = (sRows as SolicitudRow[] | null)?.[0];
     if (target) {
-      const { data: sClosed, error: e2 } = await supabase
-        .from("solicitudes")
-        .update({ estado: "Cerrada" })
-        .eq("id", target.id)
-        .select("*")
-        .single();
-      if (e2) throw e2;
-
-      const sIdx = this.solicitudes.findIndex((x) => x.id === target.id);
-      if (sIdx >= 0) this.solicitudes[sIdx] = sFromRow(sClosed as SolicitudRow);
+      // Reutilizamos la lógica que libera disponibilidad
+      await this.terminarUsoGarita(target.id);
     }
-
     // No tocar vehiculos.estado
   },
 

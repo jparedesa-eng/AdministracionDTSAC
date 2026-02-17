@@ -156,17 +156,16 @@ export default function Garita() {
 
       // Campos extra de tiempo en garita
       if (puedePasarAEnUso) {
+        await camionetasStore.entregarVehiculoGarita(ticket.id);
         updates.entrega_garita_at = ahoraISO;
       } else if (puedePasarACerrada) {
+        await camionetasStore.terminarUsoGarita(ticket.id);
         updates.termino_uso_garita_at = ahoraISO;
       }
 
-      const { error } = await supabase
-        .from("solicitudes")
-        .update(updates)
-        .eq("id", ticket.id);
+      // El store ya hizo el update en Supabase y en su cache local.
+      // Solo actualizamos el estado local del componente para reflejar cambios en UI inmediata
 
-      if (error) throw error;
 
       setTicket((prev: any) => (prev ? { ...prev, ...updates } : prev));
       await camionetasStore.syncSolicitudes();
