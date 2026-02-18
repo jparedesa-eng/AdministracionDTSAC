@@ -142,6 +142,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeSeg_ReportingManager = hasAccess("/seguimiento-agentes/reporting-manager");
   const canSeeSeg_AgentReport = hasAccess("/seguimiento-agentes/agent-report");
   const canSeeSeg_RISP = hasAccess("/risp/historial"); // New permission check
+  const canSeeSeg_Terceros = hasAccess("/seguridad/terceros");
   const canSeeAyuda = hasAccess("/ayuda");
 
 
@@ -265,6 +266,11 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     if (rispSubItems.length > 0) {
       seguridadItems.push({ id: 'seg-risp', label: 'RISP', icon: ShieldCheck, subItems: rispSubItems });
+    }
+
+    // 6. Terceros
+    if (canSeeSeg_Terceros) {
+      seguridadItems.push({ id: 'seg-terceros', label: 'Seguridad Terceros', path: '/seguridad/terceros', icon: Users });
     }
 
     if (seguridadItems.length > 0) {

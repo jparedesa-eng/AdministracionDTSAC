@@ -130,12 +130,18 @@ export default function Historial() {
             return;
         }
 
+        // Prepare data for save - convert empty strings to null for date fields
+        const dataToSave = {
+            ...formData,
+            fecha_cumplimiento: formData.fecha_cumplimiento === '' ? null : formData.fecha_cumplimiento
+        };
+
         try {
             if (selectedItem) {
-                await rispStore.updateRisp(selectedItem.id, formData);
+                await rispStore.updateRisp(selectedItem.id, dataToSave as any);
                 setToast({ type: "success", message: "Registro actualizado." });
             } else {
-                await rispStore.createRisp(formData as HechoRisp);
+                await rispStore.createRisp(dataToSave as any);
                 setToast({ type: "success", message: "Nuevo RISP creado." });
             }
             setModalOpen(false);

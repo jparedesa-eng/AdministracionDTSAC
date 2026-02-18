@@ -89,6 +89,9 @@ import MantenedorJefaturas from "./pages/RISP/MantenedorJefaturas";
 import MantenedorAreas from "./pages/RISP/MantenedorAreas";
 import MantenedorIncidentes from "./pages/RISP/MantenedorIncidentes";
 
+/* SegTercero */
+import ControlServicios from "./pages/SegTercero/ControlServicios";
+
 
 
 /* Errores */
@@ -713,6 +716,17 @@ export default function App() {
 
 
 
+
+
+          {/* SEGURIDAD: Terceros */}
+          <Route
+            path="/seguridad/terceros"
+            element={
+              <ProtectedRoute path="/seguridad/terceros">
+                <ControlServicios />
+              </ProtectedRoute>
+            }
+          />
 
           {/* 403 (protegido) */}
           <Route
