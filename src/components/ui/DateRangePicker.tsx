@@ -256,8 +256,8 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
                         {/* Days Grid */}
                         <div className="grid grid-cols-7 gap-1 mb-2">
-                            {["D", "L", "M", "M", "J", "V", "S"].map(d => (
-                                <div key={d} className="h-8 w-8 flex items-center justify-center text-xs font-bold text-gray-400">
+                            {["D", "L", "M", "M", "J", "V", "S"].map((d, index) => (
+                                <div key={index} className="h-8 w-8 flex items-center justify-center text-xs font-bold text-gray-400">
                                     {d}
                                 </div>
                             ))}

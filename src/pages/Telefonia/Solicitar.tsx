@@ -1406,7 +1406,7 @@ export default function SolicitarTelefonia() {
                                 >
                                     <option value="">Seleccione...</option>
                                     <option value="Solicitar Equipo">Solicitar Equipo</option>
-                                    <option value="Línea Nueva (SOLO CHIP)">Solicitar Línea Nueva (SOLO CHIP)</option>
+                                    <option value="Línea Nueva (SOLO CHIP)">Solicitar Chip</option>
                                     <option value="Renovación">Renovación de Equipo</option>
                                     <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
                                 </select>

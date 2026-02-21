@@ -18,8 +18,8 @@ export default function HistorialTelefonia() {
     const [searchTerm, setSearchTerm] = useState("");
 
     // Filters
-    const [appliedStartDate, setAppliedStartDate] = useState("");
-    const [appliedEndDate, setAppliedEndDate] = useState("");
+    const [appliedStartDate, setAppliedStartDate] = useState<Date | null>(null);
+    const [appliedEndDate, setAppliedEndDate] = useState<Date | null>(null);
     const [hasAppliedFilter, setHasAppliedFilter] = useState(false);
 
     // Pagination
@@ -38,12 +38,12 @@ export default function HistorialTelefonia() {
 
     const handleDateRangeApply = (range: { start: Date | null; end: Date | null }) => {
         if (range.start && range.end) {
-            setAppliedStartDate(range.start.toISOString().split('T')[0]);
-            setAppliedEndDate(range.end.toISOString().split('T')[0]);
+            setAppliedStartDate(range.start);
+            setAppliedEndDate(range.end);
             setHasAppliedFilter(true);
         } else {
-            setAppliedStartDate("");
-            setAppliedEndDate("");
+            setAppliedStartDate(null);
+            setAppliedEndDate(null);
             setHasAppliedFilter(false);
         }
     };
@@ -68,16 +68,16 @@ export default function HistorialTelefonia() {
 
             // 3. Date Range Filter using APPLIED dates
             if (appliedStartDate || appliedEndDate) {
-                const ticketDate = new Date(t.created_at).setHours(0, 0, 0, 0);
+                const ticketDateValue = new Date(t.created_at).getTime();
 
                 if (appliedStartDate) {
                     const start = new Date(appliedStartDate).setHours(0, 0, 0, 0);
-                    if (ticketDate < start) return false;
+                    if (ticketDateValue < start) return false;
                 }
 
                 if (appliedEndDate) {
                     const end = new Date(appliedEndDate).setHours(23, 59, 59, 999);
-                    if (ticketDate > end) return false;
+                    if (ticketDateValue > end) return false;
                 }
             }
 
@@ -106,7 +106,12 @@ export default function HistorialTelefonia() {
     // PDF Download
     const handleDownloadPDF = async (ticket: Solicitud) => {
         try {
-            await generateTicketPDF(ticket);
+            const fullTicket = await telefoniaStore.fetchSolicitudById(ticket.id);
+            if (fullTicket) {
+                await generateTicketPDF(fullTicket);
+            } else {
+                alert("No se pudo cargar el detalle del ticket");
+            }
         } catch (e) {
             alert("Error generando PDF");
             console.error(e);

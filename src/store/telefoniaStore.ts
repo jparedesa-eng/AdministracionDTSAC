@@ -1281,14 +1281,18 @@ export const telefoniaStore = {
     },
 
     async fetchSolicitudes() {
-        // [OPT] Only fetch recent 50 tickets for initial view if needed, 
-        // OR simply don't fetch any if the table isn't shown by default.
-        // For now, we return empty or minimal to avoid blocking.
-        // If the user needs to see the "Solicitudes" table (if it exists), 
-        // they should use a paginated view.
-        // Assuming current requirement is just to speed up Inventory.
-        this.solicitudes = [];
-        // notify(); 
+        const { data, error } = await supabase
+            .from("telefonia_solicitudes")
+            .select('*')
+            .order('created_at', { ascending: false });
+
+        if (error) {
+            console.error("Error fetching solicitudes:", error);
+            this.solicitudes = [];
+        } else {
+            this.solicitudes = data as Solicitud[];
+        }
+        notify();
     },
 
     async createSolicitud(sol: Partial<Solicitud>, asignacionesList: Partial<Asignacion>[] = []) {
