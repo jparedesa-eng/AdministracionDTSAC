@@ -295,7 +295,7 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
             ticket.chip?.numero_linea || "-",
             ticket.beneficiario_nombre || "-"
         ]);
-    } else if (ticket.tipo_solicitud === "Línea Nueva (SOLO CHIP)") {
+    } else if (ticket.tipo_solicitud === "Solicitar Chip") {
         // SOLO CHIP (Legacy Single)
         const destType = ticket.tipo_equipo_destino || "Equipo";
         const destCode = ticket.codigo_equipo_destino || "?";

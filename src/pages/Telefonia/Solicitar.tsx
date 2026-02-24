@@ -439,7 +439,7 @@ export default function SolicitarTelefonia() {
                 if (formData.n_linea === "Solicitar Equipo" && !formData.condicion_equipo) {
                     newErrors.condicion_equipo = "Debe seleccionar si requiere Equipo Nuevo o de Segundo Uso.";
                 }
-                if (formData.n_linea !== "Línea Nueva (SOLO CHIP)" && !formData.perfil_puesto) {
+                if (formData.n_linea !== "Solicitar Chip" && !formData.perfil_puesto) {
                     newErrors.perfil_puesto = "Seleccione el Perfil del Puesto";
                 }
                 if (formData.tipo_servicio !== "PAQUETE ASIGNADO" && !formData.tipo_servicio) newErrors.tipo_servicio = "Seleccione el Operador";
@@ -462,7 +462,11 @@ export default function SolicitarTelefonia() {
         }
 
         if (step === 3) {
-            if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+            if (!formData.justificacion) newErrors.justificacion = "Ingrese una justificación";
+        }
+
+        if (step === 4) {
+            if (formData.n_linea === "Solicitar Chip") {
                 const invalidTarget = chipTargets.find(t => !t.type || !t.imei);
                 if (invalidTarget) {
                     return { general: "Complete todos los campos de Equipo de Destino (Tipo e IMEI) para cada solicitud." };
@@ -473,10 +477,6 @@ export default function SolicitarTelefonia() {
                     if (invalid) return { general: "Complete todos los datos de los beneficiarios (DNI, Nombre y Sede)." };
                 }
             }
-        }
-
-        if (step === 4) {
-            if (!formData.justificacion) newErrors.justificacion = "Ingrese una justificación";
         }
 
         return Object.keys(newErrors).length > 0 ? newErrors : null;
@@ -500,39 +500,8 @@ export default function SolicitarTelefonia() {
         // Clear errors if valid
         setErrors({});
 
-        // --- STEP 3: BLOCKING VALIDATION (Active Assignment Check) ---
-        if (currentStep === 3 && !skipBeneficiaries && formData.n_linea !== "Línea Nueva (SOLO CHIP)") {
-            // Validate all beneficiaries
-            // Validate all beneficiaries
-            setSubmitting(true);
-            setBeneficiaryErrors({}); // Reset previous errors
-
-            let hasActive = false;
-            const newBeneficiaryErrors: Record<number, string> = {};
-
-            for (let i = 0; i < beneficiaries.length; i++) {
-                const b = beneficiaries[i];
-                if (b.dni && b.dni.length === 8) {
-                    const check = await telefoniaStore.checkActiveAssignment(b.dni);
-                    if (check.exists) {
-                        hasActive = true;
-                        newBeneficiaryErrors[i] = check.message || "Usuario ya tiene asignación activa.";
-                    }
-                }
-            }
-
-            setSubmitting(false);
-
-            if (hasActive) {
-                setBeneficiaryErrors(newBeneficiaryErrors);
-                setToast({ type: 'error', message: "Existen beneficiarios con asignaciones activas. Revise los campos marcados." });
-                return; // Block
-            }
-        }
-        // -----------------------------------------------------------
-
-        // Prepare Beneficiaries State when moving to Step 2 (Beneficiaries)
-        if (currentStep === 2 && formData.cantidad_lineas > 0) {
+        // --- STEP 4 PREPARATION (Beneficiarios) ---
+        if (currentStep === 3 && formData.cantidad_lineas > 0) {
             // Find selected Puesto Name
             const selectedPuesto = telefoniaStore.puestos.find(p => p.id === formData.perfil_puesto);
             const puestoName = selectedPuesto ? selectedPuesto.nombre : "";
@@ -573,7 +542,7 @@ export default function SolicitarTelefonia() {
         // SKIP STEP 3 logic removed for Solo Chip as it now uses Step 3
 
         /* 
-        if (currentStep === 2 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+        if (currentStep === 2 && formData.n_linea === "Solicitar Chip") {
             setCurrentStep(4);
             return;
         } 
@@ -584,7 +553,7 @@ export default function SolicitarTelefonia() {
 
     const prevStep = () => {
         /*
-        if (currentStep === 4 && formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+        if (currentStep === 4 && formData.n_linea === "Solicitar Chip") {
             setCurrentStep(2);
             return;
         }
@@ -721,10 +690,38 @@ export default function SolicitarTelefonia() {
             if (validationErrors.general) {
                 setToast({ type: "error", message: validationErrors.general });
             } else {
-                setToast({ type: "error", message: "Faltan campos por completar." });
+                setToast({ type: "error", message: "Faltan campos por completar en Beneficiarios." });
             }
             return;
         }
+
+        // --- STEP 4: BLOCKING VALIDATION (Active Assignment Check) ---
+        if (!skipBeneficiaries && formData.n_linea !== "Solicitar Chip") {
+            setSubmitting(true);
+            setBeneficiaryErrors({});
+
+            let hasActive = false;
+            const newBeneficiaryErrors: Record<number, string> = {};
+
+            for (let i = 0; i < beneficiaries.length; i++) {
+                const b = beneficiaries[i];
+                if (b.dni && b.dni.length === 8) {
+                    const check = await telefoniaStore.checkActiveAssignment(b.dni);
+                    if (check.exists) {
+                        hasActive = true;
+                        newBeneficiaryErrors[i] = check.message || "Usuario ya tiene asignación activa.";
+                    }
+                }
+            }
+
+            if (hasActive) {
+                setBeneficiaryErrors(newBeneficiaryErrors);
+                setToast({ type: 'error', message: "Existen beneficiarios con asignaciones activas. Revise los campos marcados." });
+                setSubmitting(false);
+                return; // Block submission
+            }
+        }
+        // -----------------------------------------------------------
 
         setSubmitting(true);
         try {
@@ -780,7 +777,7 @@ export default function SolicitarTelefonia() {
                 // Requirement: "modificar su ticket". Usually implies re-submission -> Reset to initial state? 
                 // Let's reset to "Revisión Admin" / "Pendiente Gerencia" to be safe.
 
-                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.n_linea === "Línea Nueva (SOLO CHIP)" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
+                estado: (formData.n_linea === "Reposición" || formData.n_linea === "Renovación" || formData.n_linea === "Solicitar Equipo" || formData.n_linea === "Línea Nueva" || formData.n_linea === "Solicitar Chip" || formData.tipo_servicio === "REPOSICIÓN") ? "Revisión Admin" : "Pendiente Gerencia",
                 // created_by: user?.id, deprecated
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
@@ -792,7 +789,7 @@ export default function SolicitarTelefonia() {
 
             let assignmentsPayload: any[] = [];
 
-            if (formData.n_linea === "Línea Nueva (SOLO CHIP)") {
+            if (formData.n_linea === "Solicitar Chip") {
                 // Map chipTargets to assignments
                 assignmentsPayload = chipTargets.map(t => ({
                     tipo_equipo_destino: t.type,
@@ -1002,7 +999,7 @@ export default function SolicitarTelefonia() {
     const renderConfigurationDetails = () => {
         const selectedPuesto = telefoniaStore.puestos.find(p => p.id === formData.perfil_puesto);
         // LOCK SERVICE if standard flow and no profile selected. PROCEED if Solo Chip.
-        const isServiceLocked = (formData.n_linea !== "Línea Nueva (SOLO CHIP)" && !formData.perfil_puesto) || !!selectedPuesto?.plan;
+        const isServiceLocked = (formData.n_linea !== "Solicitar Chip" && !formData.perfil_puesto) || !!selectedPuesto?.plan;
 
         return (
             <div className="space-y-6 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
@@ -1147,7 +1144,7 @@ export default function SolicitarTelefonia() {
                         {/* SOLO CHIP EXTRA FIELDS REMOVED FROM HERE - MOVED TO STEP 3 */}
 
                         {/* PUESTO DROPDOWN (NEW) - MOVED TO TOP. Hide for Solo Chip */}
-                        {formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                        {formData.n_linea !== "Solicitar Chip" && (
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">
                                     Perfil del Puesto <span className="text-gray-400 font-normal normal-case float-right">(Sugerido)</span>
@@ -1166,7 +1163,7 @@ export default function SolicitarTelefonia() {
                         )}
 
                         {/* SUGGESTED EQUIPMENT CARD */}
-                        {suggestedModel && formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                        {suggestedModel && formData.n_linea !== "Solicitar Chip" && (
                             <div className="p-3 bg-gray-50 border border-gray-200 rounded-lg flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="p-2 bg-white rounded-md border border-gray-200">
@@ -1182,11 +1179,18 @@ export default function SolicitarTelefonia() {
 
                         {/* CONDICION EQUIPO SELECTION (Solicitar Equipo ONLY) - MOVED BELOW PUESTO AND CONDITIONAL */}
                         {formData.n_linea === "Solicitar Equipo" && formData.perfil_puesto && (
-                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 animate-in fade-in slide-in-from-top-2">
-                                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-                                    Seleccione Condición del Equipo
-                                </label>
-                                <div className="flex gap-4">
+                            <div className={`p-5 rounded-xl border transition-all duration-300 animate-in fade-in slide-in-from-top-2 ${!formData.condicion_equipo ? 'bg-indigo-50/50 border-indigo-200 shadow-inner' : 'bg-white border-gray-100 shadow-sm'}`}>
+                                <div className="flex items-center justify-between mb-4">
+                                    <label className="block text-xs font-bold text-gray-700 uppercase tracking-wide">
+                                        Condición del Equipo <span className="text-red-500">*</span>
+                                    </label>
+                                    {!formData.condicion_equipo && (
+                                        <span className="text-[10px] font-bold text-indigo-600 bg-indigo-100 px-2 py-0.5 rounded-full animate-pulse border border-indigo-200">
+                                            ¡Selección Requerida!
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="flex flex-col sm:flex-row gap-3">
                                     {/* SEGUNDO USO */}
                                     {(() => {
                                         // Smart Check: Filter by Model if Puesto has a recommended model
@@ -1196,8 +1200,6 @@ export default function SolicitarTelefonia() {
                                         const secondUseCount = telefoniaStore.equipos.filter(e => {
                                             const isAvailable = e.estado === "Disponible" && e.condicion === "Segundo Uso";
                                             if (!isAvailable) return false;
-                                            // If we have a recommended model, strictly check it? Or loosen it?
-                                            // User likely wants the specific model if defined.
                                             if (recommendedModelName) {
                                                 return e.modelo === recommendedModelName;
                                             }
@@ -1211,18 +1213,18 @@ export default function SolicitarTelefonia() {
                                                 type="button"
                                                 disabled={!isAvailable}
                                                 onClick={() => setFormData({ ...formData, condicion_equipo: "Segundo Uso" })}
-                                                className={`flex-1 p-3 rounded-md border text-left transition-all relative ${formData.condicion_equipo === "Segundo Uso"
-                                                    ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
+                                                className={`flex-1 p-4 rounded-xl border-2 text-left transition-all relative ${formData.condicion_equipo === "Segundo Uso"
+                                                    ? "bg-indigo-50 border-indigo-500 shadow-md ring-4 ring-indigo-500/10"
                                                     : isAvailable
-                                                        ? "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
-                                                        : "bg-gray-100 border-gray-200 text-gray-400 cursor-not-allowed opacity-60"
+                                                        ? "bg-white border-gray-100 text-gray-700 hover:border-gray-300 hover:shadow-sm"
+                                                        : "bg-gray-50 border-gray-100 text-gray-400 cursor-not-allowed opacity-60"
                                                     }`}
                                             >
                                                 <div className="flex justify-between items-start">
                                                     <div>
-                                                        <span className={`block text-sm font-bold ${formData.condicion_equipo === "Segundo Uso" ? "text-white" : "text-gray-900"}`}>Segundo Uso</span>
-                                                        <span className={`text-xs block mt-0.5 ${formData.condicion_equipo === "Segundo Uso"
-                                                            ? "text-indigo-100"
+                                                        <span className={`block text-sm font-bold ${formData.condicion_equipo === "Segundo Uso" ? "text-indigo-900" : "text-gray-900"}`}>Segundo Uso</span>
+                                                        <span className={`text-[10px] block mt-1 ${formData.condicion_equipo === "Segundo Uso"
+                                                            ? "text-indigo-600 font-medium"
                                                             : isAvailable ? "text-green-600 font-medium" : "text-gray-500"}`}>
                                                             {isAvailable
                                                                 ? `(Disponible${recommendedModelName ? `: ${recommendedModelName}` : ''})`
@@ -1230,7 +1232,9 @@ export default function SolicitarTelefonia() {
                                                             }
                                                         </span>
                                                     </div>
-                                                    {formData.condicion_equipo === "Segundo Uso" && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                                    <div className={`w-5 h-5 rounded-full flex items-center justify-center border transition-colors ${formData.condicion_equipo === "Segundo Uso" ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300 bg-gray-50"}`}>
+                                                        {formData.condicion_equipo === "Segundo Uso" && <CheckCircle2 className="w-3 h-3" />}
+                                                    </div>
                                                 </div>
                                             </button>
                                         );
@@ -1240,17 +1244,19 @@ export default function SolicitarTelefonia() {
                                     <button
                                         type="button"
                                         onClick={() => setFormData({ ...formData, condicion_equipo: "Nuevo" })}
-                                        className={`flex-1 p-3 rounded-md border text-left transition-all ${formData.condicion_equipo === "Nuevo"
-                                            ? "bg-indigo-600 border-indigo-600 text-white shadow-sm"
-                                            : "bg-white border-gray-300 text-gray-700 hover:border-gray-400 hover:bg-gray-50"
+                                        className={`flex-1 p-4 rounded-xl border-2 text-left transition-all ${formData.condicion_equipo === "Nuevo"
+                                            ? "bg-indigo-50 border-indigo-500 shadow-md ring-4 ring-indigo-500/10"
+                                            : "bg-white border-gray-100 text-gray-700 hover:border-gray-300 hover:shadow-sm"
                                             }`}
                                     >
                                         <div className="flex justify-between items-start">
                                             <div>
-                                                <span className={`block text-sm font-bold ${formData.condicion_equipo === "Nuevo" ? "text-white" : "text-gray-900"}`}>Nuevo</span>
-                                                <span className={`text-xs block mt-0.5 ${formData.condicion_equipo === "Nuevo" ? "text-indigo-100" : "text-amber-600 font-medium"}`}>(Requiere Autorización)</span>
+                                                <span className={`block text-sm font-bold ${formData.condicion_equipo === "Nuevo" ? "text-indigo-900" : "text-gray-900"}`}>Equipo Nuevo</span>
+                                                <span className={`text-[10px] block mt-1 ${formData.condicion_equipo === "Nuevo" ? "text-indigo-600 font-medium" : "text-amber-600 font-medium"}`}>(Sujeto a Autorización)</span>
                                             </div>
-                                            {formData.condicion_equipo === "Nuevo" && <CheckCircle2 className="w-5 h-5 text-white" />}
+                                            <div className={`w-5 h-5 rounded-full flex items-center justify-center border transition-colors ${formData.condicion_equipo === "Nuevo" ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300 bg-gray-50"}`}>
+                                                {formData.condicion_equipo === "Nuevo" && <CheckCircle2 className="w-3 h-3" />}
+                                            </div>
                                         </div>
                                     </button>
                                 </div>
@@ -1406,7 +1412,7 @@ export default function SolicitarTelefonia() {
                                 >
                                     <option value="">Seleccione...</option>
                                     <option value="Solicitar Equipo">Solicitar Equipo</option>
-                                    <option value="Línea Nueva (SOLO CHIP)">Solicitar Chip</option>
+                                    <option value="Solicitar Chip">Solicitar Chip</option>
                                     <option value="Renovación">Renovación de Equipo</option>
                                     <option value="Reposición">Reposición por Robo/Pérdida/Deterioro</option>
                                 </select>
@@ -1501,16 +1507,16 @@ export default function SolicitarTelefonia() {
             case 2:
                 return renderConfigurationDetails();
 
-            case 3:
+            case 4:
                 return (
                     <div className="space-y-4 animate-in fade-in slide-in-from-right-2 duration-300 pt-2">
                         <div className="flex items-center justify-between border-b border-gray-100 pb-2">
                             <div className="flex items-center gap-3">
                                 <h3 className="text-sm font-bold text-gray-900 flex items-center gap-2">
-                                    <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">3</span>
-                                    {formData.n_linea === "Línea Nueva (SOLO CHIP)" ? "Equipos de Destino" : "Lista de Beneficiarios"}
+                                    <span className="bg-indigo-100 text-indigo-700 w-6 h-6 rounded-full flex items-center justify-center text-xs">4</span>
+                                    {formData.n_linea === "Solicitar Chip" ? "Equipos de Destino" : "Lista de Beneficiarios"}
                                 </h3>
-                                {formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                                {formData.n_linea !== "Solicitar Chip" && (
                                     <button
                                         type="button"
                                         onClick={() => setSkipBeneficiaries(!skipBeneficiaries)}
@@ -1531,7 +1537,7 @@ export default function SolicitarTelefonia() {
                             </div>
                         </div>
 
-                        {formData.n_linea === "Línea Nueva (SOLO CHIP)" ? (
+                        {formData.n_linea === "Solicitar Chip" ? (
                             <div className="space-y-4 max-h-[500px] overflow-y-auto pr-2 custom-scrollbar">
                                 {chipTargets.map((target, idx) => (
                                     <div key={idx} className="bg-purple-50 rounded-lg border border-purple-100 p-4 relative">
@@ -1838,7 +1844,7 @@ export default function SolicitarTelefonia() {
                     </div>
                 );
 
-            case 4:
+            case 3:
                 const filteredApps = availableApps.filter(app =>
                     app.nombre.toLowerCase().includes(appSearch.toLowerCase()) &&
                     !selectedApps.includes(app.nombre)
@@ -1856,7 +1862,7 @@ export default function SolicitarTelefonia() {
                             />
                         </div>
 
-                        {formData.n_linea !== "Línea Nueva" && formData.n_linea !== "Línea Nueva (SOLO CHIP)" && (
+                        {formData.n_linea !== "Línea Nueva" && formData.n_linea !== "Solicitar Chip" && (
                             <div>
                                 <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Aplicativos Necesarios</label>
 
@@ -1973,27 +1979,30 @@ export default function SolicitarTelefonia() {
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6 border-b border-gray-200 pb-4">
                         <h2 className="text-lg font-bold text-gray-900">Nueva Solicitud</h2>
 
-                        {/* Steps Group */}
-                        <div className="flex items-center gap-2 overflow-x-auto">
-                            <div className={`flex items-center gap-1 ${currentStep >= 1 ? "text-indigo-600 font-semibold" : ""}`}>
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 1 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>1</div>
-                                <span className="whitespace-nowrap">Datos</span>
-                            </div>
-                            <ChevronRight className="w-3 h-3 text-gray-300" />
-                            <div className={`flex items-center gap-1 ${currentStep >= 2 ? "text-indigo-600 font-semibold" : ""}`}>
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 2 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>2</div>
-                                <span className="whitespace-nowrap">Config</span>
-                            </div>
-                            <ChevronRight className="w-3 h-3 text-gray-300" />
-                            <div className={`flex items-center gap-1 ${currentStep >= 3 ? "text-indigo-600 font-semibold" : ""}`}>
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 3 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>3</div>
-                                <span className="whitespace-nowrap">Beneficiarios</span>
-                            </div>
-                            <ChevronRight className="w-3 h-3 text-gray-300" />
-                            <div className={`flex items-center gap-1 ${currentStep >= 4 ? "text-indigo-600 font-semibold" : ""}`}>
-                                <div className={`w-5 h-5 rounded-full flex items-center justify-center border text-[10px] ${currentStep >= 4 ? "bg-indigo-600 border-indigo-600 text-white" : "border-gray-300"}`}>4</div>
-                                <span className="whitespace-nowrap">Fin</span>
-                            </div>
+                        {/* Rediseño del Stepper Group */}
+                        <div className="flex w-full items-center justify-between relative mb-8 mt-4 px-2 sm:px-8">
+                            {/* Background Line */}
+                            <div className="absolute left-0 right-0 top-1/2 transform -translate-y-1/2 h-0.5 md:h-1 bg-gray-200 z-0 mx-4 sm:mx-10 rounded-full"></div>
+                            {/* Active Line Progress */}
+                            <div className="absolute left-0 top-1/2 transform -translate-y-1/2 h-0.5 md:h-1 bg-indigo-500 z-0 transition-all duration-500 mx-4 sm:mx-10 rounded-full" style={{ width: `calc(${((currentStep - 1) / 3) * 100}% - ${currentStep === 1 ? '0px' : '20px'})`, maxWidth: 'calc(100% - 2.5rem - 10px)' }}></div>
+
+                            {[
+                                { step: 1, label: "Datos" },
+                                { step: 2, label: "Config." },
+                                { step: 3, label: "Detalles" },
+                                { step: 4, label: "Destino" }
+                            ].map((s) => (
+                                <div key={s.step} className="relative z-10 flex flex-col items-center gap-2">
+                                    <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-[10px] md:text-xs font-bold transition-all duration-500 border-2 
+                                        ${currentStep > s.step ? "bg-indigo-500 border-indigo-500 text-white shadow-sm" : currentStep === s.step ? "bg-white border-indigo-500 text-indigo-600 shadow-[0_0_12px_rgba(99,102,241,0.4)] scale-110 ring-4 ring-indigo-50" : "bg-white border-gray-200 text-gray-400"} 
+                                    `}>
+                                        {currentStep > s.step ? <CheckCircle2 className="w-4 h-4 text-white" /> : s.step}
+                                    </div>
+                                    <span className={`text-[9px] md:text-[10px] uppercase tracking-wider font-bold absolute -bottom-5 md:-bottom-6 whitespace-nowrap transition-colors duration-300 ${currentStep >= s.step ? "text-indigo-700" : "text-gray-400"}`}>
+                                        {s.label}
+                                    </span>
+                                </div>
+                            ))}
                         </div>
                     </div>
                     {/* Removed Old StepIndicator component */}
@@ -2032,8 +2041,7 @@ export default function SolicitarTelefonia() {
                                         onClick={nextStep}
                                         disabled={
                                             (currentStep === 1 && formData.n_linea === "Renovación" && !validationResult?.valid) ||
-                                            (currentStep === 1 && formData.n_linea === "Reposición" && !renewalCalculated.valid) ||
-                                            (currentStep === 3 && !skipBeneficiaries && beneficiaries.some((b, idx) => b.dni && b.dni.length === 8 && beneficiaries.some((other, otherIdx) => idx !== otherIdx && other.dni === b.dni)))
+                                            (currentStep === 1 && formData.n_linea === "Reposición" && !renewalCalculated.valid)
                                         }
                                         className="px-4 py-1.5 bg-[#FF0000] text-white rounded hover:bg-red-700 text-sm font-medium inline-flex items-center gap-2 disabled:bg-gray-900 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                                     >
@@ -2042,7 +2050,10 @@ export default function SolicitarTelefonia() {
                                 ) : (
                                     <button
                                         type="submit"
-                                        disabled={submitting}
+                                        disabled={
+                                            submitting ||
+                                            (!skipBeneficiaries && formData.n_linea !== "Solicitar Chip" && beneficiaries.some((b, idx) => b.dni && b.dni.length === 8 && beneficiaries.some((other, otherIdx) => idx !== otherIdx && other.dni === b.dni)))
+                                        }
                                         className="px-4 py-1.5 bg-indigo-600 text-white rounded hover:bg-indigo-700 text-sm font-medium inline-flex items-center gap-2 disabled:opacity-50 transition-colors"
                                     >
                                         {submitting ? <Loader2 className="w-3 h-3 animate-spin" /> : <CheckCircle2 className="w-3 h-3" />}

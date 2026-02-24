@@ -1056,8 +1056,12 @@ export const telefoniaStore = {
             allAssigns.forEach((a: any) => {
                 const assignData = {
                     id: a.solicitud_id,
-                    beneficiario_nombre: a.solicitud?.beneficiario_nombre || a.usuario_final_nombre || "",
-                    beneficiario_area: a.solicitud?.beneficiario_area || a.usuario_final_area || "",
+                    beneficiario_dni: a.solicitud?.beneficiario_dni || a.responsable_dni || "",
+                    beneficiario_nombre: a.solicitud?.beneficiario_nombre || a.responsable_nombre || "",
+                    beneficiario_area: a.solicitud?.beneficiario_area || a.responsable_area || "",
+                    usuario_final_dni: a.usuario_final_dni || a.solicitud?.beneficiario_dni || "",
+                    usuario_final_nombre: a.usuario_final_nombre || a.solicitud?.beneficiario_nombre || "",
+                    usuario_final_area: a.usuario_final_area || a.solicitud?.beneficiario_area || "",
                     fecha_entrega: a.fecha_entrega,
                     periodo_uso: a.solicitud?.periodo_uso || "PERMANENTE",
                     fecha_fin_uso: a.solicitud?.fecha_fin_uso || "",
@@ -1148,6 +1152,8 @@ export const telefoniaStore = {
                     else console.log("Auto-repaired chip statuses:", chipsToUpdateDisplay.length);
                 });
         }
+
+        notify();
     },
 
     async createChip(chip: Omit<Chip, "id" | "created_at">) {
@@ -1548,7 +1554,9 @@ export const telefoniaStore = {
                     id,
                     beneficiario_nombre,
                     beneficiario_area,
-                    beneficiario_puesto
+                    beneficiario_puesto,
+                    tipo_solicitud,
+                    es_asignacion_directa
                 )
             `)
             .eq("equipo_id", equipoId)
@@ -1563,7 +1571,8 @@ export const telefoniaStore = {
             .from("telefonia_solicitud_asignaciones")
             .select(`
                 *,
-                solicitud:telefonia_solicitudes(*)
+                solicitud:telefonia_solicitudes(*),
+                equipo:telefonia_equipos(*)
             `)
             .eq("chip_id", chipId)
             .order("created_at", { ascending: false });
@@ -1661,10 +1670,11 @@ export const telefoniaStore = {
 
         // 1. Create Ticket (Solicitud) - Status Entregado
         const ticketPayload = {
-            tipo_solicitud: "ASIGNACION_DIRECTA", // Or "Inventario"
+            tipo_solicitud: equipo?.condicion === "Nuevo" ? "Equipo Nuevo" : "Equipo de Segundo Uso",
             tipo_servicio: ticketData?.tipo_servicio ?? "",
-            justificacion: ticketData?.justificacion || "Asignación desde Inventario",
+            justificacion: ticketData?.justificacion || "",
             ceco: ticketData?.ceco || "",
+            es_asignacion_directa: true,
 
             // New Fields
             fundo_planta: ticketData?.fundo_planta || "",
@@ -1785,10 +1795,11 @@ export const telefoniaStore = {
 
         // 1. Create Ticket (Solicitud) - Status Entregado
         const ticketPayload = {
-            tipo_solicitud: "ASIGNACION_SOLO_CHIP",
+            tipo_solicitud: "Solicitar Chip",
             tipo_servicio: chip?.operador || "Línea Nueva",
-            justificacion: "Asignación Directa de Chip - Solo Sim",
+            justificacion: "",
             ceco: ticketData.ceco,
+            es_asignacion_directa: true,
             fundo_planta: ticketData.fundo_planta,
             categoria: ticketData.categoria,
             proyecto: ticketData.proyecto,
@@ -1829,12 +1840,12 @@ export const telefoniaStore = {
             chip_id: chipId,
             estado: "Entregado",
             fecha_entrega: fechaEntrega,
-            // Usuario Final is Responsable (Ticket Owner)
-            usuario_final_dni: datosResponsable.dni,
-            usuario_final_nombre: datosResponsable.nombre,
-            usuario_final_area: datosResponsable.area,
-            usuario_final_puesto: datosResponsable.puesto,
-            usuario_final_sede: ticketData.fundo_planta, // Matches Ticket Sede
+            // Usuario Final is null for Solo Chip assignments
+            usuario_final_dni: null,
+            usuario_final_nombre: null,
+            usuario_final_area: null,
+            usuario_final_puesto: null,
+            usuario_final_sede: ticketData.fundo_planta || null, // Guardar la Sede (Fundo/Planta) como solicitó el usuario
             // Responsable
             responsable_dni: datosResponsable.dni,
             responsable_nombre: datosResponsable.nombre,
@@ -2243,13 +2254,22 @@ export const telefoniaStore = {
 
         if (ticketError) throw ticketError;
 
+        // Fetch current assignment to check if it's a Solo Chip assignment
+        const { data: currentAssign } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("chip_id, equipo_id")
+            .eq("id", assignmentId)
+            .single();
+
+        const isChipAssignment = currentAssign && !currentAssign.equipo_id && currentAssign.chip_id;
+
         // 2. Update Assignment
         const assignmentUpdates: any = {
-            usuario_final_dni: data.usuario_final.dni,
-            usuario_final_nombre: data.usuario_final.nombre,
-            usuario_final_area: data.usuario_final.area,
-            usuario_final_puesto: data.usuario_final.puesto,
-            usuario_final_sede: data.usuario_final.sede,
+            usuario_final_dni: isChipAssignment ? null : data.usuario_final.dni,
+            usuario_final_nombre: isChipAssignment ? null : data.usuario_final.nombre,
+            usuario_final_area: isChipAssignment ? null : data.usuario_final.area,
+            usuario_final_puesto: isChipAssignment ? null : data.usuario_final.puesto,
+            usuario_final_sede: isChipAssignment ? data.ticket.fundo_planta : data.usuario_final.sede,
 
             // Sync Responsable with Ticket Beneficiary
             responsable_dni: data.beneficiario.dni,
@@ -2273,28 +2293,12 @@ export const telefoniaStore = {
 
         if (assignError) throw assignError;
 
-        // 3. Update Chip Plan if provided (and if it's a chip assignment)
-        // We need to know the chip_id. We can fetch the assignment to be sure, or pass it.
-        // But for optimization, we can assume if plan_id is passed, we check the assignment's chip_id?
-        // Actually, we don't have chip_id in the args.
-        // Let's fetch the assignment's chip_id to be safe, or pass it in data?
-        // Since we already have the assignmentId, let's fetch the chip_id from the assignment record we just updated?
-        // Or better, let's trust the Caller to pass chip_id?
-        // No, let's just fetch it quickly if plan_id is present.
-
-        if (data.plan_id !== undefined) {
-            const { data: currentAssign } = await supabase
-                .from("telefonia_solicitud_asignaciones")
-                .select("chip_id")
-                .eq("id", assignmentId)
-                .single();
-
-            if (currentAssign && currentAssign.chip_id) {
-                await supabase
-                    .from("telefonia_chips")
-                    .update({ plan_id: data.plan_id || null })
-                    .eq("id", currentAssign.chip_id);
-            }
+        // 3. Update Chip Plan if provided
+        if (data.plan_id !== undefined && currentAssign && currentAssign.chip_id) {
+            await supabase
+                .from("telefonia_chips")
+                .update({ plan_id: data.plan_id || null })
+                .eq("id", currentAssign.chip_id);
         }
 
         // Refresh Data

@@ -254,6 +254,9 @@ export default function InventarioTelefonia() {
             // If still not found
             if (!ticket) throw new Error("No se encontraron los detalles del ticket (Solicitud) de esta asignación.");
 
+            // Find related chip to get actual plan_id
+            const relatedChip = assign.chip_id ? telefoniaStore.chips.find(c => c.id === assign.chip_id) : null;
+
             setEditAssignData({
                 assignment: assign,
                 ticket: ticket,
@@ -287,7 +290,7 @@ export default function InventarioTelefonia() {
                         tipo_equipo: assign.tipo_equipo_destino || "Smartphone",
                         codigo: assign.codigo_equipo_destino || ""
                     },
-                    plan_id: assign.chip?.plan_id || ""
+                    plan_id: relatedChip?.plan_id || ""
                 },
                 isChipAssignment: !assign.equipo_id && assign.chip_id
             });
@@ -401,6 +404,7 @@ export default function InventarioTelefonia() {
             );
             setToast({ type: "success", message: "Devolución registrada correctamente" });
             setOpenDevolucion(false);
+            loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al registrar devolución" });
         } finally {
@@ -507,6 +511,7 @@ export default function InventarioTelefonia() {
             );
             setToast({ type: "success", message: "Equipo asignado y ticket generado correctamente" });
             setOpenAsignacion(false);
+            loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al asignar equipo" });
         } finally {
@@ -546,6 +551,7 @@ export default function InventarioTelefonia() {
             // We need profile access here. Inventario used `useAuth` but destructured `user`. Let's check imports.
             setToast({ type: "success", message: "Solicitud de baja creada. Equipo en Mantenimiento." });
             setOpenBaja(false);
+            loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al solicitar baja" });
         }
@@ -1113,7 +1119,11 @@ export default function InventarioTelefonia() {
         return (
             (cleanNumero.includes(cleanTerm) ||
                 c.operador.toLowerCase().includes(term) ||
-                c.numero_linea.toLowerCase().includes(term)) &&
+                c.numero_linea.toLowerCase().includes(term) ||
+                (c.asignacion_activa?.beneficiario_nombre?.toLowerCase() || "").includes(term) ||
+                (c.asignacion_activa?.beneficiario_dni?.toLowerCase() || "").includes(term) ||
+                (c.asignacion_activa?.usuario_final_nombre?.toLowerCase() || "").includes(term) ||
+                (c.asignacion_activa?.usuario_final_dni?.toLowerCase() || "").includes(term)) &&
             // Filters
             (!filterChipEstado || c.estado === filterChipEstado) &&
             (!filterChipOperador || c.operador === filterChipOperador) &&
@@ -1505,6 +1515,8 @@ export default function InventarioTelefonia() {
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo Vinculado</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Responsable / Usuario</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Usuario Final</th>
 
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Fin Periodo</th>
                                             <th className="px-6 py-3 text-right font-medium text-gray-500 uppercase">Acciones</th>
@@ -1764,6 +1776,30 @@ export default function InventarioTelefonia() {
                                                 )}
                                             </td>
                                             <td className="px-6 py-4"><EstadoBadge estado={item.estado} /></td>
+                                            <td className="px-6 py-4">
+                                                {item.asignacion_activa ? (
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">
+                                                            {item.asignacion_activa.beneficiario_nombre}
+                                                        </div>
+                                                        <div className="text-xs text-gray-500">
+                                                            {item.asignacion_activa.beneficiario_area || "-"}
+                                                        </div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-400 italic text-xs">Sin asignar</span>
+                                                )}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {item.estado === "Asignado" && item.asignacion_activa && (item.asignacion_activa.usuario_final_nombre || item.asignacion_activa.usuario_final_dni) ? (
+                                                    <div>
+                                                        <div className="font-medium text-gray-900">{item.asignacion_activa.usuario_final_nombre || "Sin Nombre"}</div>
+                                                        <div className="text-xs text-gray-500 font-mono">{item.asignacion_activa.usuario_final_dni || "Sin DNI"}</div>
+                                                    </div>
+                                                ) : (
+                                                    <span className="text-gray-300">-</span>
+                                                )}
+                                            </td>
                                             <td className="px-6 py-4">
                                                 {item.estado === "Asignado" && item.asignacion_activa ? (
                                                     <div className="text-xs">
@@ -2974,6 +3010,7 @@ export default function InventarioTelefonia() {
                                     <tr>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsable Ticket</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario Final</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo Solicitud</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fechas</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                     </tr>
@@ -3005,6 +3042,18 @@ export default function InventarioTelefonia() {
                                                 </div>
                                                 <div className="text-xs text-gray-500">
                                                     {assign.usuario_final_sede || "-"}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs text-gray-700">
+                                                        {assign.solicitud?.tipo_solicitud || "N/A"}
+                                                    </span>
+                                                    {assign.solicitud?.es_asignacion_directa && (
+                                                        <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                                            Directa
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 align-top">
@@ -3069,6 +3118,7 @@ export default function InventarioTelefonia() {
                                     <tr>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Responsable / Usuario</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Detalle Equipo</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo Solicitud</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fechas</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                     </tr>
@@ -3109,6 +3159,18 @@ export default function InventarioTelefonia() {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 align-top">
+                                                <div className="flex flex-col gap-1">
+                                                    <span className="text-xs text-gray-700">
+                                                        {assign.solicitud?.tipo_solicitud || "N/A"}
+                                                    </span>
+                                                    {assign.solicitud?.es_asignacion_directa && (
+                                                        <span className="inline-flex w-fit items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-700 border border-blue-200">
+                                                            Directa
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
                                                 <div className="flex flex-col gap-1.5">
                                                     <div className="flex items-center gap-1.5 text-xs text-gray-600">
                                                         <Calendar className="w-3.5 h-3.5 text-gray-400" />
@@ -3125,9 +3187,9 @@ export default function InventarioTelefonia() {
                                             <td className="px-4 py-3 align-top text-right">
                                                 <div className="flex flex-col items-end gap-1">
                                                     <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${assign.fecha_devolucion ? 'bg-gray-100 text-gray-800' : 'bg-green-100 text-green-800'}`}>
-                                                        {assign.fecha_devolucion ? "Devuelto" : "Activo"}
+                                                        {assign.estado}
                                                     </span>
-                                                    {!assign.fecha_devolucion && (
+                                                    {!assign.fecha_devolucion && (!assign.equipo_id && assign.chip_id) && (
                                                         <button
                                                             onClick={() => handleEditAssignment(assign)}
                                                             className="text-xs text-indigo-600 hover:text-indigo-800 flex items-center gap-1 mt-1 bg-indigo-50 px-2 py-1 rounded border border-indigo-100 transition-colors"
@@ -3742,87 +3804,94 @@ export default function InventarioTelefonia() {
                         )}
 
                         {/* USUARIO FINAL */}
-                        <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
-                            <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Usuario Final</h4>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 uppercase">DNI</label>
-                                    <input
-                                        className="block w-full rounded-md sm:text-sm border p-2 mt-1 border-gray-300"
-                                        value={editAssignData.formData.usuario_final.dni}
-                                        maxLength={8}
-                                        onChange={(e) => {
-                                            const val = e.target.value.replace(/\D/g, '');
-                                            const newData = { ...editAssignData };
-                                            newData.formData.usuario_final.dni = val;
-                                            if (val.length === 8) {
-                                                const person = getPersonalState().personal.find(p => p.dni === val);
-                                                if (person) {
-                                                    newData.formData.usuario_final.nombre = person.nombre;
+                        {!editAssignData.isChipAssignment ? (
+                            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200 space-y-3">
+                                <h4 className="text-sm font-semibold text-gray-900 border-b border-gray-200 pb-1">Datos del Usuario Final</h4>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">DNI</label>
+                                        <input
+                                            className="block w-full rounded-md sm:text-sm border p-2 mt-1 border-gray-300"
+                                            value={editAssignData.formData.usuario_final.dni}
+                                            maxLength={8}
+                                            onChange={(e) => {
+                                                const val = e.target.value.replace(/\D/g, '');
+                                                const newData = { ...editAssignData };
+                                                newData.formData.usuario_final.dni = val;
+                                                if (val.length === 8) {
+                                                    const person = getPersonalState().personal.find(p => p.dni === val);
+                                                    if (person) {
+                                                        newData.formData.usuario_final.nombre = person.nombre;
+                                                    }
                                                 }
-                                            }
-                                            setEditAssignData(newData);
-                                        }}
-                                    />
+                                                setEditAssignData(newData);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">Nombre</label>
+                                        <input
+                                            className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.usuario_final.nombre}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.usuario_final.nombre = e.target.value.toUpperCase();
+                                                setEditAssignData(newData);
+                                            }}
+                                        />
+                                    </div>
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">Área</label>
+                                        <input
+                                            className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.usuario_final.area}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.usuario_final.area = e.target.value;
+                                                setEditAssignData(newData);
+                                            }}
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-xs font-medium text-gray-700 uppercase">Puesto</label>
+                                        <input
+                                            className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
+                                            value={editAssignData.formData.usuario_final.puesto}
+                                            onChange={(e) => {
+                                                const newData = { ...editAssignData };
+                                                newData.formData.usuario_final.puesto = e.target.value;
+                                                setEditAssignData(newData);
+                                            }}
+                                        />
+                                    </div>
                                 </div>
                                 <div>
-                                    <label className="block text-xs font-medium text-gray-700 uppercase">Nombre</label>
-                                    <input
+                                    <label className="block text-xs font-medium text-gray-700 uppercase">Sede</label>
+                                    <select
                                         className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
-                                        value={editAssignData.formData.usuario_final.nombre}
+                                        value={editAssignData.formData.usuario_final.sede}
                                         onChange={(e) => {
                                             const newData = { ...editAssignData };
-                                            newData.formData.usuario_final.nombre = e.target.value.toUpperCase();
+                                            newData.formData.usuario_final.sede = e.target.value;
                                             setEditAssignData(newData);
                                         }}
-                                    />
+                                    >
+                                        <option value="">Seleccione Sede...</option>
+                                        <option value="BASE">BASE</option>
+                                        {sedes.map(s => (
+                                            <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                        ))}
+                                    </select>
                                 </div>
                             </div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 uppercase">Área</label>
-                                    <input
-                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
-                                        value={editAssignData.formData.usuario_final.area}
-                                        onChange={(e) => {
-                                            const newData = { ...editAssignData };
-                                            newData.formData.usuario_final.area = e.target.value;
-                                            setEditAssignData(newData);
-                                        }}
-                                    />
-                                </div>
-                                <div>
-                                    <label className="block text-xs font-medium text-gray-700 uppercase">Puesto</label>
-                                    <input
-                                        className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
-                                        value={editAssignData.formData.usuario_final.puesto}
-                                        onChange={(e) => {
-                                            const newData = { ...editAssignData };
-                                            newData.formData.usuario_final.puesto = e.target.value;
-                                            setEditAssignData(newData);
-                                        }}
-                                    />
-                                </div>
+                        ) : (
+                            <div className="w-full bg-orange-50 p-3 rounded-lg border border-orange-100 mb-4 mt-4">
+                                <p className="text-xs text-orange-800 font-medium">Asignación de solo chip. No requiere usuario final específico.</p>
+                                <p className="text-[10px] text-orange-600 mt-1">La sede del usuario final en los reportes se sincronizará automáticamente con el Fundo / Planta del Ticket.</p>
                             </div>
-                            <div>
-                                <label className="block text-xs font-medium text-gray-700 uppercase">Sede</label>
-                                <select
-                                    className="block w-full rounded-md border-gray-300 sm:text-sm border p-2 mt-1"
-                                    value={editAssignData.formData.usuario_final.sede}
-                                    onChange={(e) => {
-                                        const newData = { ...editAssignData };
-                                        newData.formData.usuario_final.sede = e.target.value;
-                                        setEditAssignData(newData);
-                                    }}
-                                >
-                                    <option value="">Seleccione Sede...</option>
-                                    <option value="BASE">BASE</option>
-                                    {sedes.map(s => (
-                                        <option key={s.id} value={s.nombre}>{s.nombre}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        </div>
+                        )}
 
                         {/* TICKET DETAILS */}
                         <div className="bg-indigo-50 p-4 rounded-lg border border-indigo-100 space-y-3">

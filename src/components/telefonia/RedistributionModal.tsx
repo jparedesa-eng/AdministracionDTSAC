@@ -139,15 +139,19 @@ const AssignmentCard = ({
         <div className="bg-white p-4 rounded-lg border border-gray-200 shadow-sm hover:shadow-md transition-shadow">
             <div className="flex flex-col md:flex-row gap-4 items-start md:items-center justify-between mb-4 border-b border-gray-100 pb-3">
                 <div className="flex items-center gap-3">
-                    <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                    <div className={`p-2 rounded-lg ${!assignment.equipo_id && assignment.chip_id ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
                         <Smartphone className="w-5 h-5" />
                     </div>
                     <div>
                         <h4 className="font-bold text-gray-900 text-sm">
-                            {assignment.equipo?.marca} {assignment.equipo?.modelo}
+                            {!assignment.equipo_id && assignment.chip_id
+                                ? `Chip: ${assignment.chip?.numero_linea || 'Sin número'}`
+                                : `${assignment.equipo?.marca} ${assignment.equipo?.modelo}`}
                         </h4>
                         <p className="text-xs text-gray-500 font-mono">
-                            IMEI: {assignment.equipo?.imei}
+                            {!assignment.equipo_id && assignment.chip_id
+                                ? `Operador: ${assignment.chip?.operador || 'S/N'}`
+                                : `IMEI: ${assignment.equipo?.imei}`}
                         </p>
                     </div>
                 </div>
@@ -158,48 +162,55 @@ const AssignmentCard = ({
                 </div>
             </div>
 
-            <div className="w-full bg-gray-50 p-3 rounded-lg border border-gray-100">
-                <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Responsable Final (Usuario)</label>
-                <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-                    <div className="md:col-span-3">
-                        <input
-                            type="text"
-                            placeholder="DNI"
-                            value={dni}
-                            maxLength={8}
-                            onChange={(e) => setDni(e.target.value)}
-                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-                        />
-                    </div>
-                    <div className="md:col-span-4">
-                        <input
-                            type="text"
-                            placeholder="Nombre Completo"
-                            value={nombre}
-                            onChange={(e) => setNombre(e.target.value)}
-                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-                        />
-                    </div>
-                    <div className="md:col-span-3">
-                        <input
-                            type="text"
-                            placeholder="Área"
-                            value={area}
-                            onChange={(e) => setArea(e.target.value)}
-                            className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
-                        />
-                    </div>
-                    <div className="md:col-span-2">
-                        <button
-                            onClick={handleSubmit}
-                            disabled={!isDirty || saving || !dni || !nombre}
-                            className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                        >
-                            {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-1" /> Guardar</>}
-                        </button>
+            {(!assignment.equipo_id && assignment.chip_id) ? (
+                <div className="w-full bg-orange-50 p-3 rounded-lg border border-orange-100">
+                    <p className="text-xs text-orange-800 font-medium">Asignación de solo chip. No requiere usuario final específico.</p>
+                </div>
+            ) : (
+
+                <div className="w-full bg-gray-50 p-3 rounded-lg border border-gray-100">
+                    <label className="text-xs font-semibold text-gray-500 uppercase mb-2 block">Responsable Final (Usuario)</label>
+                    <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                        <div className="md:col-span-3">
+                            <input
+                                type="text"
+                                placeholder="DNI"
+                                value={dni}
+                                maxLength={8}
+                                onChange={(e) => setDni(e.target.value)}
+                                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+                            />
+                        </div>
+                        <div className="md:col-span-4">
+                            <input
+                                type="text"
+                                placeholder="Nombre Completo"
+                                value={nombre}
+                                onChange={(e) => setNombre(e.target.value)}
+                                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+                            />
+                        </div>
+                        <div className="md:col-span-3">
+                            <input
+                                type="text"
+                                placeholder="Área"
+                                value={area}
+                                onChange={(e) => setArea(e.target.value)}
+                                className="w-full text-sm border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 p-2"
+                            />
+                        </div>
+                        <div className="md:col-span-2">
+                            <button
+                                onClick={handleSubmit}
+                                disabled={!isDirty || saving || !dni || !nombre}
+                                className="w-full inline-flex justify-center items-center px-3 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Save className="w-4 h-4 mr-1" /> Guardar</>}
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
+            )}
         </div>
     );
-};
+}

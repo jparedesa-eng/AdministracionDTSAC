@@ -177,46 +177,61 @@ export default function HistorialTelefonia() {
     return (
         <div className="h-full flex flex-col space-y-4">
             {/* Header */}
-            <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 bg-white p-4 rounded-xl border border-gray-300">
+            <header className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                 <div>
                     <h1 className="text-2xl font-bold text-gray-900">Historial de Solicitudes</h1>
-                    <p className="text-gray-500 text-sm">Registro histórico y descarga de reportes</p>
+                    <p className="text-sm text-gray-500">Registro histórico y descarga de reportes</p>
+                </div>
+            </header>
+
+            {/* Filters Container */}
+            <div className="bg-white p-4 rounded-xl border border-gray-300 flex flex-col lg:flex-row items-end justify-between gap-4">
+
+                <div className="flex flex-col md:flex-row items-end gap-4 w-full lg:w-auto flex-wrap">
+                    {/* Date Range Picker */}
+                    <div className="w-full md:w-auto">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Rango de Fechas</label>
+                        <DateRangePicker
+                            onChange={handleDateRangeApply}
+                        />
+                    </div>
+
+                    {/* Search Bar */}
+                    <div className="w-full md:w-64">
+                        <label className="text-[10px] uppercase text-gray-500 font-bold block mb-1">Buscar Solicitud</label>
+                        <div className="relative">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Search className="w-4 h-4 text-gray-400" />
+                            </div>
+                            <input
+                                type="text"
+                                className="block w-full rounded-lg border border-gray-300 pl-9 p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+                                placeholder="ID, Responsable, etc..."
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                    </div>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-3 items-start md:items-center">
+                {/* Right side controls */}
+                <div className="flex items-center gap-3 w-full lg:w-auto justify-end">
+                    {/* Total Count */}
+                    <div className="flex items-center gap-2 bg-gray-50 px-3 py-2 rounded-lg border border-gray-200">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">Registros:</span>
+                        <span className="text-sm font-bold text-gray-900">{tickets.length}</span>
+                    </div>
+
                     {/* Excel Export Button */}
                     <button
                         onClick={handleDownloadExcel}
                         disabled={tickets.length === 0}
                         className="px-4 py-2 bg-emerald-600 text-white hover:bg-emerald-700 rounded-lg flex items-center gap-2 text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed shadow-sm"
+                        title="Exportar a Excel"
                     >
                         <FileSpreadsheet className="w-4 h-4" />
-                        Exportar Excel
+                        <span className="hidden sm:inline">Exportar Excel</span>
                     </button>
-
-                    <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
-
-                    {/* Date Range Picker */}
-                    <DateRangePicker
-                        onChange={handleDateRangeApply}
-                    />
-
-                    <div className="flex items-center gap-2">
-                        <span className="text-xs font-semibold text-gray-500 bg-gray-100 px-2 py-1 rounded border border-gray-200">
-                            {tickets.length} registros
-                        </span>
-                    </div>
-
-                    <div className="relative w-full md:w-64">
-                        <input
-                            type="text"
-                            placeholder="Buscar..."
-                            className="pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-blue-500 focus:border-blue-500 w-full"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
-                        <Search className="w-4 h-4 text-gray-400 absolute left-3 top-2.5" />
-                    </div>
                 </div>
             </div>
 
@@ -230,7 +245,8 @@ export default function HistorialTelefonia() {
                                 <th className="px-4 py-3">ID</th>
                                 <th className="px-4 py-3">Responsable</th>
                                 <th className="px-4 py-3">Área / Puesto</th>
-                                <th className="px-4 py-3">Detalle</th>
+                                <th className="px-4 py-3">Tipo de Solicitud</th>
+                                <th className="px-4 py-3">Justificacion</th>
                                 <th className="px-4 py-3">Estado</th>
                                 <th className="px-4 py-3 text-right">Acciones</th>
                             </tr>
@@ -238,7 +254,7 @@ export default function HistorialTelefonia() {
                         <tbody className="divide-y divide-gray-200">
                             {displayedTickets.length === 0 ? (
                                 <tr>
-                                    <td colSpan={7} className="px-4 py-8 text-center text-gray-500 italic">
+                                    <td colSpan={8} className="px-4 py-8 text-center text-gray-500 italic">
                                         {hasAppliedFilter ? "No se encontraron registros" : "Aplique filtros para ver registros"}
                                     </td>
                                 </tr>
@@ -260,10 +276,12 @@ export default function HistorialTelefonia() {
                                                 <span className="text-xs text-gray-400">{t.beneficiario_puesto}</span>
                                             </div>
                                         </td>
+                                        <td className="px-4 py-3 font-medium text-blue-700 whitespace-nowrap">
+                                            {t.tipo_solicitud || "Línea Nueva"}
+                                        </td>
                                         <td className="px-4 py-3 text-gray-600">
                                             <div className="flex flex-col">
-                                                <span className="font-medium text-blue-600">{t.tipo_solicitud || "Línea Nueva"}</span>
-                                                <span className="text-xs">{t.tipo_servicio}</span>
+                                                <span className="text-sm">{t.justificacion || "-"}</span>
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

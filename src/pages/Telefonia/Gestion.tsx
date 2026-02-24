@@ -105,7 +105,7 @@ export default function GestionTelefonia() {
     const [showCamera, setShowCamera] = useState(false);
 
     // Unified Search Logic (Equipment OR Chips)
-    const isSoloChip = selectedTicket?.tipo_solicitud === "Línea Nueva (SOLO CHIP)";
+    const isSoloChip = selectedTicket?.tipo_solicitud === "Solicitar Chip";
 
     // Filtered Items (Either Equipos or Chips)
     const filteredOptions = isSoloChip
@@ -911,7 +911,19 @@ export default function GestionTelefonia() {
                                         </div>
                                         <div className="mt-4 pt-4 border-t border-gray-200">
                                             <button
-                                                onClick={() => generateTicketPDF(selectedTicket)}
+                                                onClick={async () => {
+                                                    try {
+                                                        const fullTicket = await telefoniaStore.fetchSolicitudById(selectedTicket.id);
+                                                        if (fullTicket) {
+                                                            await generateTicketPDF(fullTicket);
+                                                        } else {
+                                                            alert("No se pudo cargar el detalle del ticket");
+                                                        }
+                                                    } catch (e) {
+                                                        alert("Error generando PDF");
+                                                        console.error(e);
+                                                    }
+                                                }}
                                                 className="w-full flex items-center justify-center gap-2 bg-white border border-gray-300 text-gray-700 py-2 rounded-lg font-medium hover:bg-gray-50 hover:text-gray-900 transition-colors shadow-sm"
                                             >
                                                 <FileDown className="w-4 h-4" />
