@@ -55,6 +55,7 @@ type Vehiculo = {
   fechaIngreso?: string; // NUEVO
   estado: EstadoVehiculoDB;
   volante: VolanteTipo;
+  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null;
 };
 
 /* Mapas DB <-> UI */
@@ -76,6 +77,7 @@ const fromDb = (r: any): Vehiculo => ({
     r.volante === "Si" || r.volante === "No"
       ? (r.volante as VolanteTipo)
       : "No",
+  zona: r.zona,
 });
 
 const toDb = (v: Vehiculo) => ({
@@ -94,6 +96,7 @@ const toDb = (v: Vehiculo) => ({
   fecha_ingreso: v.fechaIngreso,
   estado: v.estado,
   volante: v.volante,
+  zona: v.zona || null,
 });
 
 // Solo A-Z y 0-9, mayúsculas, máximo 6
@@ -167,12 +170,14 @@ async function apiFetchVehiculos({
   page,
   pageSize,
   soloVolantes,
+  zona,
 }: {
   q: string;
   estado: FiltroTipo;
   page: number;
   pageSize: number;
   soloVolantes?: boolean;
+  zona?: string;
 }) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -199,6 +204,10 @@ async function apiFetchVehiculos({
 
   if (soloVolantes) {
     query = query.eq("volante", "Si");
+  }
+
+  if (zona && zona !== "Todas") {
+    query = query.eq("zona", zona);
   }
 
   const { data, error, count } = await query;
@@ -310,6 +319,7 @@ export default function Inventario() {
   const [q, setQ] = React.useState("");
   const [estadoFiltro, setEstadoFiltro] =
     React.useState<FiltroTipo>("Todos");
+  const [zonaFiltro, setZonaFiltro] = React.useState<string>("Todas");
   const [page, setPage] = React.useState(1);
 
   // Datos de backend
@@ -346,6 +356,7 @@ export default function Inventario() {
     fechaIngreso: "",
     estado: "Disponible",
     volante: "No",
+    zona: null,
   });
 
   // Confirmación de cambio de volante
@@ -380,6 +391,7 @@ export default function Inventario() {
     fechaFin: "",
     tipoAsignacion: "Indefinida" as "Indefinida" | "Rango",
     observacion: "",
+    zona: "",
     isLocked: false, // New state for locking name
   });
 
@@ -406,6 +418,7 @@ export default function Inventario() {
         page,
         pageSize: rowsPerPage === 0 ? 10000 : rowsPerPage, // Handle "All"
         soloVolantes,
+        zona: zonaFiltro,
       });
       setRows(res.rows);
       setTotal(res.total);
@@ -419,7 +432,7 @@ export default function Inventario() {
     } finally {
       setLoading(false);
     }
-  }, [q, estadoFiltro, page, rowsPerPage, soloVolantes]);
+  }, [q, estadoFiltro, page, rowsPerPage, soloVolantes, zonaFiltro]);
 
   const loadStats = React.useCallback(async () => {
     try {
@@ -432,7 +445,7 @@ export default function Inventario() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [q, estadoFiltro, soloVolantes]);
+  }, [q, estadoFiltro, soloVolantes, zonaFiltro]);
 
   React.useEffect(() => {
     load();
@@ -548,6 +561,7 @@ export default function Inventario() {
       soat: "",
       estado: "Disponible",
       volante: "No",
+      zona: null,
     });
   };
 
@@ -624,6 +638,7 @@ export default function Inventario() {
       fechaFin: "",
       tipoAsignacion: "Indefinida",
       observacion: "",
+      zona: v.zona || "",
       isLocked: false,
     });
     setAssignOpen(true);
@@ -679,6 +694,12 @@ export default function Inventario() {
     e.preventDefault();
     setAssignLoading(true);
     try {
+      if (!assignDraft.zona) {
+        setToast({ type: "error", message: "Debe indicar una zona." });
+        setAssignLoading(false);
+        return;
+      }
+
       await camionetasStore.asignarResponsable({
         vehiculoId: assignDraft.vehiculoId,
         responsable: assignDraft.responsable,
@@ -687,6 +708,7 @@ export default function Inventario() {
         fechaFin: assignDraft.fechaFin ? new Date(assignDraft.fechaFin).toISOString() : null,
         tipoAsignacion: assignDraft.tipoAsignacion,
         observacion: assignDraft.observacion,
+        zona: assignDraft.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima",
       });
 
       setToast({ type: "success", message: "Responsable asignado correctamente." });
@@ -820,6 +842,19 @@ export default function Inventario() {
             Solo Volantes
           </button>
 
+          {/* Filtro de Zonas */}
+          <select
+            value={zonaFiltro}
+            onChange={(e) => setZonaFiltro(e.target.value)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="Todas">Todas Zonas</option>
+            <option value="Arequipa">Arequipa</option>
+            <option value="Trujillo">Trujillo</option>
+            <option value="Olmos">Olmos</option>
+            <option value="Lima">Lima</option>
+          </select>
+
           <div className="flex rounded-lg border border-gray-200 bg-white p-1">
             {(
               ["Todos", "Disponible", "Mantenimiento", "Inactivo", "DocVencida"] as FiltroTipo[]
@@ -841,7 +876,7 @@ export default function Inventario() {
           <button
             type="button"
             onClick={openCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+            className="inline-flex items-center gap-2 rounded-lg bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
           >
             <Plus className="h-4 w-4" />
             <span>Nuevo</span>
@@ -857,6 +892,7 @@ export default function Inventario() {
               <tr>
                 <th className="px-4 py-3">Placa / Info</th>
                 <th className="px-4 py-3">Marca / Modelo</th>
+                <th className="px-4 py-3">Zona</th>
                 <th className="px-4 py-3">Volante</th>
                 <th className="px-4 py-3">Responsable</th>
                 <th className="px-4 py-3">Proveedor</th>
@@ -871,7 +907,7 @@ export default function Inventario() {
               {loading && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -885,7 +921,7 @@ export default function Inventario() {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={10}
+                    colSpan={11}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     {errMsg ?? "No se encontraron vehículos."}
@@ -916,6 +952,9 @@ export default function Inventario() {
                         </span>
                         <span className="text-xs text-gray-500">{v.modelo}</span>
                       </div>
+                    </td>
+                    <td className="px-4 py-3 text-gray-700 font-medium">
+                      {v.zona || <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
                       {v.volante === "Si" ? "Sí" : "No"}
@@ -1102,7 +1141,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("placa", sanitizePlaca(e.target.value))
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="ABC123"
                   required
                 />
@@ -1116,7 +1155,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("marca", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="Toyota"
                   required
                 />
@@ -1130,7 +1169,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("modelo", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="Hilux 2.4"
                   required
                 />
@@ -1147,7 +1186,7 @@ export default function Inventario() {
                       e.target.value as "4x2" | "4x4"
                     )
                   }
-                  className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="4x2">4x2</option>
                   <option value="4x4">4x4</option>
@@ -1162,10 +1201,28 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("volante", e.target.value as VolanteTipo)
                   }
-                  className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 >
                   <option value="Si">Si</option>
                   <option value="No">No</option>
+                </select>
+              </div>
+              <div>
+                <label className="text-sm font-medium text-gray-700">
+                  Zona
+                </label>
+                <select
+                  value={editDraft.zona || ""}
+                  onChange={(e) =>
+                    handleEditChange("zona", e.target.value as any)
+                  }
+                  className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                >
+                  <option value="">- Seleccionar -</option>
+                  <option value="Arequipa">Arequipa</option>
+                  <option value="Trujillo">Trujillo</option>
+                  <option value="Olmos">Olmos</option>
+                  <option value="Lima">Lima</option>
                 </select>
               </div>
               <div>
@@ -1177,7 +1234,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("color", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="Blanco"
                   required
                 />
@@ -1218,7 +1275,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("proveedor", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   placeholder="Empresa de alquiler"
                 />
               </div>
@@ -1232,7 +1289,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("fechaIngreso", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 />
               </div>
               <div>
@@ -1245,7 +1302,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("revTecnica", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   required
                 />
               </div>
@@ -1259,7 +1316,7 @@ export default function Inventario() {
                   onChange={(e) =>
                     handleEditChange("soat", e.target.value)
                   }
-                  className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                  className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                   required
                 />
               </div>
@@ -1280,7 +1337,7 @@ export default function Inventario() {
               <button
                 type="submit"
                 disabled={editLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-60"
               >
                 {editLoading ? (
                   <>
@@ -1322,7 +1379,7 @@ export default function Inventario() {
               onChange={(e) =>
                 setStatusDraft(e.target.value as EstadoVehiculoUI)
               }
-              className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+              className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
             >
               <option value="Disponible">Disponible</option>
               <option value="Mantenimiento">Mantenimiento</option>
@@ -1344,7 +1401,7 @@ export default function Inventario() {
               <button
                 type="submit"
                 disabled={statusLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-60"
               >
                 {statusLoading ? (
                   <>
@@ -1386,7 +1443,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("placa", sanitizePlaca(e.target.value))
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="ABC123"
                 required
               />
@@ -1400,7 +1457,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("marca", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="Toyota"
                 required
               />
@@ -1414,7 +1471,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("modelo", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="Hilux 2.4"
                 required
               />
@@ -1431,7 +1488,7 @@ export default function Inventario() {
                     e.target.value as "4x2" | "4x4"
                   )
                 }
-                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="4x2">4x2</option>
                 <option value="4x4">4x4</option>
@@ -1446,10 +1503,28 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("volante", e.target.value as VolanteTipo)
                 }
-                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="Si">Si</option>
                 <option value="No">No</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Zona
+              </label>
+              <select
+                value={createDraft.zona || ""}
+                onChange={(e) =>
+                  handleCreateChange("zona", e.target.value as any)
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value="">- Seleccionar -</option>
+                <option value="Arequipa">Arequipa</option>
+                <option value="Trujillo">Trujillo</option>
+                <option value="Olmos">Olmos</option>
+                <option value="Lima">Lima</option>
               </select>
             </div>
             <div>
@@ -1461,7 +1536,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("color", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="Blanco"
                 required
               />
@@ -1499,7 +1574,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("proveedor", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 placeholder="Empresa de alquiler"
               />
             </div>
@@ -1513,7 +1588,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("fechaIngreso", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               />
             </div>
             <div>
@@ -1526,7 +1601,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("revTecnica", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 required
               />
             </div>
@@ -1540,7 +1615,7 @@ export default function Inventario() {
                 onChange={(e) =>
                   handleCreateChange("soat", e.target.value)
                 }
-                className="mt-1 w-full rounded-xl border px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
                 required
               />
             </div>
@@ -1556,7 +1631,7 @@ export default function Inventario() {
                     e.target.value as EstadoVehiculoUI
                   )
                 }
-                className="mt-1 w-full rounded-xl border bg-white px-3 py-2 text-sm shadow-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
               >
                 <option value="Disponible">Disponible</option>
                 <option value="Mantenimiento">Mantenimiento</option>
@@ -1579,7 +1654,7 @@ export default function Inventario() {
             <button
               type="submit"
               disabled={createLoading}
-              className="inline-flex items-center justify-center gap-2 rounded-xl bg-gray-900 px-4 py-2 text-sm text-white hover:bg-gray-800 disabled:opacity-60"
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm text-white hover:bg-red-700 disabled:opacity-60"
             >
               {createLoading ? (
                 <>
@@ -1633,7 +1708,7 @@ export default function Inventario() {
                 type="button"
                 onClick={handleConfirmVolante}
                 disabled={volanteSaving}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-slate-900 px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-60"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-[#ff0000] px-4 py-1.5 text-sm font-semibold text-white shadow-sm hover:bg-red-700 disabled:opacity-60"
               >
                 {volanteSaving ? (
                   <>
@@ -1689,6 +1764,24 @@ export default function Inventario() {
                 placeholder="Nombre completo"
                 required
               />
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <label className="text-sm font-medium text-gray-700">Zona</label>
+              <select
+                value={assignDraft.zona}
+                onChange={(e) => setAssignDraft({ ...assignDraft, zona: e.target.value })}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                required
+              >
+                <option value="">- Seleccionar -</option>
+                <option value="Arequipa">Arequipa</option>
+                <option value="Trujillo">Trujillo</option>
+                <option value="Olmos">Olmos</option>
+                <option value="Lima">Lima</option>
+              </select>
             </div>
           </div>
 

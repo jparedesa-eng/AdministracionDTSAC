@@ -1064,6 +1064,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                 >
                   <option value="Trujillo">Trujillo</option>
                   <option value="Arequipa">Arequipa</option>
+                  <option value="Olmos">Olmos</option>
                 </select>
               </div>
 
@@ -1371,7 +1372,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
               type="button"
               onClick={guardar}
               disabled={saving}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-medium text-white hover:bg-slate-900 disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-60"
             >
               <CheckCircle className="h-4 w-4" />
               {saving ? "Guardando..." : editingRow ? "Actualizar checklist" : "Guardar checklist"}
@@ -1385,6 +1386,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
 
 /* =============== Componente principal =============== */
 export default function RegistrosChecklist() {
+  const { profile } = useAuth();
   const [rows, setRows] = React.useState<ChecklistRow[]>([]);
   const [total, setTotal] = React.useState(0);
   const [page, setPage] = React.useState(1);
@@ -1809,9 +1811,10 @@ export default function RegistrosChecklist() {
                       </button>
                       <button
                         type="button"
-                        className="p-1.5 rounded-lg bg-amber-50 text-amber-600 hover:bg-amber-100 transition-colors"
-                        onClick={() => openEditModal(c)}
-                        title="Editar checklist"
+                        className={`p-1.5 rounded-lg transition-colors ${getNombre(c) === profile?.nombre ? "bg-amber-50 text-amber-600 hover:bg-amber-100" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                        onClick={() => getNombre(c) === profile?.nombre && openEditModal(c)}
+                        title={getNombre(c) === profile?.nombre ? "Editar checklist" : "Solo el creador puede editar"}
+                        disabled={getNombre(c) !== profile?.nombre}
                       >
                         <PenLine className="h-4 w-4" />
                       </button>

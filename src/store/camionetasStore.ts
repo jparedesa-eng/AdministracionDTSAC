@@ -34,6 +34,7 @@ export interface Vehiculo {
   fechaIngreso?: string | null;
   /** Nuevo: si el vehículo tiene volante físico (tarjeta) asignado */
   volante?: "Si" | "No";
+  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null;
   estado: EstadoVehiculo;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -83,6 +84,7 @@ type VehiculoRow = {
   fecha_ingreso: string | null;
   /** Nuevo: columna en BD */
   volante: "Si" | "No" | null;
+  zona: string | null;
   estado: EstadoVehiculo;
   created_at: string | null;
   updated_at: string | null;
@@ -105,6 +107,7 @@ function vFromRow(r: VehiculoRow): Vehiculo {
     fechaIngreso: r.fecha_ingreso,
     /** Si viene null, por defecto "No" */
     volante: (r.volante as "Si" | "No" | null) ?? "No",
+    zona: r.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null,
     estado: r.estado,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -128,6 +131,7 @@ function vToRow(v: Partial<Vehiculo>): Partial<VehiculoRow> {
   if (v.soat !== undefined) out.soat = v.soat ?? null;
   if (v.fechaIngreso !== undefined) out.fecha_ingreso = v.fechaIngreso ?? null;
   if (v.volante !== undefined) out.volante = (v.volante as "Si" | "No") ?? "No";
+  if (v.zona !== undefined) out.zona = v.zona ?? null;
   if (v.estado !== undefined) out.estado = v.estado;
   return out;
 }
@@ -632,6 +636,7 @@ export const camionetasStore = {
       ...v,
       estado: v.estado ?? "Disponible",
       volante: v.volante ?? "No",
+      zona: v.zona ?? null,
     });
 
     const { data, error } = await supabase
@@ -754,6 +759,7 @@ export const camionetasStore = {
     fechaFin?: string | null;
     tipoAsignacion: "Indefinida" | "Rango";
     observacion?: string;
+    zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima";
   }): Promise<void> {
     // 1. Insert history record
     const { error: histError } = await supabase
@@ -796,6 +802,7 @@ export const camionetasStore = {
       .update({
         responsable: payload.responsable,
         dni_responsable: payload.dniResponsable,
+        zona: payload.zona,
         updated_at: new Date().toISOString()
       })
       .eq("id", payload.vehiculoId);
