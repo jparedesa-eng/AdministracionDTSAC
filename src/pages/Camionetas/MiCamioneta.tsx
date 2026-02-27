@@ -156,13 +156,14 @@ export default function MiCamioneta() {
         setLoading(true);
         try {
             // 1. Buscar vehículo asignado al DNI del usuario
-            const { data: vData, error: vError } = await supabase
+            const { data: vDataRows, error: vError } = await supabase
                 .from("vehiculos")
                 .select("id, placa, marca, modelo, color, soat, rev_tecnica, estado")
                 .eq("dni_responsable", profile?.dni)
-                .maybeSingle();
+                .limit(1);
 
             if (vError) throw vError;
+            const vData = vDataRows?.[0] || null;
 
             // 2. Buscar datos del conductor (usuario actual) para el header
             if (profile?.dni) {

@@ -761,6 +761,20 @@ export const camionetasStore = {
     observacion?: string;
     zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima";
   }): Promise<void> {
+    if (payload.dniResponsable) {
+      const { data: existing, error: errExist } = await supabase
+        .from("vehiculos")
+        .select("placa")
+        .eq("dni_responsable", payload.dniResponsable)
+        .neq("id", payload.vehiculoId)
+        .limit(1);
+
+      if (errExist) throw errExist;
+      if (existing && existing.length > 0) {
+        throw new Error(`El conductor con DNI ${payload.dniResponsable} ya tiene asignada la camioneta ${existing[0].placa}. No puede tener dos vehículos a su cargo.`);
+      }
+    }
+
     // 1. Insert history record
     const { error: histError } = await supabase
       .from("vehiculos_historial_responsables")

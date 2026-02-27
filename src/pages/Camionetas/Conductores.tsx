@@ -9,7 +9,6 @@ import {
   Search,
   Plus,
   PencilLine,
-  Shuffle,
   Loader2,
   CheckCircle2,
   XCircle,
@@ -119,6 +118,7 @@ export default function Conductores() {
   // Filtros
   const [query, setQuery] = React.useState("");
   const [onlyActive, setOnlyActive] = React.useState(false);
+  const [onlyExpired, setOnlyExpired] = React.useState(false);
 
   // Paginación
   const [rowsPerPage, setRowsPerPage] = React.useState(10);
@@ -129,6 +129,7 @@ export default function Conductores() {
   const [editing, setEditing] = React.useState<Driver | null>(null);
 
   // Form controlado
+  const [nombreReadOnly, setNombreReadOnly] = React.useState(false);
   const [form, setForm] = React.useState<Driver>({
     id: "",
     nombre: "",
@@ -166,6 +167,8 @@ export default function Conductores() {
    * ========================= */
   const filtered = React.useMemo(() => {
     const q = query.trim().toLowerCase();
+    const todayStr = new Date().toISOString().split("T")[0];
+
     return drivers.filter((d) => {
       const match =
         !q ||
@@ -175,9 +178,13 @@ export default function Conductores() {
         d.sede.toLowerCase().includes(q) ||
         (d.telefono ?? "").toLowerCase().includes(q);
       const okActivo = !onlyActive || d.activo;
-      return match && okActivo;
+      let okExpired = true;
+      if (onlyExpired) {
+        okExpired = d.activo && !!(d.licenciaVence && d.licenciaVence < todayStr);
+      }
+      return match && okActivo && okExpired;
     });
-  }, [drivers, query, onlyActive]);
+  }, [drivers, query, onlyActive, onlyExpired]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const safePage = Math.min(page, totalPages);
@@ -187,7 +194,7 @@ export default function Conductores() {
 
   React.useEffect(() => {
     setPage(1);
-  }, [query, onlyActive, drivers.length]);
+  }, [query, onlyActive, onlyExpired, drivers.length]);
 
   /* =========================
    * Helpers UI / Actions
@@ -235,6 +242,7 @@ export default function Conductores() {
 
   const handleCreate = () => {
     setEditing(null);
+    setNombreReadOnly(false);
     resetForm();
     setOpenModal(true);
   };
@@ -242,7 +250,40 @@ export default function Conductores() {
   const handleEdit = (d: Driver) => {
     setEditing(d);
     setForm(d);
+    setNombreReadOnly(false);
     setOpenModal(true);
+  };
+
+  const handleDniChange = async (val: string) => {
+    setForm((prev) => ({ ...prev, dni: val }));
+
+    if (val.length === 8) {
+      try {
+        const { data, error } = await supabase
+          .from("personal")
+          .select("nombres, apellidos")
+          .eq("dni", val)
+          .single();
+
+        if (data && !error) {
+          const fullName = `${data.nombres || ""} ${data.apellidos || ""}`.trim();
+          if (fullName) {
+            setForm((prev) => ({ ...prev, nombre: fullName }));
+            setNombreReadOnly(true);
+            setToast({ type: "success", message: "Personal encontrado." });
+          }
+        }
+      } catch (err) {
+        // Not found or error, leave as is but editable
+        setNombreReadOnly(false);
+      }
+    } else {
+      // If user deletes a digit and it was readOnly, clear the name and unlock
+      if (nombreReadOnly) {
+        setForm((prev) => ({ ...prev, nombre: "" }));
+        setNombreReadOnly(false);
+      }
+    }
   };
 
   const toggleActivo = async (d: Driver) => {
@@ -314,6 +355,11 @@ export default function Conductores() {
   const activeCount = drivers.filter((d) => d.activo).length;
   const inactiveCount = totalCount - activeCount;
 
+  const todayStr = new Date().toISOString().split("T")[0];
+  const expiredActiveCount = drivers.filter(
+    (d) => d.activo && d.licenciaVence && d.licenciaVence < todayStr
+  ).length;
+
   return (
     <div className="space-y-6">
       <Toast toast={toast} onClose={() => setToast(null)} />
@@ -329,7 +375,7 @@ export default function Conductores() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
         {/* Total */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
@@ -370,6 +416,19 @@ export default function Conductores() {
             </div>
           </div>
         </div>
+
+        {/* Doc Vencida */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-500">Doc. Vencida</p>
+              <p className="mt-2 text-3xl font-bold text-gray-900">{expiredActiveCount}</p>
+            </div>
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-orange-50 text-orange-600">
+              <AlertCircle className="h-5 w-5" />
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filtros + Acciones */}
@@ -387,6 +446,12 @@ export default function Conductores() {
 
         {/* Filters/Buttons */}
         <div className="flex items-center gap-3">
+          <Switch
+            checked={onlyExpired}
+            onChange={setOnlyExpired}
+            label="Doc. Vencida"
+          />
+
           <Switch
             checked={onlyActive}
             onChange={setOnlyActive}
@@ -481,8 +546,8 @@ export default function Conductores() {
                         <button
                           onClick={() => toggleActivo(d)}
                           className={`rounded p-1.5 transition-all ${d.activo
-                              ? "text-rose-600 hover:bg-white hover:shadow-sm"
-                              : "text-emerald-600 hover:bg-white hover:shadow-sm"
+                            ? "text-rose-600 hover:bg-white hover:shadow-sm"
+                            : "text-emerald-600 hover:bg-white hover:shadow-sm"
                             }`}
                           title={d.activo ? "Inactivar (Desactivar)" : "Activar"}
                         >
@@ -579,21 +644,7 @@ export default function Conductores() {
         size="lg"
       >
         <form onSubmit={handleSubmit} className="mt-4 grid gap-4">
-          {/* Row 1: Nombre */}
-          <div>
-            <label className="text-sm font-medium text-gray-700">
-              Nombre Completo <span className="text-rose-500">*</span>
-            </label>
-            <input
-              required
-              value={form.nombre}
-              onChange={(e) => setForm({ ...form, nombre: e.target.value })}
-              className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
-              placeholder="Ej. Juan Pérez"
-            />
-          </div>
-
-          {/* Row 2: DNI, Teléfono */}
+          {/* Row 1: DNI, Teléfono */}
           <div className="grid gap-4 md:grid-cols-2">
             <div>
               <label className="text-sm font-medium text-gray-700">
@@ -603,12 +654,7 @@ export default function Conductores() {
                 required
                 maxLength={8}
                 value={form.dni}
-                onChange={(e) =>
-                  setForm({
-                    ...form,
-                    dni: e.target.value.replace(/\D/g, "").slice(0, 8),
-                  })
-                }
+                onChange={(e) => handleDniChange(e.target.value.replace(/\D/g, "").slice(0, 8))}
                 className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 placeholder="8 dígitos"
               />
@@ -624,6 +670,26 @@ export default function Conductores() {
                 placeholder="Ej. 999 000 000"
               />
             </div>
+          </div>
+
+          {/* Row 2: Nombre */}
+          <div>
+            <label className="text-sm font-medium text-gray-700">
+              Nombre Completo <span className="text-rose-500">*</span>
+            </label>
+            <input
+              required
+              value={form.nombre}
+              onChange={(e) => {
+                if (!nombreReadOnly) {
+                  setForm({ ...form, nombre: e.target.value });
+                }
+              }}
+              readOnly={nombreReadOnly}
+              className={`mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none transition-colors ${nombreReadOnly ? "bg-gray-100 text-gray-500" : "focus:border-gray-400"
+                }`}
+              placeholder="Ej. Juan Pérez"
+            />
           </div>
 
           {/* Row 3: Licencia (Select), Vence */}
@@ -700,8 +766,8 @@ export default function Conductores() {
               {editing ? "Guardar Cambios" : "Crear Conductor"}
             </button>
           </div>
-        </form>
-      </Modal>
-    </div>
+        </form >
+      </Modal >
+    </div >
   );
 }
