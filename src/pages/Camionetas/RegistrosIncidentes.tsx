@@ -676,30 +676,6 @@ export default function RegistrosIncidentes({
 
   /* ----- NAV HORIZONTAL SOLO DENTRO DE LA TABLA (flexible) ----- */
   const scrollRef = React.useRef<HTMLDivElement>(null);
-  const [, setScrollLeft] = React.useState(0);
-  const [, setScrollMax] = React.useState(0);
-
-  const recalcScroll = React.useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const max = Math.max(0, el.scrollWidth - el.clientWidth);
-    setScrollMax(max);
-    setScrollLeft(Math.min(el.scrollLeft, max));
-  }, []);
-
-  React.useEffect(() => {
-    recalcScroll();
-    const onResize = () => recalcScroll();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [recalcScroll, vista.length, pageSize]);
-
-  const onScrollArea = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    setScrollLeft(el.scrollLeft);
-    setScrollMax(Math.max(0, el.scrollWidth - el.clientWidth));
-  };
 
   // Scroll horizontal con rueda del mouse (flexible)
   const onWheelHorizontal = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1073,7 +1049,6 @@ export default function RegistrosIncidentes({
         {/* Área scrolleable SOLO de la tabla */}
         <div
           ref={scrollRef}
-          onScroll={onScrollArea}
           onWheel={onWheelHorizontal}
           onPointerDown={onPointerDown}
           onPointerMove={onPointerMove}

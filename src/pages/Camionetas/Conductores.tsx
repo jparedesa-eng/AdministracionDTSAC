@@ -4,6 +4,8 @@ import { supabase } from "../../supabase/supabaseClient";
 import {
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Search,
   Plus,
   PencilLine,
@@ -14,6 +16,7 @@ import {
   AlertTriangle,
   User,
   AlertCircle,
+  Trash2,
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
@@ -118,7 +121,7 @@ export default function Conductores() {
   const [onlyActive, setOnlyActive] = React.useState(false);
 
   // Paginación
-  const pageSize = 10;
+  const [rowsPerPage, setRowsPerPage] = React.useState(10);
   const [page, setPage] = React.useState(1);
 
   // Modal crear/editar
@@ -176,10 +179,10 @@ export default function Conductores() {
     });
   }, [drivers, query, onlyActive]);
 
-  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const totalPages = Math.max(1, Math.ceil(filtered.length / rowsPerPage));
   const safePage = Math.min(page, totalPages);
-  const start = (safePage - 1) * pageSize;
-  const end = start + pageSize;
+  const start = (safePage - 1) * rowsPerPage;
+  const end = start + rowsPerPage;
   const pageData = filtered.slice(start, end);
 
   React.useEffect(() => {
@@ -393,7 +396,8 @@ export default function Conductores() {
           <button
             type="button"
             onClick={handleCreate}
-            className="inline-flex items-center gap-2 rounded-lg bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
+            className="inline-flex items-center gap-2 rounded-lg px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+            style={{ backgroundColor: "#ff0000" }}
           >
             <Plus className="h-4 w-4" />
             <span>Nuevo</span>
@@ -466,19 +470,25 @@ export default function Conductores() {
                   <td className="px-6 py-3 text-right">
                     <div className="flex items-center justify-end gap-1">
                       <button
-                        onClick={() => toggleActivo(d)}
-                        className="rounded-lg border p-2 hover:bg-gray-50"
-                        title={d.activo ? "Desactivar" : "Activar"}
-                      >
-                        <Shuffle className="h-4 w-4 text-gray-500" />
-                      </button>
-                      <button
                         onClick={() => handleEdit(d)}
-                        className="rounded-lg border p-2 hover:bg-gray-50"
+                        className="rounded-lg border border-gray-100 bg-gray-50 p-2 text-blue-600 hover:bg-white hover:shadow-sm transition-all"
                         title="Editar"
                       >
-                        <PencilLine className="h-4 w-4 text-gray-700" />
+                        <PencilLine className="h-4 w-4" />
                       </button>
+
+                      <div className="flex items-center gap-1 rounded-lg bg-gray-50 border border-gray-100 p-1 ml-1">
+                        <button
+                          onClick={() => toggleActivo(d)}
+                          className={`rounded p-1.5 transition-all ${d.activo
+                              ? "text-rose-600 hover:bg-white hover:shadow-sm"
+                              : "text-emerald-600 hover:bg-white hover:shadow-sm"
+                            }`}
+                          title={d.activo ? "Inactivar (Desactivar)" : "Activar"}
+                        >
+                          {d.activo ? <Trash2 className="h-4 w-4" /> : <CheckCircle2 className="h-4 w-4" />}
+                        </button>
+                      </div>
                     </div>
                   </td>
                 </tr>
@@ -498,29 +508,64 @@ export default function Conductores() {
           </table>
         </div>
 
-        {/* Paginación */}
-        <div className="flex items-center justify-between border-t bg-white px-6 py-3 text-sm text-gray-600">
-          <div>
-            Mostrando <span className="font-medium">{filtered.length === 0 ? 0 : start + 1}</span> a{" "}
-            <span className="font-medium">{Math.min(end, filtered.length)}</span> de{" "}
-            <span className="font-medium">{filtered.length}</span>
-          </div>
+        {/* Paginación - Telefonia/Inventario Style */}
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-4 border-t border-gray-100 p-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => setPage((p) => Math.max(1, p - 1))}
-              disabled={safePage <= 1}
-              className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+            <span className="text-xs text-gray-400 font-medium uppercase">
+              Filas:
+            </span>
+            <select
+              className="rounded border-none text-gray-500 py-1 pl-2 pr-6 text-sm focus:ring-0 bg-transparent cursor-pointer hover:text-gray-700"
+              value={rowsPerPage}
+              onChange={(e) => {
+                setRowsPerPage(Number(e.target.value));
+                setPage(1);
+              }}
             >
-              <ChevronLeft className="h-4 w-4" />
-              Anterior
+              <option value={10}>10</option>
+              <option value={20}>20</option>
+              <option value={50}>50</option>
+              <option value={100}>100</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1">
+            <button
+              onClick={() => setPage(1)}
+              disabled={safePage === 1 || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Primera Página"
+            >
+              <ChevronsLeft className="h-4 w-4" />
             </button>
             <button
-              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              disabled={safePage >= totalPages}
-              className="inline-flex items-center gap-1 rounded-lg border bg-white px-3 py-1.5 hover:bg-gray-50 disabled:opacity-50"
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={safePage === 1 || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Página Anterior"
             >
-              Siguiente
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            <span className="text-xs font-medium px-4 text-gray-400">
+              {safePage} / {Math.max(1, totalPages)}
+            </span>
+
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={safePage === totalPages || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Página Siguiente"
+            >
               <ChevronRight className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => setPage(totalPages)}
+              disabled={safePage === totalPages || loading}
+              className="p-2 rounded hover:bg-gray-50 text-gray-400 hover:text-gray-600 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+              title="Última Página"
+            >
+              <ChevronsRight className="h-4 w-4" />
             </button>
           </div>
         </div>
@@ -649,7 +694,8 @@ export default function Conductores() {
             </button>
             <button
               type="submit"
-              className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900 transition-colors"
+              className="rounded-xl px-4 py-2 text-sm font-medium text-white hover:opacity-90 transition-colors"
+              style={{ backgroundColor: "#ff0000" }}
             >
               {editing ? "Guardar Cambios" : "Crear Conductor"}
             </button>
