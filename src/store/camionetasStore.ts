@@ -759,7 +759,7 @@ export const camionetasStore = {
     fechaFin?: string | null;
     tipoAsignacion: "Indefinida" | "Rango";
     observacion?: string;
-    zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima";
+    zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa";
   }): Promise<void> {
     if (payload.dniResponsable) {
       const { data: existing, error: errExist } = await supabase

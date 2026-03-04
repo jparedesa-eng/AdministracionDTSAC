@@ -55,7 +55,7 @@ type Vehiculo = {
   fechaIngreso?: string; // NUEVO
   estado: EstadoVehiculoDB;
   volante: VolanteTipo;
-  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null;
+  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | null;
 };
 
 /* Mapas DB <-> UI */
@@ -708,7 +708,7 @@ export default function Inventario() {
         fechaFin: assignDraft.fechaFin ? new Date(assignDraft.fechaFin).toISOString() : null,
         tipoAsignacion: assignDraft.tipoAsignacion,
         observacion: assignDraft.observacion,
-        zona: assignDraft.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima",
+        zona: assignDraft.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa",
       });
 
       setToast({ type: "success", message: "Responsable asignado correctamente." });
@@ -853,6 +853,7 @@ export default function Inventario() {
             <option value="Trujillo">Trujillo</option>
             <option value="Olmos">Olmos</option>
             <option value="Lima">Lima</option>
+            <option value="Venturosa">Venturosa</option>
           </select>
 
           <div className="flex rounded-lg border border-gray-200 bg-white p-1">
@@ -1223,6 +1224,7 @@ export default function Inventario() {
                   <option value="Trujillo">Trujillo</option>
                   <option value="Olmos">Olmos</option>
                   <option value="Lima">Lima</option>
+                  <option value="Venturosa">Venturosa</option>
                 </select>
               </div>
               <div>
@@ -1525,6 +1527,7 @@ export default function Inventario() {
                 <option value="Trujillo">Trujillo</option>
                 <option value="Olmos">Olmos</option>
                 <option value="Lima">Lima</option>
+                <option value="Venturosa">Venturosa</option>
               </select>
             </div>
             <div>
@@ -1781,6 +1784,7 @@ export default function Inventario() {
                 <option value="Trujillo">Trujillo</option>
                 <option value="Olmos">Olmos</option>
                 <option value="Lima">Lima</option>
+                <option value="Venturosa">Venturosa</option>
               </select>
             </div>
           </div>

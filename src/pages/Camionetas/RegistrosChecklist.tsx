@@ -1065,6 +1065,8 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                   <option value="Trujillo">Trujillo</option>
                   <option value="Arequipa">Arequipa</option>
                   <option value="Olmos">Olmos</option>
+                  <option value="Lima">Lima</option>
+                  <option value="Venturosa">Venturosa</option>
                 </select>
               </div>
 

@@ -739,6 +739,9 @@ export default function Conductores() {
               <option value="">Seleccione...</option>
               <option value="Trujillo">Trujillo</option>
               <option value="Arequipa">Arequipa</option>
+              <option value="Olmos">Olmos</option>
+              <option value="Venturosa">Venturosa</option>
+              <option value="Lima">Lima</option>
             </select>
           </div>
 
