@@ -393,8 +393,37 @@ const drawTicketContent = (doc: jsPDF, ticket: Solicitud, logoUrl: string | null
         }
     });
 
+    // Clausula de Compromiso
+    const clausulaY = (doc as any).lastAutoTable.finalY + 10;
+    const clausulaText = "El USUARIO, con la firma de la presente Acta de Entrega se compromete a hacerse responsable del EQUIPO para el uso exclusivo del desempeño de sus funciones y siguiendo los lineamientos de la Política de Gestión de activos asignados a personal (POL-CTR05).\n\nEl USUARIO, en forma voluntaria AUTORIZA a DANPER TRUJILLO SAC, a descontar de su boleta de pago, liquidación de beneficios sociales y/o utilidades, cualquier suma de dinero que deba como consecuencia de la pérdida, hurto, robo y/o deterioro del equipo móvil entregado a su persona.";
+
+    autoTable(doc, {
+        startY: clausulaY,
+        theme: 'plain',
+        head: [['CLÁUSULA DE COMPROMISO']],
+        body: [[clausulaText]],
+        styles: {
+            lineColor: [150, 150, 150],
+            lineWidth: 0.3,
+        },
+        headStyles: {
+            fillColor: [240, 240, 240],
+            textColor: [50, 50, 50],
+            fontStyle: 'bold',
+            halign: 'center',
+            fontSize: 8,
+            cellPadding: 2
+        },
+        bodyStyles: {
+            fontSize: 7,
+            textColor: [60, 60, 60],
+            halign: 'justify',
+            cellPadding: 4
+        }
+    });
+
     // 6. FIRMA
-    let finalY = (doc as any).lastAutoTable.finalY + 20;
+    let finalY = (doc as any).lastAutoTable.finalY + 25;
 
     // Check space on current page? Since we are calculating height, we just add.
 
