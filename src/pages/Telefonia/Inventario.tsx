@@ -35,7 +35,8 @@ import {
     Clock,
     CardSim,
     Sprout,
-    ScanBarcode
+    ScanBarcode,
+    UserCheck
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -123,10 +124,12 @@ export default function InventarioTelefonia() {
     const [openDevolucion, setOpenDevolucion] = useState(false);
     const [openAsignacion, setOpenAsignacion] = useState(false);
     const [openBaja, setOpenBaja] = useState(false);
+    const [openCustodioConfirm, setOpenCustodioConfirm] = useState(false);
+    const [custodioConfirmData, setCustodioConfirmData] = useState<Equipo | null>(null);
     const [modalActionItem, setModalActionItem] = useState<Equipo | null>(null);
 
     // Action Form States
-    const [devolucionData, setDevolucionData] = useState({ estado: "Bueno", observaciones: "" });
+    const [devolucionData, setDevolucionData] = useState<{ estado: string, observaciones: string, tipo: 'Completa' | 'Custodio', custodio: 'Usuario' | 'Administración' }>({ estado: "Bueno", observaciones: "", tipo: 'Completa', custodio: 'Administración' });
     const [asignacionData, setAsignacionData] = useState({ dni: "", nombre: "", area: "", puesto: "", sede: "" }); // Usuario Final
     const [responsableData, setResponsableData] = useState({ dni: "", nombre: "", area: "", puesto: "" }); // Responsable
     const [responsableLocked, setResponsableLocked] = useState(false);
@@ -387,7 +390,7 @@ export default function InventarioTelefonia() {
 
     const handleOpenDevolucion = (eq: Equipo) => {
         setModalActionItem(eq);
-        setDevolucionData({ estado: "Bueno", observaciones: "" });
+        setDevolucionData({ estado: "Bueno", observaciones: "", tipo: 'Completa', custodio: 'Administración' });
         setOpenDevolucion(true);
     };
 
@@ -396,17 +399,46 @@ export default function InventarioTelefonia() {
         if (!modalActionItem?.asignacion_activa) return;
         setSubmitting(true);
         try {
-            await telefoniaStore.registrarDevolucion(
-                modalActionItem.asignacion_activa.id,
-                modalActionItem.id,
-                devolucionData.estado,
-                devolucionData.observaciones
-            );
+            if (devolucionData.tipo === 'Custodio') {
+                await telefoniaStore.registrarDevolucionCustodio(
+                    modalActionItem.asignacion_activa.asignacion_id as string,
+                    modalActionItem.id,
+                    devolucionData.custodio
+                );
+            } else {
+                await telefoniaStore.registrarDevolucion(
+                    modalActionItem.asignacion_activa.id,
+                    modalActionItem.id,
+                    devolucionData.estado,
+                    devolucionData.observaciones
+                );
+            }
             setToast({ type: "success", message: "Devolución registrada correctamente" });
             setOpenDevolucion(false);
             loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al registrar devolución" });
+        } finally {
+            setSubmitting(false);
+        }
+    };
+
+    const handleChangeCustodio = (eq: Equipo) => {
+        setCustodioConfirmData(eq);
+        setOpenCustodioConfirm(true);
+    };
+
+    const confirmChangeCustodio = async () => {
+        if (!custodioConfirmData) return;
+        setSubmitting(true);
+        try {
+            await telefoniaStore.cambiarCustodioAUsuario(custodioConfirmData.id);
+            setToast({ type: "success", message: "Custodio cambiado a Usuario exitosamente" });
+            setOpenCustodioConfirm(false);
+            setCustodioConfirmData(null);
+            loadData(true);
+        } catch (error: any) {
+            setToast({ type: "error", message: error.message || "Error al cambiar custodio" });
         } finally {
             setSubmitting(false);
         }
@@ -987,7 +1019,7 @@ export default function InventarioTelefonia() {
 
     const handleOpenDevolucionChip = (chip: Chip) => {
         setModalActionChip(chip);
-        setDevolucionData({ estado: "Bueno", observaciones: "" });
+        setDevolucionData({ estado: "Bueno", observaciones: "", tipo: 'Completa', custodio: 'Administración' });
         setOpenDevolucionChip(true);
     };
 
@@ -1567,13 +1599,18 @@ export default function InventarioTelefonia() {
                                                     <span className="text-xs text-gray-400 px-1 border rounded bg-gray-50">
                                                         {item.categoria || "Nuevo"}
                                                     </span>
+                                                    {item.custodio && (
+                                                        <span className="text-[10px] font-bold text-indigo-700 bg-indigo-50 px-1.5 py-0.5 rounded border border-indigo-200 uppercase">
+                                                            Custodio: {item.custodio}
+                                                        </span>
+                                                    )}
                                                 </div>
                                             </td>
                                             <td className="px-6 py-4 text-sm text-gray-600">
                                                 <div className="flex items-center gap-2">
                                                     <MapPin className="h-5 w-5 text-gray-400" />
                                                     <span className="font-medium">
-                                                        {item.asignacion_activa?.fundo_planta || item.ubicacion}
+                                                        {item.custodio === 'Administración' ? item.ubicacion : (item.asignacion_activa?.fundo_planta || item.ubicacion)}
                                                     </span>
                                                 </div>
                                             </td>
@@ -1654,6 +1691,15 @@ export default function InventarioTelefonia() {
 
                                                 <div className="flex items-center justify-end gap-2">
                                                     {/* Botones de acción principales */}
+                                                    {item.estado === "Asignado" && item.custodio === "Administración" && item.categoria === "PROYECTO" && (
+                                                        <button
+                                                            onClick={() => handleChangeCustodio(item)}
+                                                            className="p-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
+                                                            title="Cambiar Custodio a Usuario"
+                                                        >
+                                                            <UserCheck className="h-4 w-4" />
+                                                        </button>
+                                                    )}
                                                     {item.estado === "Asignado" && (
                                                         <button
                                                             onClick={() => handleOpenDevolucion(item)}
@@ -1994,33 +2040,92 @@ export default function InventarioTelefonia() {
                         <br />
                         Responsable: {modalActionItem?.asignacion_activa?.beneficiario_nombre}
                     </p>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Estado del Equipo al Retorno</label>
-                        <select
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                            value={devolucionData.estado}
-                            onChange={(e) => setDevolucionData({ ...devolucionData, estado: e.target.value })}
-                        >
-                            <option value="Bueno">Bueno (Operativo)</option>
-                            <option value="Dañado">Dañado (Pasará a Mantenimiento)</option>
-                            <option value="Robado">Robado (Pasará a Mantenimiento)</option>
-                        </select>
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-gray-700">Observaciones</label>
-                        <textarea
-                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                            rows={3}
-                            value={devolucionData.observaciones}
-                            onChange={(e) => setDevolucionData({ ...devolucionData, observaciones: e.target.value })}
-                            placeholder="Detalles sobre el estado, accesorios faltantes, etc."
-                        />
-                    </div>
-                    {devolucionData.estado !== "Bueno" && (
-                        <div className="bg-amber-50 p-3 rounded-md text-sm text-amber-800 flex gap-2">
-                            <AlertTriangle className="w-5 h-5 flex-shrink-0" />
-                            <p>Este equipo quedará en estado <strong>Mantenimiento</strong> hasta que un administrador apruebe la baja o confirme la reparación.</p>
+
+                    {modalActionItem?.categoria === 'PROYECTO' && (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Devolución</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setDevolucionData({ ...devolucionData, tipo: 'Completa' })}
+                                    className={`p-2 rounded-lg border text-sm font-medium transition-all ${devolucionData.tipo === 'Completa'
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-500'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    Completa (Actual)
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDevolucionData({ ...devolucionData, tipo: 'Custodio' })}
+                                    className={`p-2 rounded-lg border text-sm font-medium transition-all ${devolucionData.tipo === 'Custodio'
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-500'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    Custodio (Nuevo)
+                                </button>
+                            </div>
                         </div>
+                    )}
+
+                    {devolucionData.tipo === 'Custodio' ? (
+                        <div>
+                            <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Custodio</label>
+                            <div className="grid grid-cols-2 gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setDevolucionData({ ...devolucionData, custodio: 'Usuario' })}
+                                    className={`p-2 rounded-lg border text-sm font-medium transition-all ${devolucionData.custodio === 'Usuario'
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-500'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    Usuario
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setDevolucionData({ ...devolucionData, custodio: 'Administración' })}
+                                    className={`p-2 rounded-lg border text-sm font-medium transition-all ${devolucionData.custodio === 'Administración'
+                                        ? 'bg-indigo-50 border-indigo-200 text-indigo-700 ring-1 ring-indigo-500'
+                                        : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                                        }`}
+                                >
+                                    Administración
+                                </button>
+                            </div>
+                        </div>
+                    ) : (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Estado del Equipo al Retorno</label>
+                                <select
+                                    className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                    value={devolucionData.estado}
+                                    onChange={(e) => setDevolucionData({ ...devolucionData, estado: e.target.value })}
+                                >
+                                    <option value="Bueno">Bueno (Operativo)</option>
+                                    <option value="Dañado">Dañado (Pasará a Mantenimiento)</option>
+                                    <option value="Robado">Robado (Pasará a Mantenimiento)</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700">Observaciones</label>
+                                <textarea
+                                    className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                                    rows={3}
+                                    value={devolucionData.observaciones}
+                                    onChange={(e) => setDevolucionData({ ...devolucionData, observaciones: e.target.value })}
+                                    placeholder="Detalles sobre el estado, accesorios faltantes, etc."
+                                />
+                            </div>
+                            {devolucionData.estado !== "Bueno" && (
+                                <div className="bg-amber-50 p-3 rounded-md text-sm text-amber-800 flex gap-2">
+                                    <AlertTriangle className="w-5 h-5 flex-shrink-0" />
+                                    <p>Este equipo quedará en estado <strong>Mantenimiento</strong> hasta que un administrador apruebe la baja o confirme la reparación.</p>
+                                </div>
+                            )}
+                        </>
                     )}
                     <div className="flex justify-end pt-2">
                         <button
@@ -4089,6 +4194,21 @@ export default function InventarioTelefonia() {
                 loading={confirmation.loading}
             >
                 {confirmation.message}
+            </ConfirmationModal>
+
+            {/* Custodio Confirmation Modal */}
+            <ConfirmationModal
+                open={openCustodioConfirm}
+                onClose={() => {
+                    setOpenCustodioConfirm(false);
+                    setCustodioConfirmData(null);
+                }}
+                onConfirm={confirmChangeCustodio}
+                title="Cambiar Custodio a Usuario"
+                variant="info"
+                loading={submitting}
+            >
+                {`¿Seguro que deseas cambiar el custodio del equipo ${custodioConfirmData?.marca} ${custodioConfirmData?.modelo} a "Usuario"? Esto devolverá la administración física del equipo al responsable actual, permitiéndole reasignarlo desde la vista de "Mis Equipos".`}
             </ConfirmationModal>
 
             {/* SCANNER MODAL */}

@@ -22,6 +22,7 @@ interface AsignacionUI {
     fecha_entrega: string;
     solicitud_id: string | null;
     fecha_entrega_final: string; // New field
+    equipo_custodio?: string; // New field
     editMode: boolean;
     // Temp edit values
     temp_dni: string;
@@ -46,6 +47,8 @@ export default function MisEquipos() {
     const { sedes } = getSedesState();
     const [returnModalOpen, setReturnModalOpen] = useState(false);
     const [selectedReturn, setSelectedReturn] = useState<AsignacionUI | null>(null);
+    const [returnCustodioModalOpen, setReturnCustodioModalOpen] = useState(false);
+    const [selectedReturnCustodio, setSelectedReturnCustodio] = useState<AsignacionUI | null>(null);
     const [itemErrors, setItemErrors] = useState<Record<string, string>>({}); // ID -> Error mapping
 
     const loadMisEquipos = async () => {
@@ -94,6 +97,7 @@ export default function MisEquipos() {
                                 temp_area: asig.usuario_final_area || "",
                                 temp_puesto: asig.usuario_final_puesto || "",
                                 temp_sede: asig.usuario_final_sede || "",
+                                equipo_custodio: asig.equipo?.custodio || "",
                                 temp_fecha_entrega_final: asig.fecha_entrega_final || "",
 
                                 isSoloChip: !asig.equipo_id && !!asig.chip_id,
@@ -152,27 +156,7 @@ export default function MisEquipos() {
         }));
     };
 
-    const handleReassign = (id: string) => {
-        setAssignments(prev => prev.map(a => {
-            if (a.id === id) {
-                return {
-                    ...a,
-                    editMode: true,
-                    // Clear temps for new assignment
-                    temp_dni: "",
-                    temp_nombre: "",
-                    temp_area: "",
-                    temp_puesto: "",
-                    temp_sede: "",
-                    temp_fecha_entrega_final: (() => {
-                        const d = new Date();
-                        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-                    })()
-                };
-            }
-            return a;
-        }));
-    };
+
 
     const handleSave = async (item: AsignacionUI) => {
         try {
@@ -292,6 +276,32 @@ export default function MisEquipos() {
         } catch (error) {
             console.error(error);
             setToast({ type: "error", message: "Error al registrar devolución" });
+        }
+    };
+
+    const handleOpenReturnCustodio = (item: AsignacionUI) => {
+        setSelectedReturnCustodio(item);
+        setReturnCustodioModalOpen(true);
+    };
+
+    const confirmReturnCustodio = async () => {
+        if (!selectedReturnCustodio || !selectedReturnCustodio.equipo_id) return;
+        setLoading(true);
+        try {
+            await telefoniaStore.registrarDevolucionCustodio(
+                selectedReturnCustodio.id,
+                selectedReturnCustodio.equipo_id,
+                "Usuario" // Hardcoded to Usuario per business logic
+            );
+            setToast({ type: "success", message: "Devolución a custodio registrada" });
+            setReturnCustodioModalOpen(false);
+            setSelectedReturnCustodio(null);
+            await loadMisEquipos();
+        } catch (error) {
+            console.error(error);
+            setToast({ type: "error", message: "Error al registrar custodio" });
+        } finally {
+            setLoading(false);
         }
     };
 
@@ -554,13 +564,19 @@ export default function MisEquipos() {
                                             </button>
                                         </div>
                                     ) : !item.usuario_final_nombre ? (
-                                        <button
-                                            onClick={() => toggleEdit(item.id)}
-                                            className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
-                                        >
-                                            <UserPlus className="h-4 w-4" />
-                                            Asignar Responsable
-                                        </button>
+                                        item.equipo_custodio === "Administración" ? (
+                                            <div className="w-full py-2.5 text-center text-sm font-medium text-gray-500 bg-gray-100 rounded-lg cursor-not-allowed border border-gray-200">
+                                                En Custodia (Administración)
+                                            </div>
+                                        ) : (
+                                            <button
+                                                onClick={() => toggleEdit(item.id)}
+                                                className="w-full flex items-center justify-center gap-2 py-2.5 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
+                                            >
+                                                <UserPlus className="h-4 w-4" />
+                                                Asignar Responsable
+                                            </button>
+                                        )
                                     ) : (
                                         <div className="flex gap-2">
                                             {item.estado === "PARA DEVOLUCION" ? (
@@ -575,14 +591,16 @@ export default function MisEquipos() {
                                                 </div>
                                             ) : (
                                                 <>
-                                                    <button
-                                                        onClick={() => handleReassign(item.id)}
-                                                        className="flex-1 py-2.5 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
-                                                        title="Reasignar a otro usuario"
-                                                    >
-                                                        <RefreshCw className="h-4 w-4" />
-                                                        Reasignar
-                                                    </button>
+                                                    {item.equipo_categoria === 'PROYECTO' && (
+                                                        <button
+                                                            onClick={() => handleOpenReturnCustodio(item)}
+                                                            className="flex-1 py-2.5 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
+                                                            title="Devolver a Custodio"
+                                                        >
+                                                            <User className="h-4 w-4" />
+                                                            Custodio
+                                                        </button>
+                                                    )}
                                                     <button
                                                         onClick={() => handleOpenReturn(item)}
                                                         className="flex-1 py-2.5 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 font-medium text-sm transition-colors shadow-sm flex items-center justify-center gap-2"
@@ -648,6 +666,62 @@ export default function MisEquipos() {
                                     >
                                         <CornerUpLeft className="h-4 w-4" />
                                         Confirmar Devolución
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Custodio Return Modal */}
+            {
+                returnCustodioModalOpen && selectedReturnCustodio && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
+                        <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden">
+                            <div className="p-6">
+                                <div className="flex items-center gap-4 mb-4">
+                                    <div className="h-12 w-12 rounded-full bg-indigo-100 flex items-center justify-center flex-shrink-0">
+                                        <User className="h-6 w-6 text-indigo-600" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-lg font-bold text-gray-900">Devolver a Custodio</h3>
+                                        <p className="text-sm text-gray-500">¿A quién se le entregará el equipo temporalmente?</p>
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-50 rounded-lg p-3 mb-6 border border-gray-100 text-sm">
+                                    <div className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 mb-4">
+                                        <span className="font-semibold text-gray-500">Equipo:</span>
+                                        <span className="font-medium text-gray-900">
+                                            {selectedReturnCustodio.equipo_marca} {selectedReturnCustodio.equipo_modelo}
+                                        </span>
+                                    </div>
+
+                                    <div>
+                                        <span className="text-xs font-semibold text-gray-500 mb-1 block">Custodio Destino:</span>
+                                        <div className="w-full border border-gray-200 rounded-md shadow-sm sm:text-sm p-2 bg-gray-50 text-gray-700 font-medium">
+                                            Usuario (Responsable actual)
+                                        </div>
+                                    </div>
+                                    <p className="mt-3 text-xs text-gray-500 italic">
+                                        Al confirmar, la asignación actual ({selectedReturnCustodio.usuario_final_nombre || "Sin usuario"}) se cerrará y el equipo quedará a cargo del custodio.
+                                    </p>
+                                </div>
+
+                                <div className="flex gap-3 justify-end">
+                                    <button
+                                        onClick={() => setReturnCustodioModalOpen(false)}
+                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50"
+                                    >
+                                        Cancelar
+                                    </button>
+                                    <button
+                                        onClick={confirmReturnCustodio}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-lg hover:bg-indigo-700 flex items-center gap-2"
+                                    >
+                                        <Check className="h-4 w-4" />
+                                        Confirmar Custodio
                                     </button>
                                 </div>
                             </div>

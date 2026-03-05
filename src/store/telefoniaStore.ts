@@ -68,6 +68,7 @@ export interface Equipo {
     categoria?: 'TELEFONIA' | 'PROYECTO' | string;
     ubicacion?: string;
     estado_actual?: string; // Estado físico actual (Bueno, Dañado, Robado)
+    custodio?: string | null; // "Usuario" o "Administración"
     // Helpers (Populated by store)
     asignacion_activa?: Solicitud | null;
     periodo_asignado?: string; // Derived from active assignment
@@ -968,7 +969,7 @@ export const telefoniaStore = {
 
     async createEquipo(eq: Omit<Equipo, "id" | "created_at">) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { chip, asignacion_activa, ...payload } = eq;
+        const { chip, asignacion_activa, periodo_asignado, fecha_fin_asignado, ...payload } = eq;
 
         // Default estado_actual to the initial condition ('Nuevo' or 'Segundo Uso')
         const finalPayload = {
@@ -989,7 +990,7 @@ export const telefoniaStore = {
 
     async updateEquipo(id: string, updates: Partial<Equipo>) {
         // eslint-disable-next-line @typescript-eslint/no-unused-vars
-        const { chip, asignacion_activa, ...payload } = updates;
+        const { chip, asignacion_activa, periodo_asignado, fecha_fin_asignado, ...payload } = updates;
         const { data, error } = await supabase
             .from("telefonia_equipos")
             .update(payload)
@@ -1639,10 +1640,84 @@ export const telefoniaStore = {
                 estado: nuevoEstadoEquipo,
                 condicion: "Segundo Uso",
                 estado_actual: estadoRetorno,
-                ubicacion: "BASE" // Return to BASE upon return
+                ubicacion: "BASE", // Return to BASE upon return
+                custodio: null // Clear custodio
             })
             .eq("id", equipoId);
 
+        await this.fetchEquipos();
+    },
+
+    async registrarDevolucionCustodio(asignacionId: string, equipoId: string, custodio: "Usuario" | "Administración") {
+        const fechaDevolucion = new Date().toISOString();
+
+        // Obtener la asignacion original
+        const { data: original, error: fetchErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("*")
+            .eq("id", asignacionId)
+            .single();
+
+        if (fetchErr || !original) throw fetchErr || new Error("No se encontró la asignación original");
+
+        // 1. Terminar la asignación actual marcándola como devuelta
+        let assignQuery = supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                fecha_devolucion: fechaDevolucion,
+                estado: 'Devuelto',
+                observacion_retorno: `Devuelto por Custodio: ${custodio}`,
+                condicion_retorno: 'Bueno'
+            })
+            .eq("id", asignacionId);
+
+        const { error: assignErr } = await assignQuery;
+        if (assignErr) throw assignErr;
+
+        // 2. Crear una nueva asignación copiando los datos del responsable pero dejando al usuario final en null
+        const { error: newAssignErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .insert([{
+                solicitud_id: original.solicitud_id,
+                equipo_id: equipoId,
+                chip_id: original.chip_id,
+                fecha_entrega: fechaDevolucion,
+                estado: 'Entregado',
+                responsable_dni: original.responsable_dni,
+                responsable_nombre: original.responsable_nombre,
+                responsable_area: original.responsable_area,
+                usuario_final_dni: null,
+                usuario_final_nombre: null,
+                usuario_final_area: null,
+                usuario_final_puesto: null,
+                usuario_final_sede: null
+            }]);
+
+        if (newAssignErr) throw newAssignErr;
+
+        // 3. Actualizar el estado del equipo
+        const updateData: any = { custodio: custodio };
+
+        // As per requirements: if it's sent back to Administración, reset location to BASE
+        if (custodio === "Administración") {
+            updateData.ubicacion = "BASE";
+        }
+
+        await supabase
+            .from("telefonia_equipos")
+            .update(updateData)
+            .eq("id", equipoId);
+
+        await this.fetchEquipos();
+    },
+
+    async cambiarCustodioAUsuario(equipoId: string) {
+        const { error } = await supabase
+            .from("telefonia_equipos")
+            .update({ custodio: "Usuario" })
+            .eq("id", equipoId);
+
+        if (error) throw error;
         await this.fetchEquipos();
     },
 
@@ -1752,7 +1827,8 @@ export const telefoniaStore = {
             .from("telefonia_equipos")
             .update({
                 estado: "Asignado",
-                ubicacion: ubicacionFinal
+                ubicacion: ubicacionFinal,
+                custodio: null // Clear custodio on reassignment
             })
             .eq("id", equipoId);
 
