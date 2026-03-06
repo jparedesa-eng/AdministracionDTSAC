@@ -555,27 +555,30 @@ export const telefoniaStore = {
         }
     },
 
-    async finalizarRevision(asignacionId: string, equipoId: string, nuevoEstado: "Disponible" | "Mantenimiento") {
+    async finalizarRevision(asignacionId: string, equipoId: string, condicionRetorno: "Bueno" | "Dañado" | "Robado", observaciones?: string) {
+        let nuevoEstado: EstadoEquipo = "Disponible";
+        if (condicionRetorno === "Dañado" || condicionRetorno === "Robado") {
+            nuevoEstado = "Mantenimiento";
+        }
+
         // 1. Update Equipo Status
         const { error: eqError } = await supabase
             .from("telefonia_equipos")
             .update({
                 estado: nuevoEstado,
-                // If it's available, it's no longer assigned physically? 
-                // Wait, logic says "DISPONBILE SI ESTA BUENO".
-                // We should probably unlink the active assignment?
-                // But the user said "EL ESTADO EN ASIGNACIONES CAMBIARIA A DEVUELTO".
             })
             .eq("id", equipoId);
 
         if (eqError) throw eqError;
 
-        // 2. Update Asignacion Status -> "DEVUELTO"
+        // 2. Update Asignacion Status -> "DEVUELTO" con campos adicionales
         const { error: asigError } = await supabase
             .from("telefonia_solicitud_asignaciones")
             .update({
                 estado: "Devuelto",
-                fecha_devolucion: new Date().toISOString() // Set return date now
+                fecha_devolucion: new Date().toISOString(), // Set return date now
+                condicion_retorno: condicionRetorno,
+                observacion_retorno: observaciones || ""
             })
             .eq("id", asignacionId);
 

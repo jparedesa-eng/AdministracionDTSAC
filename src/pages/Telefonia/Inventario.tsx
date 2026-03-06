@@ -185,7 +185,7 @@ export default function InventarioTelefonia() {
         return () => unsub();
     }, []);
     const [openRevision, setOpenRevision] = useState(false);
-    const [revisionData, setRevisionData] = useState<{ estado: "Disponible" | "Mantenimiento", obs: string }>({ estado: "Disponible", obs: "" });
+    const [revisionData, setRevisionData] = useState<{ estado: "Bueno" | "Dañado" | "Robado", obs: string }>({ estado: "Bueno", obs: "" });
 
     // History View
     const [showHistory, setShowHistory] = useState(false);
@@ -598,7 +598,7 @@ export default function InventarioTelefonia() {
 
     const handleOpenRevision = (eq: Equipo) => {
         setModalActionItem(eq);
-        setRevisionData({ estado: "Disponible", obs: "" });
+        setRevisionData({ estado: "Bueno", obs: "" });
         setOpenRevision(true);
     };
 
@@ -611,7 +611,8 @@ export default function InventarioTelefonia() {
             await telefoniaStore.finalizarRevision(
                 asigId,
                 modalActionItem.id,
-                revisionData.estado
+                revisionData.estado,
+                revisionData.obs
             );
             setToast({ type: "success", message: "Revisión finalizada. Equipo actualizado." });
             setOpenRevision(false);
@@ -2070,16 +2071,44 @@ export default function InventarioTelefonia() {
                     {(devolucionData.tipo === 'Completa' || (devolucionData.tipo === 'Custodio' && devolucionData.custodio === 'Administración')) && (
                         <>
                             <div>
-                                <label className="block text-sm font-medium text-gray-700">Estado del Equipo al Retorno</label>
-                                <select
-                                    className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
-                                    value={devolucionData.estado}
-                                    onChange={(e) => setDevolucionData({ ...devolucionData, estado: e.target.value })}
-                                >
-                                    <option value="Bueno">Bueno (Operativo)</option>
-                                    <option value="Dañado">Dañado (Pasará a Mantenimiento)</option>
-                                    <option value="Robado">Robado (Pasará a Mantenimiento)</option>
-                                </select>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">Estado del Equipo al Retorno</label>
+                                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDevolucionData({ ...devolucionData, estado: 'Bueno' })}
+                                        className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${devolucionData.estado === 'Bueno'
+                                            ? 'bg-green-50 border-green-200 text-green-700 ring-2 ring-green-500 shadow-sm'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70'
+                                            }`}
+                                    >
+                                        <CheckCircle className={`h-6 w-6 ${devolucionData.estado === 'Bueno' ? "text-green-600" : "text-gray-400"}`} />
+                                        <span className="font-semibold text-center mb-1">Bueno <br /><span className="text-[10px] font-normal text-gray-500">(Operativo)</span></span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setDevolucionData({ ...devolucionData, estado: 'Dañado' })}
+                                        className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${devolucionData.estado === 'Dañado'
+                                            ? 'bg-amber-50 border-amber-200 text-amber-700 ring-2 ring-amber-500 shadow-sm'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70'
+                                            }`}
+                                    >
+                                        <Activity className={`h-6 w-6 ${devolucionData.estado === 'Dañado' ? "text-amber-600" : "text-gray-400"}`} />
+                                        <span className="font-semibold text-center mb-1">Dañado <br /><span className="text-[10px] font-normal text-gray-500">(Mantenimiento)</span></span>
+                                    </button>
+
+                                    <button
+                                        type="button"
+                                        onClick={() => setDevolucionData({ ...devolucionData, estado: 'Robado' })}
+                                        className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${devolucionData.estado === 'Robado'
+                                            ? 'bg-red-50 border-red-200 text-red-700 ring-2 ring-red-500 shadow-sm'
+                                            : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70'
+                                            }`}
+                                    >
+                                        <AlertTriangle className={`h-6 w-6 ${devolucionData.estado === 'Robado' ? "text-red-600" : "text-gray-400"}`} />
+                                        <span className="font-semibold text-center mb-1">Robado <br /><span className="text-[10px] font-normal text-gray-500">(Mantenimiento)</span></span>
+                                    </button>
+                                </div>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Observaciones</label>
@@ -3704,35 +3733,41 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Resultado de la Revisión
                         </label>
-                        <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <button
                                 type="button"
-                                onClick={() => setRevisionData({ ...revisionData, estado: "Disponible" })}
-                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${revisionData.estado === "Disponible"
-                                    ? "bg-green-50 border-green-200 text-green-700 ring-1 ring-green-500"
-                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                                onClick={() => setRevisionData({ ...revisionData, estado: "Bueno" })}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${revisionData.estado === "Bueno"
+                                    ? "bg-green-50 border-green-200 text-green-700 ring-2 ring-green-500 shadow-sm"
+                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70"
                                     }`}
                             >
-                                <div className="flex flex-col items-center gap-1">
-                                    <CheckCircle className="h-5 w-5" />
-                                    <span>Equipo Bueno</span>
-                                    <span className="text-[10px] text-gray-400 font-normal">Pasa a Disponibles</span>
-                                </div>
+                                <CheckCircle className={`h-6 w-6 ${revisionData.estado === "Bueno" ? "text-green-600" : "text-gray-400"}`} />
+                                <span className="font-semibold text-center mb-1">Bueno</span>
                             </button>
 
                             <button
                                 type="button"
-                                onClick={() => setRevisionData({ ...revisionData, estado: "Mantenimiento" })}
-                                className={`p-3 rounded-lg border text-sm font-medium transition-all ${revisionData.estado === "Mantenimiento"
-                                    ? "bg-amber-50 border-amber-200 text-amber-700 ring-1 ring-amber-500"
-                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+                                onClick={() => setRevisionData({ ...revisionData, estado: "Dañado" })}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${revisionData.estado === "Dañado"
+                                    ? "bg-amber-50 border-amber-200 text-amber-700 ring-2 ring-amber-500 shadow-sm"
+                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70"
                                     }`}
                             >
-                                <div className="flex flex-col items-center gap-1">
-                                    <Activity className="h-5 w-5" />
-                                    <span>Requiere Reparación</span>
-                                    <span className="text-[10px] text-gray-400 font-normal">Pasa a Mantenimiento</span>
-                                </div>
+                                <Activity className={`h-6 w-6 ${revisionData.estado === "Dañado" ? "text-amber-600" : "text-gray-400"}`} />
+                                <span className="font-semibold text-center mb-1">Dañado</span>
+                            </button>
+
+                            <button
+                                type="button"
+                                onClick={() => setRevisionData({ ...revisionData, estado: "Robado" })}
+                                className={`p-3 rounded-lg border text-sm font-medium transition-all flex flex-col items-center justify-center gap-2 ${revisionData.estado === "Robado"
+                                    ? "bg-red-50 border-red-200 text-red-700 ring-2 ring-red-500 shadow-sm"
+                                    : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50 opacity-70"
+                                    }`}
+                            >
+                                <AlertTriangle className={`h-6 w-6 ${revisionData.estado === "Robado" ? "text-red-600" : "text-gray-400"}`} />
+                                <span className="font-semibold text-center mb-1">Robado</span>
                             </button>
                         </div>
                     </div>
