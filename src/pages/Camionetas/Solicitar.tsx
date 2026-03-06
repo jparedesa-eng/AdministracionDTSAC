@@ -88,9 +88,7 @@ export default function Solicitar() {
 
   // disponibilidad
   const [checking, setChecking] = React.useState(false);
-  const [selectedPlaca, setSelectedPlaca] = React.useState<string>("");
-
-  const [submitting, setSubmitting] = React.useState(false);
+  const [selectedPlaca, setSelectedPlaca] = React.useState<string>("");  const [submitting, setSubmitting] = React.useState(false);
   const [msg, setMsg] = React.useState<{
     type: "ok" | "err";
     text: string;
@@ -168,16 +166,6 @@ export default function Solicitar() {
         setMsg({
           type: "err",
           text: "La fecha/hora de fin debe ser mayor al inicio.",
-        });
-        return;
-      }
-
-      // VALIDACIÓN: mismo día
-      if (dInicio.toDateString() !== dFin.toDateString()) {
-        setChecking(false);
-        setMsg({
-          type: "err",
-          text: "El inicio y fin de uso deben ser el mismo día.",
         });
         return;
       }
@@ -291,15 +279,6 @@ export default function Solicitar() {
       setMsg({
         type: "err",
         text: "La fecha/hora de fin debe ser mayor al inicio.",
-      });
-      return;
-    }
-
-    // VALIDACIÓN: mismo día
-    if (dInicio.toDateString() !== dFin.toDateString()) {
-      setMsg({
-        type: "err",
-        text: "El inicio y fin de uso deben ser el mismo día.",
       });
       return;
     }
@@ -656,195 +635,236 @@ export default function Solicitar() {
         )}
 
         {/* Línea de tiempo de reservas para camioneta seleccionada */}
-        {selectedPlaca && usoInicioLocal ? (
-          <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-100 text-emerald-800">
-                  <Calendar className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-semibold text-gray-900">
-                    Ocupación del día para {selectedPlaca}
-                  </p>
-                  <p className="text-xs text-gray-500 font-medium">
-                    {usoInicioLocal.slice(0, 10).split('-').reverse().join('/')}
-                  </p>
-                </div>
-              </div>
-
-              {/* Leyenda */}
-              <div className="flex items-center gap-4 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300"></div>
-                  <span>Fuera de horario</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300"></div>
-                  <span>Disponible</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm bg-rose-500 border border-rose-600"></div>
-                  <span>Ocupado</span>
-                </div>
-                <div className="flex items-center gap-1.5">
-                  <div className="w-3 h-3 rounded-sm bg-blue-400/40 border-y-[2px] border-blue-500"></div>
-                  <span className="font-bold text-blue-700">Tu selección</span>
-                </div>
-              </div>
-            </div>
-
-            <div className="relative h-12 bg-gray-200 rounded-lg border border-gray-300 ml-2 mr-2 overflow-hidden shadow-inner">
-              {/* Bloque verde de horario volante */}
-              {(() => {
-                const veh: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
-                if (veh && veh.volante === "Si" && veh.volanteInicio && veh.volanteFin) {
-                  const [hIni, mIni] = veh.volanteInicio.split(':').map(Number);
-                  const [hFin, mFin] = veh.volanteFin.split(':').map(Number);
-                  const tStart = hIni + (mIni / 60);
-                  const tEnd = hFin + (mFin / 60);
-
-                  const left = Math.max(0, (tStart / 24) * 100);
-                  const right = Math.min(100, (tEnd / 24) * 100);
-                  const width = right - left;
-
-                  if (width > 0) {
-                    return (
-                      <div
-                        className="absolute top-0 bottom-0 bg-emerald-100 border-x border-emerald-300 pointer-events-none"
-                        style={{ left: `${left}%`, width: `${width}%` }}
-                      ></div>
-                    );
-                  }
-                }
-                return null;
-              })()}
-
-              {/* Marcas de horas (0 a 24) */}
-              <div className="absolute inset-0 pointer-events-none">
-                {Array.from({ length: 25 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className="absolute top-0 bottom-0 border-l border-gray-300/60"
-                    style={{ left: `${(i / 24) * 100}%` }}
-                  >
+        {showForm && (
+          selectedPlaca && usoInicioLocal ? (
+            <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 shadow-sm">
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-100 text-emerald-800">
+                    <Calendar className="h-5 w-5" />
                   </div>
-                ))}
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">
+                      Ocupación para {selectedPlaca}
+                    </p>
+                    <p className="text-xs text-gray-500 font-medium">
+                      {usoInicioLocal.slice(0, 10) === usoFinLocal.slice(0, 10) 
+                        ? usoInicioLocal.slice(0, 10).split('-').reverse().join('/')
+                        : `${usoInicioLocal.slice(0, 10).split('-').reverse().join('/')} al ${usoFinLocal.slice(0, 10).split('-').reverse().join('/')}`
+                      }
+                    </p>
+                  </div>
+                </div>
+
+                {/* Leyenda */}
+                <div className="flex items-center gap-4 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300"></div>
+                    <span>Fuera de horario</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300"></div>
+                    <span>Disponible</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-rose-500 border border-rose-600"></div>
+                    <span>Ocupado</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-3 rounded-sm bg-blue-400/40 border-y-[2px] border-blue-500"></div>
+                    <span className="font-bold text-blue-700">Tu selección</span>
+                  </div>
+                </div>
               </div>
 
-              {/* Bloques de reservas */}
-              {(() => {
-                const targetDate = usoInicioLocal.slice(0, 10);
-                if (!targetDate) return null;
+              <div className="relative h-12 bg-gray-200 rounded-lg border border-gray-300 ml-2 mr-2 overflow-hidden shadow-inner">
+                {/* Bloque verde de horario volante */}
+                {(() => {
+                  const veh: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
+                  if (veh && veh.volante === "Si" && veh.volanteInicio && veh.volanteFin) {
+                    const [hIni, mIni] = veh.volanteInicio.split(':').map(Number);
+                    const [hFin, mFin] = veh.volanteFin.split(':').map(Number);
+                    const volStart = hIni + (mIni / 60);
+                    const volEnd = hFin + (mFin / 60);
 
-                return camionetasStore.solicitudes
-                  .filter(s => {
-                    if (s.vehiculo !== selectedPlaca) return false;
-                    const activeStates = ["Pendiente", "Asignada", "Reservada", "En uso"];
-                    if (!activeStates.includes(s.estado)) return false;
+                    const iDateStr = usoInicioLocal.slice(0, 10);
+                    const fDateStr = usoFinLocal.slice(0, 10);
+                    const diffDays = Math.round((new Date(fDateStr).getTime() - new Date(iDateStr).getTime()) / (1000 * 60 * 60 * 24));
+                    const totalDays = Math.max(1, diffDays + 1);
+                    const totalHours = totalDays * 24;
 
-                    const sD = s.usoInicio.slice(0, 10);
-                    const eD = s.usoFin.slice(0, 10);
-                    return sD === targetDate || eD === targetDate;
-                  })
-                  .map(s => {
-                    const sStartTime = s.usoInicio.slice(11, 16);
-                    const sEndTime = s.usoFin.slice(11, 16);
+                    return Array.from({ length: totalDays }).map((_, dayIdx) => {
+                      const tStart = dayIdx * 24 + volStart;
+                      const tEnd = dayIdx * 24 + volEnd;
+                      const left = (tStart / totalHours) * 100;
+                      const width = ((tEnd - tStart) / totalHours) * 100;
 
-                    const [sH, sM] = sStartTime.split(':').map(Number);
-                    const [eH, eM] = sEndTime.split(':').map(Number);
+                      if (width > 0) {
+                        return (
+                          <div
+                            key={dayIdx}
+                            className="absolute top-0 bottom-0 bg-emerald-100 border-x border-emerald-300 pointer-events-none"
+                            style={{ left: `${left}%`, width: `${width}%` }}
+                          ></div>
+                        );
+                      }
+                      return null;
+                    });
+                  }
+                  return null;
+                })()}
 
-                    const tStart = s.usoInicio.slice(0, 10) === targetDate
-                      ? sH + (sM / 60)
-                      : 0;
+                {/* Marcas de horas */}
+                {(() => {
+                  const iDateStr = usoInicioLocal.slice(0, 10);
+                  const fDateStr = usoFinLocal.slice(0, 10);
+                  const diffDays = Math.round((new Date(fDateStr).getTime() - new Date(iDateStr).getTime()) / (1000 * 60 * 60 * 24));
+                  const totalDays = Math.max(1, diffDays + 1);
+                  const totalHours = totalDays * 24;
+                  
+                  const step = totalDays > 3 ? 12 : (totalDays > 1 ? 6 : 1);
 
-                    const tEnd = s.usoFin.slice(0, 10) === targetDate
-                      ? eH + (eM / 60)
-                      : 24;
-
-                    const left = (tStart / 24) * 100;
-                    const width = ((tEnd - tStart) / 24) * 100;
-
-                    if (width <= 0) return null;
-
+                  return Array.from({ length: totalHours + 1 }).map((_, i) => {
+                    if (i % step !== 0 && i !== totalHours) return null;
                     return (
                       <div
-                        key={s.id}
-                        className="absolute top-1 bottom-1 bg-rose-500 rounded-md border border-rose-600 group cursor-default transition-transform hover:scale-y-105 shadow-md flex items-center justify-center overflow-hidden"
-                        style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                        key={i}
+                        className={`absolute top-0 bottom-0 border-l ${i % 24 === 0 ? 'border-gray-400 z-0' : 'border-gray-300/60'}`}
+                        style={{ left: `${(i / totalHours) * 100}%` }}
                       >
-                        {width > 4 && (
-                          <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
-                            {s.usoInicio.slice(11, 16)} - {s.usoFin.slice(11, 16)}
-                          </span>
-                        )}
-                        <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[12px] font-medium px-3 py-1.5 rounded-lg shadow-xl pointer-events-none whitespace-nowrap z-20 transition-opacity">
-                          {s.nombre.split(' ')[0]} ({s.usoInicio.slice(11, 16)} - {s.usoFin.slice(11, 16)})
-                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-t-gray-900 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent"></div>
-                        </div>
                       </div>
                     );
                   });
-              })()}
+                })()}
 
-              {/* Bloque de selección actual (overlay) */}
-              {(() => {
-                if (!usoInicioLocal || !usoFinLocal) return null;
-                const iDate = usoInicioLocal.slice(0, 10);
-                const fDate = usoFinLocal.slice(0, 10);
-                const targetDate = usoInicioLocal.slice(0, 10);
+                {/* Bloques de reservas */}
+                {(() => {
+                  const iDateStr = usoInicioLocal.slice(0, 10);
+                  const fDateStr = usoFinLocal.slice(0, 10);
+                  const baseTime = new Date(iDateStr + "T00:00:00").getTime();
+                  const totalDays = Math.max(1, Math.round((new Date(fDateStr).getTime() - baseTime) / (1000 * 60 * 60 * 24)) + 1);
+                  const totalHours = totalDays * 24;
 
-                if (iDate !== targetDate || fDate !== targetDate) return null;
+                  return camionetasStore.solicitudes
+                    .filter(s => {
+                      if (s.vehiculo !== selectedPlaca) return false;
+                      const activeStates = ["Pendiente", "Asignada", "Reservada", "En uso"];
+                      if (!activeStates.includes(s.estado)) return false;
 
-                const iTime = usoInicioLocal.slice(11, 16);
-                const fTime = usoFinLocal.slice(11, 16);
+                      const sD = s.usoInicio.slice(0, 10);
+                      const eD = s.usoFin.slice(0, 10);
+                      return sD <= fDateStr && eD >= iDateStr;
+                    })
+                    .map(s => {
+                      const sTime = new Date(s.usoInicio).getTime();
+                      let tStart = (sTime - baseTime) / (1000 * 60 * 60);
+                      if (tStart < 0) tStart = 0;
 
-                if (!iTime || !fTime) return null;
+                      const eTime = new Date(s.usoFin).getTime();
+                      let tEnd = (eTime - baseTime) / (1000 * 60 * 60);
+                      if (tEnd > totalHours) tEnd = totalHours;
 
-                const [iH, iM] = iTime.split(':').map(Number);
-                const [fH, fM] = fTime.split(':').map(Number);
+                      const left = (tStart / totalHours) * 100;
+                      const width = ((tEnd - tStart) / totalHours) * 100;
 
-                const tStart = iH + (iM / 60);
-                const tEnd = fH + (fM / 60);
+                      if (width <= 0) return null;
 
-                if (tEnd <= tStart) return null;
+                      return (
+                        <div
+                          key={s.id}
+                          className="absolute top-1 bottom-1 bg-rose-500 rounded-md border border-rose-600 group cursor-default transition-transform hover:scale-y-105 shadow-md flex items-center justify-center overflow-hidden"
+                          style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                        >
+                          {width > (400 / totalHours) && (
+                            <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
+                              {totalDays > 1 ? `${s.usoInicio.slice(5,10)}` : `${s.usoInicio.slice(11, 16)}`}
+                            </span>
+                          )}
+                          <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[12px] font-medium px-3 py-1.5 rounded-lg shadow-xl pointer-events-none whitespace-nowrap z-20 transition-opacity">
+                            {s.nombre.split(' ')[0]} ({s.usoInicio.slice(5, 16).replace('T', ' ')} a {s.usoFin.slice(5, 16).replace('T', ' ')})
+                            <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-t-gray-900 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent"></div>
+                          </div>
+                        </div>
+                      );
+                    });
+                })()}
 
-                const left = (tStart / 24) * 100;
-                const width = ((tEnd - tStart) / 24) * 100;
+                {/* Bloque de selección actual (overlay) */}
+                {(() => {
+                  if (!usoInicioLocal || !usoFinLocal) return null;
+                  const iDateStr = usoInicioLocal.slice(0, 10);
+                  const fDateStr = usoFinLocal.slice(0, 10);
+                  const baseTime = new Date(iDateStr + "T00:00:00").getTime();
+                  const totalDays = Math.max(1, Math.round((new Date(fDateStr).getTime() - baseTime) / (1000 * 60 * 60 * 24)) + 1);
+                  const totalHours = totalDays * 24;
 
-                return (
-                  <div
-                    className="absolute top-0 bottom-0 bg-blue-400/40 border-y-[3px] border-blue-500 z-10 pointer-events-none flex items-center justify-center overflow-hidden transition-all duration-300 ease-in-out"
-                    style={{ left: `${left}%`, width: `${width}%` }}
-                  >
-                    {width > 6 && (
-                      <span className="text-[10px] font-bold text-blue-900 truncate px-1.5 py-0.5 drop-shadow-sm bg-white/70 rounded shadow-sm">
-                        Tu selección
-                      </span>
-                    )}
-                  </div>
-                );
-              })()}
+                  const iH = new Date(usoInicioLocal).getTime();
+                  const fH = new Date(usoFinLocal).getTime();
+
+                  let tStart = (iH - baseTime) / (1000 * 60 * 60);
+                  let tEnd = (fH - baseTime) / (1000 * 60 * 60);
+
+                  if (tEnd <= tStart) return null;
+
+                  const left = (tStart / totalHours) * 100;
+                  const width = ((tEnd - tStart) / totalHours) * 100;
+
+                  return (
+                    <div
+                      className="absolute top-0 bottom-0 bg-blue-400/40 border-y-[3px] border-blue-500 z-10 pointer-events-none flex items-center justify-center overflow-hidden transition-all duration-300 ease-in-out"
+                      style={{ left: `${left}%`, width: `${width}%` }}
+                    >
+                      {width > (600 / totalHours) && (
+                        <span className="text-[10px] font-bold text-blue-900 truncate px-1.5 py-0.5 drop-shadow-sm bg-white/70 rounded shadow-sm">
+                          Tu selección
+                        </span>
+                      )}
+                    </div>
+                  );
+                })()}
+              </div>
+
+              {/* Eje de tiempo base */}
+              <div className="relative h-6 mt-2 mx-2">
+                {(() => {
+                  const iDateStr = usoInicioLocal.slice(0, 10);
+                  const fDateStr = usoFinLocal.slice(0, 10);
+                  const baseTime = new Date(iDateStr + "T00:00:00").getTime();
+                  const diffDays = Math.round((new Date(fDateStr).getTime() - baseTime) / (1000 * 60 * 60 * 24));
+                  const totalDays = Math.max(1, diffDays + 1);
+                  const totalHours = totalDays * 24;
+                  
+                  const step = totalDays > 3 ? 24 : (totalDays > 1 ? 12 : 4);
+
+                  return Array.from({ length: totalHours + 1 }).map((_, i) => {
+                    if (i % step !== 0 && i !== totalHours) return null;
+                    
+                    // if it's a multiple of 24, show the date or "00:00"
+                    let label = `${(i % 24).toString().padStart(2, '0')}:00`;
+                    if (totalDays > 1 && i % 24 === 0) {
+                      const d = new Date(baseTime + i * 1000 * 60 * 60);
+                      label = d.toISOString().slice(5, 10).split('-').reverse().join('/');
+                    }
+
+                    return (
+                      <div
+                        key={i}
+                        className="absolute text-[11px] font-bold text-gray-500 -translate-x-1/2"
+                        style={{ left: `${(i / totalHours) * 100}%` }}
+                      >
+                        {label}
+                      </div>
+                    );
+                  });
+                })()}
+              </div>
             </div>
-
-            {/* Eje de tiempo base */}
-            <div className="relative h-6 mt-2 mx-2">
-              {[0, 4, 8, 12, 16, 20, 24].map((h) => (
-                <div
-                  key={h}
-                  className="absolute text-[11px] font-bold text-gray-500 -translate-x-1/2"
-                  style={{ left: `${(h / 24) * 100}%` }}
-                >
-                  {h === 24 ? "00:00" : `${h.toString().padStart(2, '0')}:00`}
-                </div>
-              ))}
+          ) : (
+            <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 border-dashed text-center">
+              <Calendar className="h-6 w-6 text-gray-400 mx-auto mb-2 opacity-50" />
+              <p className="text-sm text-gray-500">Selecciona una placa e inicio de uso para ver su ocupación aquí.</p>
             </div>
-          </div>
-        ) : (
-          <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 border-dashed text-center">
-            <Calendar className="h-6 w-6 text-gray-400 mx-auto mb-2 opacity-50" />
-            <p className="text-sm text-gray-500">Selecciona una placa e inicio de uso para ver su ocupación aquí.</p>
-          </div>
+          )
         )}
 
         {/* Formulario */}
@@ -894,17 +914,7 @@ export default function Solicitar() {
                     type="datetime-local"
                     value={usoInicioLocal}
                     onChange={(e) => {
-                      const newStart = e.target.value;
-                      setUsoInicioLocal(newStart);
-
-                      // Al cambiar inicio, actualizamos fin para que tenga la misma fecha
-                      // pero mantenemos la hora que ya tenía fin (o reseteamos si se prefiere).
-                      // Aquí mantenemos la hora que tenía fin.
-                      if (newStart && usoFinLocal) {
-                        const datePart = newStart.slice(0, 10);
-                        const timePart = usoFinLocal.slice(11, 16);
-                        setUsoFinLocal(`${datePart}T${timePart}`);
-                      }
+                      setUsoInicioLocal(e.target.value);
                     }}
                     className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
@@ -917,14 +927,10 @@ export default function Solicitar() {
                 <div className="relative mt-1">
                   <Calendar className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                   <input
-                    type="time"
-                    value={usoFinLocal.slice(11, 16)}
+                    type="datetime-local"
+                    value={usoFinLocal}
                     onChange={(e) => {
-                      const timeStr = e.target.value;
-                      if (!timeStr) return;
-                      // Mantener la fecha de inicio, cambiar solo la hora
-                      const datePart = usoInicioLocal.slice(0, 10);
-                      setUsoFinLocal(`${datePart}T${timeStr}`);
+                      setUsoFinLocal(e.target.value);
                     }}
                     className="w-full rounded-xl border border-gray-200 px-10 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                   />
@@ -1062,7 +1068,11 @@ export default function Solicitar() {
             <div className="pt-1 flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setShowForm(false)}
+                onClick={() => {
+                  setShowForm(false);
+                  setMsg(null);
+                  setSelectedPlaca("");
+                }}
                 className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
               >
                 <X className="h-4 w-4" />
@@ -1070,7 +1080,7 @@ export default function Solicitar() {
               </button>
               <button
                 type="submit"
-                disabled={submitting || checking || !selectedPlaca}
+                disabled={submitting || checking || !selectedPlaca || msg?.type === "err"}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-[#cc0000] disabled:opacity-60"
               >
                 {submitting ? (
