@@ -403,7 +403,9 @@ export default function InventarioTelefonia() {
                 await telefoniaStore.registrarDevolucionCustodio(
                     modalActionItem.asignacion_activa.asignacion_id as string,
                     modalActionItem.id,
-                    devolucionData.custodio
+                    devolucionData.custodio,
+                    devolucionData.estado,
+                    devolucionData.observaciones
                 );
             } else {
                 await telefoniaStore.registrarDevolucion(
@@ -2041,7 +2043,7 @@ export default function InventarioTelefonia() {
                         Responsable: {modalActionItem?.asignacion_activa?.beneficiario_nombre}
                     </p>
 
-                    {modalActionItem?.categoria === 'PROYECTO' && (
+                    {modalActionItem?.categoria === 'PROYECTO' && modalActionItem?.custodio !== 'Administración' && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Tipo de Devolución</label>
                             <div className="grid grid-cols-2 gap-3">
@@ -2069,7 +2071,7 @@ export default function InventarioTelefonia() {
                         </div>
                     )}
 
-                    {devolucionData.tipo === 'Custodio' ? (
+                    {devolucionData.tipo === 'Custodio' && (
                         <div>
                             <label className="block text-sm font-medium text-gray-700 mb-2">Seleccionar Custodio</label>
                             <div className="grid grid-cols-2 gap-3">
@@ -2095,7 +2097,9 @@ export default function InventarioTelefonia() {
                                 </button>
                             </div>
                         </div>
-                    ) : (
+                    )}
+
+                    {(devolucionData.tipo === 'Completa' || (devolucionData.tipo === 'Custodio' && devolucionData.custodio === 'Administración')) && (
                         <>
                             <div>
                                 <label className="block text-sm font-medium text-gray-700">Estado del Equipo al Retorno</label>

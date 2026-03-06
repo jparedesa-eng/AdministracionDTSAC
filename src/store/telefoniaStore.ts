@@ -1648,7 +1648,7 @@ export const telefoniaStore = {
         await this.fetchEquipos();
     },
 
-    async registrarDevolucionCustodio(asignacionId: string, equipoId: string, custodio: "Usuario" | "Administración") {
+    async registrarDevolucionCustodio(asignacionId: string, equipoId: string, custodio: "Usuario" | "Administración", condicion_retorno = "Bueno", observacion_retorno = "") {
         const fechaDevolucion = new Date().toISOString();
 
         // Obtener la asignacion original
@@ -1666,8 +1666,8 @@ export const telefoniaStore = {
             .update({
                 fecha_devolucion: fechaDevolucion,
                 estado: 'Devuelto',
-                observacion_retorno: `Devuelto por Custodio: ${custodio}`,
-                condicion_retorno: 'Bueno'
+                observacion_retorno: observacion_retorno || `Devuelto por Custodio: ${custodio}`,
+                condicion_retorno: condicion_retorno
             })
             .eq("id", asignacionId);
 
