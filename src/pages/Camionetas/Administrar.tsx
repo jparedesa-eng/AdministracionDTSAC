@@ -136,8 +136,8 @@ export default function AdministrarSolicitudes() {
     pedirDevolucion: (placa: string) => void;
   }) => {
     const estadoLower = (s.estado ?? "").toString().toLowerCase();
-    const inicio = new Date(s.usoInicio);
-    const fin = new Date(s.usoFin);
+    const inicio = new Date(s.usoInicio.slice(0, 16));
+    const fin = new Date(s.usoFin.slice(0, 16));
 
     // Variables no usadas eliminadas para evitar lints
 
@@ -151,7 +151,7 @@ export default function AdministrarSolicitudes() {
 
     return (
       <div
-        className={`bg-white rounded-xl p-2.5 border ${borderClass} transition-all group`}
+        className={`bg-white rounded-xl p-2 border ${borderClass} transition-all group`}
       >
         <div className="flex justify-between items-start mb-1.5">
           <span className="text-[9px] text-gray-400 font-mono">
@@ -164,52 +164,46 @@ export default function AdministrarSolicitudes() {
           )}
         </div>
 
-        <div className="flex items-center gap-2 mb-2">
+        <div className="flex items-center gap-2 mb-1.5">
           {estadoLower === "en uso" ? (
-            <div className="p-1 rounded-md bg-sky-50 text-sky-600">
-              <Hourglass className="h-3.5 w-3.5" />
+            <div className="p-0.5 rounded pl-1 pr-1 bg-sky-50 text-sky-600">
+              <Hourglass className="h-3 w-3" />
             </div>
           ) : (
-            <div className="p-1 rounded-md bg-emerald-50 text-emerald-600">
-              <Truck className="h-3.5 w-3.5" />
+            <div className="p-0.5 rounded pl-1 pr-1 bg-emerald-50 text-emerald-600">
+              <Truck className="h-3 w-3" />
             </div>
           )}
           <div>
-            <h4 className="text-xs font-bold text-gray-900 leading-tight">
+            <h4 className="text-[11px] font-bold text-gray-900 leading-tight">
               {s.vehiculo ?? "Sin Asignar"}
             </h4>
           </div>
         </div>
 
-        <div className="bg-gray-50 rounded-lg p-2 text-[10px] space-y-1 mb-2 border border-gray-100">
+        <div className="bg-gray-50 rounded-lg p-1.5 text-[9px] space-y-0.5 mb-1.5 border border-gray-100">
           <div className="flex justify-between">
             <span className="text-gray-500">Solicitante:</span>
-            <span className="font-medium text-gray-800 truncate max-w-[100px]" title={s.nombre}>
+            <span className="font-medium text-gray-800 truncate max-w-[110px]" title={s.nombre}>
               {s.nombre.split(" ")[0]} {s.nombre.split(" ")[1]?.charAt(0)}.
             </span>
           </div>
-          <div className="pt-1 mt-1 border-t border-gray-200">
-            <div className="flex justify-between">
-              <span className="text-gray-500">Inicio:</span>
+          <div className="pt-0.5 mt-0.5 border-t border-gray-200">
+            <div className="flex justify-between items-center">
+              <span className="text-gray-500">I-F:</span>
               <span className="font-mono text-gray-700">
-                {inicio.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })} {inicio.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
-            </div>
-            <div className="flex justify-between">
-              <span className="text-gray-500">Fin:</span>
-              <span className="font-mono text-gray-700">
-                {fin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                {inicio.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })} {inicio.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {fin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
               </span>
             </div>
           </div>
         </div>
 
         {/* Actions */}
-        <div className="flex justify-end pt-1.5 border-t border-gray-100 gap-1.5 opacity-80 group-hover:opacity-100 transition-opacity">
+        <div className="flex justify-end pt-1 border-t border-gray-100 gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
           {((s.estado === "Pendiente" || s.estado === "Reservada") && !isVencido) && (
             <button
               onClick={() => pedirRechazo(s.id)}
-              className="text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-1.5 py-0.5 rounded transition-colors"
+              className="text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-1 py-0.5 rounded transition-colors"
             >
               Rechazar
             </button>
@@ -217,7 +211,7 @@ export default function AdministrarSolicitudes() {
           {s.estado === "En uso" && s.vehiculo && (
             <button
               onClick={() => pedirDevolucion(s.vehiculo!)}
-              className="text-[9px] font-bold text-sky-600 hover:text-sky-800 hover:bg-sky-50 px-1.5 py-0.5 rounded transition-colors"
+              className="text-[9px] font-bold text-sky-600 hover:text-sky-800 hover:bg-sky-50 px-1 py-0.5 rounded transition-colors"
             >
               Devolución
             </button>
@@ -344,12 +338,12 @@ export default function AdministrarSolicitudes() {
                     RESERVADAS
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {asignadas.filter(s => new Date() <= new Date(s.usoFin)).length}
+                    {asignadas.filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length}
                   </span>
                 </div>
 
                 <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).map(s => (
+                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).map(s => (
                     <TicketCard
                       key={s.id}
                       s={s}
@@ -358,7 +352,7 @@ export default function AdministrarSolicitudes() {
                       pedirDevolucion={pedirDevolucion}
                     />
                   ))}
-                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).length === 0 && (
+                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay reservas
                     </div>
@@ -374,14 +368,14 @@ export default function AdministrarSolicitudes() {
                     EN USO
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {enUso.filter(s => new Date() <= new Date(s.usoFin)).length}
+                    {enUso.filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length}
                   </span>
                 </div>
 
                 <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).map(s => {
+                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).map(s => {
                     const now = new Date();
-                    const fin = new Date(s.usoFin);
+                    const fin = new Date(s.usoFin.slice(0, 16));
                     const isVencido = now > fin;
                     return (
                       <TicketCard
@@ -393,7 +387,7 @@ export default function AdministrarSolicitudes() {
                       />
                     );
                   })}
-                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin)).length === 0 && (
+                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay unidades en uso
                     </div>

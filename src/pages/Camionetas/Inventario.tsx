@@ -55,6 +55,8 @@ type Vehiculo = {
   fechaIngreso?: string; // NUEVO
   estado: EstadoVehiculoDB;
   volante: VolanteTipo;
+  volanteInicio?: string | null;
+  volanteFin?: string | null;
   zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | null;
 };
 
@@ -77,6 +79,8 @@ const fromDb = (r: any): Vehiculo => ({
     r.volante === "Si" || r.volante === "No"
       ? (r.volante as VolanteTipo)
       : "No",
+  volanteInicio: r.volante_inicio,
+  volanteFin: r.volante_fin,
   zona: r.zona,
 });
 
@@ -96,6 +100,8 @@ const toDb = (v: Vehiculo) => ({
   fecha_ingreso: v.fechaIngreso,
   estado: v.estado,
   volante: v.volante,
+  volante_inicio: v.volanteInicio || null,
+  volante_fin: v.volanteFin || null,
   zona: v.zona || null,
 });
 
@@ -264,10 +270,10 @@ async function apiUpdateEstado(id: string, estado: EstadoVehiculoUI) {
   return fromDb(data);
 }
 
-async function apiUpdateVolante(id: string, volante: VolanteTipo) {
+async function apiUpdateVolante(id: string, volante: VolanteTipo, volanteInicio: string | null = null, volanteFin: string | null = null) {
   const { data, error } = await supabase
     .from("vehiculos")
-    .update({ volante })
+    .update({ volante, volante_inicio: volanteInicio, volante_fin: volanteFin })
     .eq("id", id)
     .select("*")
     .single();
@@ -363,6 +369,8 @@ export default function Inventario() {
   const [volanteModalVeh, setVolanteModalVeh] = React.useState<Vehiculo | null>(null);
   const [volanteNuevoValor, setVolanteNuevoValor] =
     React.useState<VolanteTipo>("Si");
+  const [volanteInicioNuevo, setVolanteInicioNuevo] = React.useState<string>("");
+  const [volanteFinNuevo, setVolanteFinNuevo] = React.useState<string>("");
   const [volanteSaving, setVolanteSaving] = React.useState(false);
   const [volanteLoadingId, setVolanteLoadingId] =
     React.useState<string | null>(null);
@@ -601,15 +609,27 @@ export default function Inventario() {
     const nuevo: VolanteTipo = veh.volante === "Si" ? "No" : "Si";
     setVolanteModalVeh(veh);
     setVolanteNuevoValor(nuevo);
+    setVolanteInicioNuevo(veh.volanteInicio || "");
+    setVolanteFinNuevo(veh.volanteFin || "");
   };
 
   const handleConfirmVolante = async () => {
     if (!volanteModalVeh) return;
     const veh = volanteModalVeh;
+
+    if (volanteNuevoValor === "Si") {
+      if (!volanteInicioNuevo || !volanteFinNuevo) {
+        setToast({ type: "error", message: "Debe ingresar el horario de volante (Inicio y Fin)." });
+        return;
+      }
+    }
+
     setVolanteSaving(true);
     setVolanteLoadingId(veh.id);
     try {
-      const updated = await apiUpdateVolante(veh.id, volanteNuevoValor);
+      const vInicio = volanteNuevoValor === "Si" ? volanteInicioNuevo : null;
+      const vFin = volanteNuevoValor === "Si" ? volanteFinNuevo : null;
+      const updated = await apiUpdateVolante(veh.id, volanteNuevoValor, vInicio, vFin);
       setRows((arr) => arr.map((it) => (it.id === updated.id ? updated : it)));
       setToast({
         type: "success",
@@ -958,7 +978,14 @@ export default function Inventario() {
                       {v.zona || <span className="text-gray-300">-</span>}
                     </td>
                     <td className="px-4 py-3 text-gray-600 text-xs">
-                      {v.volante === "Si" ? "Sí" : "No"}
+                      {v.volante === "Si" ? (
+                        <div className="flex flex-col">
+                          <span className="font-semibold text-emerald-600">Sí</span>
+                          {v.volanteInicio && v.volanteFin && (
+                            <span className="text-xs text-gray-500">{v.volanteInicio} - {v.volanteFin}</span>
+                          )}
+                        </div>
+                      ) : "No"}
                     </td>
                     <td className="px-4 py-3">
                       {v.responsable ? (
@@ -1695,6 +1722,28 @@ export default function Inventario() {
               </span>
               ?
             </p>
+            {volanteNuevoValor === "Si" && (
+              <div className="mt-4 grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Hora de Inicio</label>
+                  <input
+                    type="time"
+                    value={volanteInicioNuevo}
+                    onChange={(e) => setVolanteInicioNuevo(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-sm font-medium text-gray-700">Hora de Fin</label>
+                  <input
+                    type="time"
+                    value={volanteFinNuevo}
+                    onChange={(e) => setVolanteFinNuevo(e.target.value)}
+                    className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                </div>
+              </div>
+            )}
             <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"

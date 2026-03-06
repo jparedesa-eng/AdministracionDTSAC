@@ -1,6 +1,7 @@
 // src/pages/Camionetas/Solicitar.tsx
 import React from "react";
 import { camionetasStore } from "../../store/camionetasStore";
+import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { notificationsStore } from "../../store/notificationsStore";
 import {
   Calendar,
@@ -20,10 +21,9 @@ import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 
-function toISO(dtLocal: string): string {
+function toLocalString(dtLocal: string): string {
   if (!dtLocal) return "";
-  const d = new Date(dtLocal);
-  return d.toISOString();
+  return dtLocal.length === 16 ? `${dtLocal}:00` : dtLocal;
 }
 
 /* =========================
@@ -38,17 +38,14 @@ function filtrarPlacasConVolante(placas: string[]): string[] {
   });
 }
 
-// Horario permitido: 08:00 a 16:00 del mismo día
-const HORARIO_MIN_MIN = 8 * 60; // 08:00
-const HORARIO_MAX_MIN = 16 * 60; // 16:00
-
-function minutosDelDia(d: Date) {
-  return d.getHours() * 60 + d.getMinutes();
+function minutosDelDiaStr(timeStr: string) {
+  if (!timeStr) return 0;
+  const parts = timeStr.split(":");
+  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
 }
 
-function esHorarioPermitido(d: Date) {
-  const m = minutosDelDia(d);
-  return m >= HORARIO_MIN_MIN && m <= HORARIO_MAX_MIN;
+function minutosDelDiaDate(d: Date) {
+  return d.getHours() * 60 + d.getMinutes();
 }
 
 /* =========================
@@ -61,8 +58,10 @@ export default function Solicitar() {
   const [nombre, setNombre] = React.useState("");
   const [origen, setOrigen] = React.useState("");
   const [destino, setDestino] = React.useState("");
+  const [otroDestino, setOtroDestino] = React.useState("");
   const [motivo, setMotivo] = React.useState("");
   const [ceco, setCeco] = React.useState("");
+  const [sedes, setSedes] = React.useState<any[]>(getSedesState().sedes);
 
   const [dniError, setDniError] = React.useState<string | null>(null);
   const [cecoError, setCecoError] = React.useState<string | null>(null);
@@ -89,9 +88,6 @@ export default function Solicitar() {
 
   // disponibilidad
   const [checking, setChecking] = React.useState(false);
-  const [availableCount, setAvailableCount] =
-    React.useState<number | null>(null);
-  const [availablePlacas, setAvailablePlacas] = React.useState<string[]>([]);
   const [selectedPlaca, setSelectedPlaca] = React.useState<string>("");
 
   const [submitting, setSubmitting] = React.useState(false);
@@ -101,6 +97,14 @@ export default function Solicitar() {
   } | null>(null);
 
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    const unsub = subscribeSedes(() => {
+      setSedes(getSedesState().sedes);
+    });
+    setSedes(getSedesState().sedes);
+    return unsub;
+  }, []);
 
   // Tickets en estado local (para que carguen bien al entrar)
   const [tickets, setTickets] = React.useState<any[]>([]);
@@ -131,17 +135,27 @@ export default function Solicitar() {
 
   const handleCloseQr = () => setQrTicket(null);
 
+  // Placas pre-cargadas (estado = Disponible y volante = Si)
+  const placasDisponibles = React.useMemo(() => {
+    return camionetasStore.inventario
+      .filter((v) => v.estado === "Disponible" && v.volante === "Si")
+      .map((v) => v.placa);
+  }, [camionetasStore.inventario]);
+
   const calcDisponibilidad = React.useCallback(async () => {
     setMsg(null);
+    if (!selectedPlaca) {
+      // Don't check availability until a truck is explicitly selected
+      targetChecking(false);
+      return;
+    }
+
     setChecking(true);
     try {
-      const inicioISO = toISO(usoInicioLocal);
-      const finISO = toISO(usoFinLocal);
+      const inicioISO = toLocalString(usoInicioLocal);
+      const finISO = toLocalString(usoFinLocal);
 
       if (!inicioISO || !finISO) {
-        setAvailableCount(null);
-        setAvailablePlacas([]);
-        setSelectedPlaca("");
         setChecking(false);
         return;
       }
@@ -150,9 +164,6 @@ export default function Solicitar() {
       const dFin = new Date(finISO);
 
       if (dInicio >= dFin) {
-        setAvailableCount(0);
-        setAvailablePlacas([]);
-        setSelectedPlaca("");
         setChecking(false);
         setMsg({
           type: "err",
@@ -163,9 +174,6 @@ export default function Solicitar() {
 
       // VALIDACIÓN: mismo día
       if (dInicio.toDateString() !== dFin.toDateString()) {
-        setAvailableCount(0);
-        setAvailablePlacas([]);
-        setSelectedPlaca("");
         setChecking(false);
         setMsg({
           type: "err",
@@ -174,17 +182,22 @@ export default function Solicitar() {
         return;
       }
 
-      // VALIDACIÓN: horario 08:00–20:00
-      if (!esHorarioPermitido(dInicio) || !esHorarioPermitido(dFin)) {
-        setAvailableCount(0);
-        setAvailablePlacas([]);
-        setSelectedPlaca("");
-        setChecking(false);
-        setMsg({
-          type: "err",
-          text: "El horario permitido es de 08:00 a 16:00 horas del mismo día.",
-        });
-        return;
+      // VALIDACIÓN: horario volante del vehiculo seleccionado
+      const vehSeleccionado: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
+      if (vehSeleccionado && vehSeleccionado.volanteInicio && vehSeleccionado.volanteFin) {
+        const vInicioMin = minutosDelDiaStr(vehSeleccionado.volanteInicio);
+        const vFinMin = minutosDelDiaStr(vehSeleccionado.volanteFin);
+        const iMin = minutosDelDiaDate(dInicio);
+        const fMin = minutosDelDiaDate(dFin);
+
+        if (iMin < vInicioMin || fMin > vFinMin) {
+          setChecking(false);
+          setMsg({
+            type: "err",
+            text: `El horario permitido para la placa ${selectedPlaca} es de ${vehSeleccionado.volanteInicio} a ${vehSeleccionado.volanteFin} horas.`,
+          });
+          return;
+        }
       }
 
       const { placas } = await camionetasStore.disponibilidadRango(
@@ -192,23 +205,14 @@ export default function Solicitar() {
         finISO
       );
 
-      // Filtrar sólo las que tienen volante = "Si"
-      const placasConVolante = filtrarPlacasConVolante(placas);
-
-      setAvailableCount(placasConVolante.length);
-      setAvailablePlacas(placasConVolante);
-
-      if (
-        placasConVolante.length === 0 ||
-        (selectedPlaca && !placasConVolante.includes(selectedPlaca))
-      ) {
-        setSelectedPlaca("");
+      if (!placas.includes(selectedPlaca)) {
+        setMsg({ type: "err", text: `La camioneta ${selectedPlaca} ya está ocupada en ese horario.` });
+      } else {
+        setMsg({ type: "ok", text: `La camioneta ${selectedPlaca} se encuentra libre en el horario indicado.` });
       }
+
     } catch (e: any) {
       console.error(e);
-      setAvailableCount(null);
-      setAvailablePlacas([]);
-      setSelectedPlaca("");
       setMsg({
         type: "err",
         text: e?.message ?? "Error verificando disponibilidad.",
@@ -216,6 +220,7 @@ export default function Solicitar() {
     } finally {
       setChecking(false);
     }
+    function targetChecking(v: boolean) { setChecking(v); }
   }, [usoInicioLocal, usoFinLocal, selectedPlaca]);
 
   // Carga inicial: inventario + solicitudes + disponibilidad
@@ -272,8 +277,8 @@ export default function Solicitar() {
       return;
     }
 
-    const inicioISO = toISO(usoInicioLocal);
-    const finISO = toISO(usoFinLocal);
+    const inicioISO = toLocalString(usoInicioLocal);
+    const finISO = toLocalString(usoFinLocal);
     if (!inicioISO || !finISO) {
       setMsg({ type: "err", text: "Seleccione fechas válidas." });
       return;
@@ -299,13 +304,21 @@ export default function Solicitar() {
       return;
     }
 
-    // VALIDACIÓN: horario 08:00–20:00
-    if (!esHorarioPermitido(dInicio) || !esHorarioPermitido(dFin)) {
-      setMsg({
-        type: "err",
-        text: "El horario permitido es de 08:00 a 16:00 horas del mismo día.",
-      });
-      return;
+    // VALIDACIÓN: horario volante del vehiculo seleccionado
+    const vehSeleccionado: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
+    if (vehSeleccionado && vehSeleccionado.volanteInicio && vehSeleccionado.volanteFin) {
+      const vInicioMin = minutosDelDiaStr(vehSeleccionado.volanteInicio);
+      const vFinMin = minutosDelDiaStr(vehSeleccionado.volanteFin);
+      const iMin = minutosDelDiaDate(dInicio);
+      const fMin = minutosDelDiaDate(dFin);
+
+      if (iMin < vInicioMin || fMin > vFinMin) {
+        setMsg({
+          type: "err",
+          text: `El horario permitido para la placa ${selectedPlaca} es de ${vehSeleccionado.volanteInicio} a ${vehSeleccionado.volanteFin} horas.`,
+        });
+        return;
+      }
     }
 
     if (!selectedPlaca) {
@@ -338,11 +351,11 @@ export default function Solicitar() {
         dni: dni.trim(),
         nombre: nombre.trim(),
         origen: origen.trim(),
-        destino: destino.trim(),
+        destino: destino === "Otros" ? otroDestino.trim() : destino.trim(),
         motivo: (motivo || null) as string | null,
         ceco: ceco.trim(),
-        uso_inicio: new Date(inicioISO).toISOString(),
-        uso_fin: new Date(finISO).toISOString(),
+        uso_inicio: inicioISO,
+        uso_fin: finISO,
         estado: "Reservada" as const,
         vehiculo: selectedPlaca,
         recojo: inicioISO,
@@ -390,6 +403,7 @@ export default function Solicitar() {
       setNombre("");
       setOrigen("");
       setDestino("");
+      setOtroDestino("");
       setMotivo("");
       setSelectedPlaca("");
       setSelectedPlaca("");
@@ -641,37 +655,197 @@ export default function Solicitar() {
           </div>
         )}
 
-        {/* Indicador de disponibilidad */}
-        <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200">
-          <div className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="grid h-10 w-10 place-items-center rounded-lg bg-gray-900 text-white">
-                <Calendar className="h-5 w-5" />
+        {/* Línea de tiempo de reservas para camioneta seleccionada */}
+        {selectedPlaca && usoInicioLocal ? (
+          <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 shadow-sm">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-3">
+                <div className="grid h-10 w-10 place-items-center rounded-lg bg-emerald-100 text-emerald-800">
+                  <Calendar className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">
+                    Ocupación del día para {selectedPlaca}
+                  </p>
+                  <p className="text-xs text-gray-500 font-medium">
+                    {usoInicioLocal.slice(0, 10).split('-').reverse().join('/')}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-sm text-gray-500">
-                  Disponibilidad para el rango
-                </p>
-                {checking ? (
-                  <p className="text-sm font-medium text-gray-800 inline-flex items-center gap-2">
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                    Verificando…
-                  </p>
-                ) : availableCount === null ? (
-                  <p className="text-sm font-medium text-gray-800">—</p>
-                ) : availableCount > 0 ? (
-                  <p className="text-sm font-medium text-emerald-700">
-                    {availableCount} camioneta(s) disponible(s)
-                  </p>
-                ) : (
-                  <p className="text-sm font-medium text-rose-700">
-                    Sin disponibilidad
-                  </p>
-                )}
+
+              {/* Leyenda */}
+              <div className="flex items-center gap-4 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300"></div>
+                  <span>Fuera de horario</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300"></div>
+                  <span>Disponible</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm bg-rose-500 border border-rose-600"></div>
+                  <span>Ocupado</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="w-3 h-3 rounded-sm bg-blue-400/40 border-y-[2px] border-blue-500"></div>
+                  <span className="font-bold text-blue-700">Tu selección</span>
+                </div>
               </div>
             </div>
+
+            <div className="relative h-12 bg-gray-200 rounded-lg border border-gray-300 ml-2 mr-2 overflow-hidden shadow-inner">
+              {/* Bloque verde de horario volante */}
+              {(() => {
+                const veh: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
+                if (veh && veh.volante === "Si" && veh.volanteInicio && veh.volanteFin) {
+                  const [hIni, mIni] = veh.volanteInicio.split(':').map(Number);
+                  const [hFin, mFin] = veh.volanteFin.split(':').map(Number);
+                  const tStart = hIni + (mIni / 60);
+                  const tEnd = hFin + (mFin / 60);
+
+                  const left = Math.max(0, (tStart / 24) * 100);
+                  const right = Math.min(100, (tEnd / 24) * 100);
+                  const width = right - left;
+
+                  if (width > 0) {
+                    return (
+                      <div
+                        className="absolute top-0 bottom-0 bg-emerald-100 border-x border-emerald-300 pointer-events-none"
+                        style={{ left: `${left}%`, width: `${width}%` }}
+                      ></div>
+                    );
+                  }
+                }
+                return null;
+              })()}
+
+              {/* Marcas de horas (0 a 24) */}
+              <div className="absolute inset-0 pointer-events-none">
+                {Array.from({ length: 25 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="absolute top-0 bottom-0 border-l border-gray-300/60"
+                    style={{ left: `${(i / 24) * 100}%` }}
+                  >
+                  </div>
+                ))}
+              </div>
+
+              {/* Bloques de reservas */}
+              {(() => {
+                const targetDate = usoInicioLocal.slice(0, 10);
+                if (!targetDate) return null;
+
+                return camionetasStore.solicitudes
+                  .filter(s => {
+                    if (s.vehiculo !== selectedPlaca) return false;
+                    const activeStates = ["Pendiente", "Asignada", "Reservada", "En uso"];
+                    if (!activeStates.includes(s.estado)) return false;
+
+                    const sD = s.usoInicio.slice(0, 10);
+                    const eD = s.usoFin.slice(0, 10);
+                    return sD === targetDate || eD === targetDate;
+                  })
+                  .map(s => {
+                    const sStartTime = s.usoInicio.slice(11, 16);
+                    const sEndTime = s.usoFin.slice(11, 16);
+
+                    const [sH, sM] = sStartTime.split(':').map(Number);
+                    const [eH, eM] = sEndTime.split(':').map(Number);
+
+                    const tStart = s.usoInicio.slice(0, 10) === targetDate
+                      ? sH + (sM / 60)
+                      : 0;
+
+                    const tEnd = s.usoFin.slice(0, 10) === targetDate
+                      ? eH + (eM / 60)
+                      : 24;
+
+                    const left = (tStart / 24) * 100;
+                    const width = ((tEnd - tStart) / 24) * 100;
+
+                    if (width <= 0) return null;
+
+                    return (
+                      <div
+                        key={s.id}
+                        className="absolute top-1 bottom-1 bg-rose-500 rounded-md border border-rose-600 group cursor-default transition-transform hover:scale-y-105 shadow-md flex items-center justify-center overflow-hidden"
+                        style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100 - left, width)}%` }}
+                      >
+                        {width > 4 && (
+                          <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
+                            {s.usoInicio.slice(11, 16)} - {s.usoFin.slice(11, 16)}
+                          </span>
+                        )}
+                        <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[12px] font-medium px-3 py-1.5 rounded-lg shadow-xl pointer-events-none whitespace-nowrap z-20 transition-opacity">
+                          {s.nombre.split(' ')[0]} ({s.usoInicio.slice(11, 16)} - {s.usoFin.slice(11, 16)})
+                          <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 border-t-gray-900 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent"></div>
+                        </div>
+                      </div>
+                    );
+                  });
+              })()}
+
+              {/* Bloque de selección actual (overlay) */}
+              {(() => {
+                if (!usoInicioLocal || !usoFinLocal) return null;
+                const iDate = usoInicioLocal.slice(0, 10);
+                const fDate = usoFinLocal.slice(0, 10);
+                const targetDate = usoInicioLocal.slice(0, 10);
+
+                if (iDate !== targetDate || fDate !== targetDate) return null;
+
+                const iTime = usoInicioLocal.slice(11, 16);
+                const fTime = usoFinLocal.slice(11, 16);
+
+                if (!iTime || !fTime) return null;
+
+                const [iH, iM] = iTime.split(':').map(Number);
+                const [fH, fM] = fTime.split(':').map(Number);
+
+                const tStart = iH + (iM / 60);
+                const tEnd = fH + (fM / 60);
+
+                if (tEnd <= tStart) return null;
+
+                const left = (tStart / 24) * 100;
+                const width = ((tEnd - tStart) / 24) * 100;
+
+                return (
+                  <div
+                    className="absolute top-0 bottom-0 bg-blue-400/40 border-y-[3px] border-blue-500 z-10 pointer-events-none flex items-center justify-center overflow-hidden transition-all duration-300 ease-in-out"
+                    style={{ left: `${left}%`, width: `${width}%` }}
+                  >
+                    {width > 6 && (
+                      <span className="text-[10px] font-bold text-blue-900 truncate px-1.5 py-0.5 drop-shadow-sm bg-white/70 rounded shadow-sm">
+                        Tu selección
+                      </span>
+                    )}
+                  </div>
+                );
+              })()}
+            </div>
+
+            {/* Eje de tiempo base */}
+            <div className="relative h-6 mt-2 mx-2">
+              {[0, 4, 8, 12, 16, 20, 24].map((h) => (
+                <div
+                  key={h}
+                  className="absolute text-[11px] font-bold text-gray-500 -translate-x-1/2"
+                  style={{ left: `${(h / 24) * 100}%` }}
+                >
+                  {h === 24 ? "00:00" : `${h.toString().padStart(2, '0')}:00`}
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="mb-6 rounded-2xl bg-white p-4 border border-gray-200 border-dashed text-center">
+            <Calendar className="h-6 w-6 text-gray-400 mx-auto mb-2 opacity-50" />
+            <p className="text-sm text-gray-500">Selecciona una placa e inicio de uso para ver su ocupación aquí.</p>
+          </div>
+        )}
 
         {/* Formulario */}
         {showForm && (
@@ -679,6 +853,36 @@ export default function Solicitar() {
             onSubmit={onSubmit}
             className="rounded-2xl bg-white p-4 border border-gray-200 grid gap-4"
           >
+            <div>
+              <label className="text-sm font-medium text-gray-700">
+                Camioneta disponible <span className="text-red-500">*</span>
+              </label>
+              <select
+                value={selectedPlaca}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedPlaca(val);
+                  if (val) {
+                    const veh: any = camionetasStore.inventario.find((v) => v.placa === val);
+                    if (veh && veh.volanteInicio && veh.volanteFin) {
+                      const datePart = usoInicioLocal.slice(0, 10);
+                      setUsoInicioLocal(`${datePart}T${veh.volanteInicio}`);
+                      setUsoFinLocal(`${datePart}T${veh.volanteFin}`);
+                    }
+                  }
+                }}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
+                required
+              >
+                <option value="">— Selecciona una placa —</option>
+                {placasDisponibles.map((p) => (
+                  <option key={p} value={p}>
+                    {metaDePlaca(p)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div>
                 <label className="text-sm font-medium text-gray-700">
@@ -726,31 +930,6 @@ export default function Solicitar() {
                   />
                 </div>
               </div>
-            </div>
-
-            <div>
-              <label className="text-sm font-medium text-gray-700">
-                Camioneta disponible <span className="text-red-500">*</span>
-              </label>
-              <select
-                value={selectedPlaca}
-                onChange={(e) => setSelectedPlaca(e.target.value)}
-                disabled={checking || (availableCount ?? 0) <= 0}
-                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors disabled:opacity-60"
-              >
-                <option value="">
-                  {checking
-                    ? "Verificando disponibilidad…"
-                    : (availableCount ?? 0) > 0
-                      ? "— Selecciona una placa —"
-                      : "Sin disponibilidad en el rango"}
-                </option>
-                {availablePlacas.map((p) => (
-                  <option key={p} value={p}>
-                    {metaDePlaca(p)}
-                  </option>
-                ))}
-              </select>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -839,19 +1018,31 @@ export default function Solicitar() {
                 </label>
                 <select
                   value={destino}
-                  onChange={(e) => setDestino(e.target.value)}
+                  onChange={(e) => {
+                    setDestino(e.target.value);
+                    if (e.target.value !== "Otros") setOtroDestino("");
+                  }}
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
+                  required
                 >
                   <option value="">— Selecciona destino —</option>
-                  <option value="F. AGROMORIN">F. AGROMORIN</option>
-                  <option value="F. COMPOSITAN">F. COMPOSITAN</option>
-                  <option value="F. CASA VERDE">F. CASA VERDE</option>
-                  <option value="F. MUCHIK">F. MUCHIK</option>
-                  <option value="F. SAN PEDRO">F. SAN PEDRO</option>
-                  <option value="F. PALMAR">F. PALMAR</option>
-                  <option value="F. MARIA DEL ROSARIO">F. MARIA DEL ROSARIO</option>
-                  <option value="F. SANTO DOMINGO">F. SANTO DOMINGO</option>
+                  {sedes.map((s) => (
+                    <option key={s.id} value={s.nombre}>
+                      {s.nombre}
+                    </option>
+                  ))}
+                  <option value="Otros">Otros</option>
                 </select>
+                {destino === "Otros" && (
+                  <input
+                    type="text"
+                    value={otroDestino}
+                    onChange={(e) => setOtroDestino(e.target.value)}
+                    placeholder="Especifique el destino"
+                    className="mt-2 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
+                    required
+                  />
+                )}
               </div>
 
               <div>
@@ -962,8 +1153,8 @@ export default function Solicitar() {
                     null;
                   const conductorNombre = (s as any).nombre ?? null;
 
-                  const inicio = new Date(s.usoInicio);
-                  const fin = new Date(s.usoFin);
+                  const inicio = new Date(s.usoInicio.slice(0, 16));
+                  const fin = new Date(s.usoFin.slice(0, 16));
 
                   // tiempos extra desde garita
                   const entregaGaritaRaw =
@@ -976,10 +1167,10 @@ export default function Solicitar() {
                     null;
 
                   const entregaGarita = entregaGaritaRaw
-                    ? new Date(entregaGaritaRaw)
+                    ? new Date(entregaGaritaRaw.slice(0, 16))
                     : null;
                   const terminoUsoGarita = terminoUsoGaritaRaw
-                    ? new Date(terminoUsoGaritaRaw)
+                    ? new Date(terminoUsoGaritaRaw.slice(0, 16))
                     : null;
 
                   const estado = (s.estado ?? "").toString();

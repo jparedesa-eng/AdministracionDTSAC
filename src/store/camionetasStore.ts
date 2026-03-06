@@ -34,6 +34,8 @@ export interface Vehiculo {
   fechaIngreso?: string | null;
   /** Nuevo: si el vehículo tiene volante físico (tarjeta) asignado */
   volante?: "Si" | "No";
+  volanteInicio?: string | null;
+  volanteFin?: string | null;
   zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null;
   estado: EstadoVehiculo;
   createdAt?: string | null;
@@ -84,6 +86,8 @@ type VehiculoRow = {
   fecha_ingreso: string | null;
   /** Nuevo: columna en BD */
   volante: "Si" | "No" | null;
+  volante_inicio: string | null;
+  volante_fin: string | null;
   zona: string | null;
   estado: EstadoVehiculo;
   created_at: string | null;
@@ -107,6 +111,8 @@ function vFromRow(r: VehiculoRow): Vehiculo {
     fechaIngreso: r.fecha_ingreso,
     /** Si viene null, por defecto "No" */
     volante: (r.volante as "Si" | "No" | null) ?? "No",
+    volanteInicio: r.volante_inicio,
+    volanteFin: r.volante_fin,
     zona: r.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null,
     estado: r.estado,
     createdAt: r.created_at,
@@ -131,6 +137,8 @@ function vToRow(v: Partial<Vehiculo>): Partial<VehiculoRow> {
   if (v.soat !== undefined) out.soat = v.soat ?? null;
   if (v.fechaIngreso !== undefined) out.fecha_ingreso = v.fechaIngreso ?? null;
   if (v.volante !== undefined) out.volante = (v.volante as "Si" | "No") ?? "No";
+  if (v.volanteInicio !== undefined) out.volante_inicio = v.volanteInicio ?? null;
+  if (v.volanteFin !== undefined) out.volante_fin = v.volanteFin ?? null;
   if (v.zona !== undefined) out.zona = v.zona ?? null;
   if (v.estado !== undefined) out.estado = v.estado;
   return out;
@@ -206,8 +214,8 @@ function sToInsertRowNoId(s: {
     origen: s.origen,
     destino: s.destino,
     motivo: s.motivo ?? null,
-    uso_inicio: new Date(s.usoInicio).toISOString(),
-    uso_fin: new Date(s.usoFin).toISOString(),
+    uso_inicio: s.usoInicio,
+    uso_fin: s.usoFin,
     estado: s.estado,
     vehiculo: s.vehiculo,
     recojo: s.recojo,
@@ -255,8 +263,8 @@ export const camionetasStore = {
     const { error } = await supabase.from("reservas_vehiculo").insert([
       {
         placa: opts.placa,
-        uso_inicio: new Date(opts.inicioISO).toISOString(),
-        uso_fin: new Date(opts.finISO).toISOString(),
+        uso_inicio: opts.inicioISO,
+        uso_fin: opts.finISO,
         solicitud_id: opts.solicitudId,
       },
     ]);
@@ -275,8 +283,8 @@ export const camionetasStore = {
    * Disponibilidad por rango (usa reservas_vehiculo)
    * ======================================================= */
   async getDisponibles(inicioISO: string, finISO: string): Promise<string[]> {
-    const inicio = new Date(inicioISO).toISOString();
-    const fin = new Date(finISO).toISOString();
+    const inicio = inicioISO.length === 16 ? `${inicioISO}:00` : inicioISO;
+    const fin = finISO.length === 16 ? `${finISO}:00` : finISO;
 
     const usables = this.inventario.filter((v) => v.estado === "Disponible");
     if (usables.length === 0) return [];
