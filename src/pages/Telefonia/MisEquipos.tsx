@@ -31,6 +31,8 @@ interface AsignacionUI {
     temp_puesto: string; // New field
     temp_sede: string;
     temp_fecha_entrega_final: string;
+    temp_condicion_retorno?: string; // New field
+    temp_observacion_retorno?: string; // New field
     // Solo Chip Fields
     isSoloChip: boolean;
     tipo_equipo_destino?: string;
@@ -99,6 +101,8 @@ export default function MisEquipos() {
                                 temp_sede: asig.usuario_final_sede || "",
                                 equipo_custodio: asig.equipo?.custodio || "",
                                 temp_fecha_entrega_final: asig.fecha_entrega_final || "",
+                                temp_condicion_retorno: "Bueno",
+                                temp_observacion_retorno: "",
 
                                 isSoloChip: !asig.equipo_id && !!asig.chip_id,
                                 tipo_equipo_destino: asig.tipo_equipo_destino || "",
@@ -149,7 +153,9 @@ export default function MisEquipos() {
                             const d = new Date();
                             return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
                         })())
-                        : a.temp_fecha_entrega_final
+                        : a.temp_fecha_entrega_final,
+                    temp_condicion_retorno: !a.editMode ? "Bueno" : a.temp_condicion_retorno,
+                    temp_observacion_retorno: !a.editMode ? "" : a.temp_observacion_retorno
                 };
             }
             return a;
@@ -213,39 +219,39 @@ export default function MisEquipos() {
                 return n;
             });
 
-            await telefoniaStore.updateAsignacionResponsable(item.id, {
-                dni: item.temp_dni,
-                nombre: item.temp_nombre,
-                area: item.temp_area,
-                puesto: item.temp_puesto,
-                sede: item.temp_sede,
-                fecha_entrega_final: item.temp_fecha_entrega_final
-            });
+            // If it's the Custodio returning and assigning directly:
+            if (!item.usuario_final_nombre && item.equipo_custodio === "Usuario") {
+                await telefoniaStore.asignarUsuarioFinalDesdeCustodio(item.id, item.equipo_id, {
+                    dni: item.temp_dni,
+                    nombre: item.temp_nombre,
+                    area: item.temp_area,
+                    puesto: item.temp_puesto,
+                    sede: item.temp_sede,
+                    fecha_entrega_final: item.temp_fecha_entrega_final
+                }, item.temp_condicion_retorno || "Bueno", item.temp_observacion_retorno || "");
+            } else {
+                // Regular Update
+                await telefoniaStore.updateAsignacionResponsable(item.id, {
+                    dni: item.temp_dni,
+                    nombre: item.temp_nombre,
+                    area: item.temp_area,
+                    puesto: item.temp_puesto,
+                    sede: item.temp_sede,
+                    fecha_entrega_final: item.temp_fecha_entrega_final
+                });
+            }
 
-            setAssignments(prev => prev.map(a => {
-                if (a.id === item.id) {
-                    return {
-                        ...a,
-                        usuario_final_dni: item.temp_dni,
-                        usuario_final_nombre: item.temp_nombre,
-                        usuario_final_area: item.temp_area,
-                        usuario_final_puesto: item.temp_puesto,
-                        usuario_final_sede: item.temp_sede,
-                        fecha_entrega_final: item.temp_fecha_entrega_final,
-                        editMode: false
-                    };
-                }
-                return a;
-            }));
+            // After assigning final user or editing, refresh list completely to get new IDs
+            await loadMisEquipos();
 
-            setToast({ type: "success", message: "Responsable actualizado" });
+            setToast({ type: "success", message: "Responsable asignado/actualizado" });
         } catch (error) {
             console.error("Error updating assignment:", error);
             setToast({ type: "error", message: "Error al actualizar" });
         }
     };
 
-    const handleChange = (id: string, field: 'temp_dni' | 'temp_nombre' | 'temp_area' | 'temp_puesto' | 'temp_sede' | 'temp_fecha_entrega_final', value: string) => {
+    const handleChange = (id: string, field: 'temp_dni' | 'temp_nombre' | 'temp_area' | 'temp_puesto' | 'temp_sede' | 'temp_fecha_entrega_final' | 'temp_condicion_retorno' | 'temp_observacion_retorno', value: string) => {
         setAssignments(prev => prev.map(a => a.id === id ? { ...a, [field]: value } : a));
     };
 
@@ -489,6 +495,35 @@ export default function MisEquipos() {
                                                             onChange={e => handleChange(item.id, 'temp_fecha_entrega_final', e.target.value)}
                                                         />
                                                     </div>
+
+                                                    {/* Mostrar campos de retorno SÓLO si es la primera asignación final (viniendo de custodia) */}
+                                                    {!item.usuario_final_nombre && item.equipo_custodio === "Usuario" && (
+                                                        <div className="pt-3 border-t border-gray-200 mt-2 space-y-3">
+                                                            <div className="flex items-center gap-2 text-[10px] font-bold text-gray-400 mb-1 uppercase tracking-wider">
+                                                                Condición de equipo al entregar
+                                                            </div>
+                                                            <div>
+                                                                <select
+                                                                    className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2 text-gray-700"
+                                                                    value={item.temp_condicion_retorno}
+                                                                    onChange={e => handleChange(item.id, 'temp_condicion_retorno', e.target.value)}
+                                                                >
+                                                                    <option value="Bueno">Bueno (Operativo)</option>
+                                                                    <option value="Dañado">Dañado (Se notificará para mantenimiento)</option>
+                                                                    <option value="Robado">Robado</option>
+                                                                </select>
+                                                            </div>
+                                                            <div>
+                                                                <label className="text-[10px] uppercase text-gray-400 font-semibold ml-1">Observaciones</label>
+                                                                <input
+                                                                    className="w-full text-base border-gray-300 rounded-md focus:ring-indigo-500 focus:border-indigo-500 p-2"
+                                                                    placeholder="Opcional..."
+                                                                    value={item.temp_observacion_retorno}
+                                                                    onChange={e => handleChange(item.id, 'temp_observacion_retorno', e.target.value)}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    )}
                                                 </div>
                                             ) : (
                                                 <div className="pl-1">

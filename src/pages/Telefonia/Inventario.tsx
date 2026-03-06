@@ -36,7 +36,7 @@ import {
     CardSim,
     Sprout,
     ScanBarcode,
-    UserCheck
+    User
 } from "lucide-react";
 
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -124,8 +124,6 @@ export default function InventarioTelefonia() {
     const [openDevolucion, setOpenDevolucion] = useState(false);
     const [openAsignacion, setOpenAsignacion] = useState(false);
     const [openBaja, setOpenBaja] = useState(false);
-    const [openCustodioConfirm, setOpenCustodioConfirm] = useState(false);
-    const [custodioConfirmData, setCustodioConfirmData] = useState<Equipo | null>(null);
     const [modalActionItem, setModalActionItem] = useState<Equipo | null>(null);
 
     // Action Form States
@@ -420,27 +418,6 @@ export default function InventarioTelefonia() {
             loadData(true);
         } catch (error: any) {
             setToast({ type: "error", message: error.message || "Error al registrar devolución" });
-        } finally {
-            setSubmitting(false);
-        }
-    };
-
-    const handleChangeCustodio = (eq: Equipo) => {
-        setCustodioConfirmData(eq);
-        setOpenCustodioConfirm(true);
-    };
-
-    const confirmChangeCustodio = async () => {
-        if (!custodioConfirmData) return;
-        setSubmitting(true);
-        try {
-            await telefoniaStore.cambiarCustodioAUsuario(custodioConfirmData.id);
-            setToast({ type: "success", message: "Custodio cambiado a Usuario exitosamente" });
-            setOpenCustodioConfirm(false);
-            setCustodioConfirmData(null);
-            loadData(true);
-        } catch (error: any) {
-            setToast({ type: "error", message: error.message || "Error al cambiar custodio" });
         } finally {
             setSubmitting(false);
         }
@@ -1693,15 +1670,6 @@ export default function InventarioTelefonia() {
 
                                                 <div className="flex items-center justify-end gap-2">
                                                     {/* Botones de acción principales */}
-                                                    {item.estado === "Asignado" && item.custodio === "Administración" && item.categoria === "PROYECTO" && (
-                                                        <button
-                                                            onClick={() => handleChangeCustodio(item)}
-                                                            className="p-1.5 rounded-md bg-indigo-50 text-indigo-600 hover:bg-indigo-100 hover:text-indigo-700 transition-colors"
-                                                            title="Cambiar Custodio a Usuario"
-                                                        >
-                                                            <UserCheck className="h-4 w-4" />
-                                                        </button>
-                                                    )}
                                                     {item.estado === "Asignado" && (
                                                         <button
                                                             onClick={() => handleOpenDevolucion(item)}
@@ -3121,6 +3089,7 @@ export default function InventarioTelefonia() {
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Usuario Final</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Tipo Solicitud</th>
                                         <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Fechas</th>
+                                        <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Condición Retorno</th>
                                         <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">Estado</th>
                                     </tr>
                                 </thead>
@@ -3152,6 +3121,12 @@ export default function InventarioTelefonia() {
                                                 <div className="text-xs text-gray-500">
                                                     {assign.usuario_final_sede || "-"}
                                                 </div>
+                                                {assign.custodio && (
+                                                    <div className="mt-1 flex items-center gap-1 text-xs text-indigo-700 bg-indigo-50 px-1 py-0.5 rounded w-fit capitalize font-medium">
+                                                        <User className="w-3 h-3" />
+                                                        <span>Custodio: {assign.custodio}</span>
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 align-top">
                                                 <div className="flex flex-col gap-1">
@@ -3178,6 +3153,26 @@ export default function InventarioTelefonia() {
                                                         </div>
                                                     )}
                                                 </div>
+                                            </td>
+                                            <td className="px-4 py-3 align-top">
+                                                {assign.fecha_devolucion ? (
+                                                    <div className="flex flex-col gap-1">
+                                                        {assign.condicion_retorno ? (
+                                                            <div className="text-sm font-medium text-gray-900">
+                                                                {assign.condicion_retorno}
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-sm text-gray-400 italic">No especificada</div>
+                                                        )}
+                                                        {assign.observacion_retorno && (
+                                                            <div className="text-xs text-gray-500 line-clamp-2 max-w-[200px]" title={assign.observacion_retorno}>
+                                                                {assign.observacion_retorno}
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                ) : (
+                                                    <div className="text-sm text-gray-400 italic">-</div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 align-top text-right">
                                                 <div className="flex flex-col items-end gap-1">
@@ -4198,21 +4193,6 @@ export default function InventarioTelefonia() {
                 loading={confirmation.loading}
             >
                 {confirmation.message}
-            </ConfirmationModal>
-
-            {/* Custodio Confirmation Modal */}
-            <ConfirmationModal
-                open={openCustodioConfirm}
-                onClose={() => {
-                    setOpenCustodioConfirm(false);
-                    setCustodioConfirmData(null);
-                }}
-                onConfirm={confirmChangeCustodio}
-                title="Cambiar Custodio a Usuario"
-                variant="info"
-                loading={submitting}
-            >
-                {`¿Seguro que deseas cambiar el custodio del equipo ${custodioConfirmData?.marca} ${custodioConfirmData?.modelo} a "Usuario"? Esto devolverá la administración física del equipo al responsable actual, permitiéndole reasignarlo desde la vista de "Mis Equipos".`}
             </ConfirmationModal>
 
             {/* SCANNER MODAL */}

@@ -1690,7 +1690,8 @@ export const telefoniaStore = {
                 usuario_final_nombre: null,
                 usuario_final_area: null,
                 usuario_final_puesto: null,
-                usuario_final_sede: null
+                usuario_final_sede: null,
+                custodio: custodio
             }]);
 
         if (newAssignErr) throw newAssignErr;
@@ -2207,6 +2208,16 @@ export const telefoniaStore = {
     },
 
     async updateAsignacionResponsable(asignacionId: string, datos: { dni: string; nombre: string; area: string; sede?: string; fecha_entrega_final?: string; puesto?: string }) {
+        // 1. Find assignment
+        const { data: asignacion, error: fetchErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("equipo_id")
+            .eq("id", asignacionId)
+            .single();
+
+        if (fetchErr) throw fetchErr;
+
+        // 2. Update assignment and clear custodio
         const { error } = await supabase
             .from("telefonia_solicitud_asignaciones")
             .update({
@@ -2215,15 +2226,82 @@ export const telefoniaStore = {
                 usuario_final_area: datos.area,
                 usuario_final_sede: datos.sede,
                 usuario_final_puesto: datos.puesto,
-                fecha_entrega_final: datos.fecha_entrega_final
+                fecha_entrega_final: datos.fecha_entrega_final,
+                custodio: null
             })
             .eq("id", asignacionId);
 
         if (error) throw error;
+
+        // 3. Clear custodio from equipment
+        if (asignacion.equipo_id) {
+            await supabase
+                .from("telefonia_equipos")
+                .update({ custodio: null })
+                .eq("id", asignacion.equipo_id);
+        }
+
         await this.fetchSolicitudes();
-        // Also fetch direct assignments to refresh the view
-        // We aren't calling it here explicitly but MisEquipos calls it on mount. 
-        // Ideally we should retain local state update in MisEquipos to avoid full refetch or refetch if needed.
+        await this.fetchEquipos();
+    },
+
+    async asignarUsuarioFinalDesdeCustodio(asignacionId: string, equipoId: string, datos: { dni: string; nombre: string; area: string; sede?: string; fecha_entrega_final?: string; puesto?: string }, condicion_retorno: string, observacion_retorno: string) {
+        // 1. Obtener asignacion
+        const { data: original, error: fetchErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select("*")
+            .eq("id", asignacionId)
+            .single();
+
+        if (fetchErr || !original) throw fetchErr || new Error("No se encontró la asignación original");
+
+        const fechaActual = new Date().toISOString();
+
+        // 2. Marcar devuelta
+        const { error: assignErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .update({
+                fecha_devolucion: fechaActual,
+                estado: 'Devuelto',
+                condicion_retorno: condicion_retorno || "Bueno",
+                observacion_retorno: observacion_retorno || "Asignado a usuario final desde custodio",
+            })
+            .eq("id", asignacionId);
+
+        if (assignErr) throw assignErr;
+
+        // 3. Crear nueva asignacion con responsable original, y nuevos datos de usuario final
+        const { error: newAssignErr } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .insert([{
+                solicitud_id: original.solicitud_id,
+                equipo_id: equipoId,
+                chip_id: original.chip_id,
+                fecha_entrega: fechaActual,
+                estado: 'Entregado',
+                responsable_dni: original.responsable_dni,
+                responsable_nombre: original.responsable_nombre,
+                responsable_area: original.responsable_area,
+                usuario_final_dni: datos.dni,
+                usuario_final_nombre: datos.nombre,
+                usuario_final_area: datos.area,
+                usuario_final_puesto: datos.puesto,
+                usuario_final_sede: datos.sede,
+                fecha_entrega_final: datos.fecha_entrega_final || fechaActual,
+                custodio: null
+            }]);
+
+        if (newAssignErr) throw newAssignErr;
+
+        // 4. Quitar custodio de equipo
+        if (equipoId) {
+            await supabase
+                .from("telefonia_equipos")
+                .update({ custodio: null })
+                .eq("id", equipoId);
+        }
+
+        await this.fetchEquipos();
     },
 
     async registrarDevolucionItem(asignacionId: string, estadoRetorno: string, _observaciones: string) {
