@@ -23,6 +23,7 @@ import Conductores from "./pages/Camionetas/Conductores";
 import Garita from "./pages/Camionetas/Garita";
 import MiCamioneta from "./pages/Camionetas/MiCamioneta";
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
+import HistorialSolicitudesCamionetas from "./pages/Camionetas/HistorialSolicitudes";
 
 /* Pasajes & Hospedaje */
 import SolicitarPasaje from "./pages/pasajes/SolicitarView";
@@ -203,6 +204,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/camionetas/inventario">
                 <InventarioMantenedor />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camionetas/historial"
+            element={
+              <ProtectedRoute path="/camionetas/historial">
+                <HistorialSolicitudesCamionetas />
               </ProtectedRoute>
             }
           />

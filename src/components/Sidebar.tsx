@@ -162,6 +162,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     const camionetasSubItems: NavItem[] = [];
     if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
     if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: Layers });
+    if (hasAccess("/camionetas/historial")) camionetasSubItems.push({ id: 'cam-hist', label: 'Historial', path: '/camionetas/historial', icon: Database });
     if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });
     if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Car });
     if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Car });
