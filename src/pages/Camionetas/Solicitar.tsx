@@ -1080,7 +1080,7 @@ export default function Solicitar() {
               </button>
               <button
                 type="submit"
-                disabled={submitting || checking || !selectedPlaca || msg?.type === "err"}
+                disabled={submitting || checking || !selectedPlaca || msg?.type === "err" || !!cecoError}
                 className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-[#cc0000] disabled:opacity-60"
               >
                 {submitting ? (
