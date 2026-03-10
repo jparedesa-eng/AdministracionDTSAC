@@ -280,6 +280,16 @@ export interface Baja {
     equipo?: Equipo;
 }
 
+export interface Jerarquia {
+    id: string;
+    usuario_creador_id: string;
+    usuario_nombre: string;
+    gerente_id: string;
+    gerente_nombre: string;
+    activa: boolean;
+    created_at?: string;
+}
+
 /* =========================
  * Store
  * ========================= */
@@ -294,6 +304,7 @@ export const telefoniaStore = {
     bajas: [] as Baja[],
     asignaciones: [] as Asignacion[], // Cache if needed, or stick to inside Solicitud
     facturas: [] as Factura[],
+    jerarquias: [] as Jerarquia[],
     availableYears: [] as number[],
 
     // Realtime Subs
@@ -628,6 +639,71 @@ export const telefoniaStore = {
             .eq("id", id);
         if (error) throw error;
         this.proyectos = this.proyectos.filter((p) => p.id !== id);
+    },
+
+    // --- JERARQUIAS ---
+    async fetchJerarquias() {
+        const { data, error } = await supabase
+            .from("telefonia_geraprobador")
+            .select("*")
+            .order("created_at", { ascending: false });
+        if (error) throw error;
+        this.jerarquias = data as Jerarquia[];
+        notify();
+    },
+
+    async createJerarquia(jerarquia: Omit<Jerarquia, "id" | "created_at">) {
+        const { data, error } = await supabase
+            .from("telefonia_geraprobador")
+            .insert([jerarquia])
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchJerarquias();
+        return data as Jerarquia;
+    },
+
+    async updateJerarquia(id: string, updates: Partial<Jerarquia>) {
+        const { data, error } = await supabase
+            .from("telefonia_geraprobador")
+            .update(updates)
+            .eq("id", id)
+            .select()
+            .single();
+        if (error) throw error;
+        await this.fetchJerarquias();
+        return data as Jerarquia;
+    },
+
+    async deleteJerarquia(id: string) {
+        const { error } = await supabase
+            .from("telefonia_geraprobador")
+            .delete()
+            .eq("id", id);
+        if (error) throw error;
+        this.jerarquias = this.jerarquias.filter((d) => d.id !== id);
+        notify();
+    },
+
+    async searchProfileByDni(dni: string) {
+        const cleanDni = dni.trim();
+        const { data, error } = await supabase
+            .from("profiles")
+            .select("id, nombre, dni")
+            .eq("dni", cleanDni)
+            .limit(1)
+            .maybeSingle();
+            
+        if (error) {
+            console.error("Error buscando perfil:", error);
+            throw new Error(error.message || "No se encontró el perfil o hubo un error de red");
+        }
+        
+        if (!data) {
+             throw new Error("No se encontró ningún usuario con ese DNI");
+        }
+        
+        return data as { id: string, nombre: string, dni: string };
     },
 
     // --- MODELOS ---

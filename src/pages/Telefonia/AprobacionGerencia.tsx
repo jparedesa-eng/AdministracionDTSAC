@@ -22,7 +22,10 @@ export default function AprobacionGerencia() {
 
     const loadData = async () => {
         try {
-            await telefoniaStore.fetchSolicitudes();
+            await Promise.all([
+                telefoniaStore.fetchSolicitudes(),
+                telefoniaStore.fetchJerarquias()
+            ]);
         } catch (e: any) {
             setToast({ type: "error", message: "Error cargando datos" });
         }
@@ -33,14 +36,26 @@ export default function AprobacionGerencia() {
     }, []);
 
     const getDisplayedTickets = () => {
+        const misTickets = telefoniaStore.solicitudes.filter(t => {
+            // El gerente actual solo puede ver los tickets de los usuarios para los que es asignado como gerente
+            const esMio = telefoniaStore.jerarquias.some(j =>
+                j.gerente_id === profile?.id &&
+                j.usuario_creador_id === t.usuario_creador_id &&
+                j.activa
+            );
+
+            // Si es SuperAdmin puede que queramos bypassear esto, pero sigamos la regla estricta:
+            return esMio || profile?.rol === "admin";
+        });
+
         if (viewMode === "pending") {
-            return telefoniaStore.solicitudes.filter(t => t.estado === "Pendiente Gerencia");
+            return misTickets.filter(t => t.estado === "Pendiente Gerencia");
         }
 
         // History Mode
         if (!showHistory) return [];
 
-        return telefoniaStore.solicitudes.filter(t => {
+        return misTickets.filter(t => {
             if (t.estado === "Pendiente Gerencia") return false;
 
             // Date Filter
@@ -73,10 +88,13 @@ export default function AprobacionGerencia() {
         if (!selectedTicket) return;
 
         try {
+            // Determinar el nombre final que quedara en el log de aprobación
+            let approverName = profile?.nombre || "Gerencia";
+
             await telefoniaStore.updateSolicitud(selectedTicket.id, {
                 aprobacion_gerencia: approved,
                 fecha_aprobacion_gerencia: new Date().toISOString(),
-                aprobacion_gerencia_nombre: approved ? (profile?.nombre || "Gerencia") : null,
+                aprobacion_gerencia_nombre: approved ? approverName : null,
                 estado: approved ? "Pendiente Admin" : "Rechazada"
             });
 

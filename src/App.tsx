@@ -42,6 +42,7 @@ import ModelosTelefonia from "./pages/Telefonia/Catalogos/Modelos";
 import PuestosTelefonia from "./pages/Telefonia/Catalogos/Puestos";
 import ProyectosTelefonia from "./pages/Telefonia/Catalogos/Proyectos";
 import FacturasTelefonia from "./pages/Telefonia/Facturas"; // [NEW]
+import LocalDelegacionView from "./pages/Telefonia/LocalDelegacionView";
 
 import MisEquipos from "./pages/Telefonia/MisEquipos";
 
@@ -414,6 +415,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/telefonia/facturas">
                 <FacturasTelefonia />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/telefonia/delegaciones-locales"
+            element={
+              <ProtectedRoute path="/telefonia/delegaciones-locales">
+                <LocalDelegacionView />
               </ProtectedRoute>
             }
           />
