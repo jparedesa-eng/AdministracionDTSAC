@@ -37,6 +37,7 @@ interface AsignacionUI {
     isSoloChip: boolean;
     tipo_equipo_destino?: string;
     codigo_equipo_destino?: string;
+    chip_numero?: string; // New
     estado: string; // New
 }
 
@@ -113,6 +114,7 @@ export default function MisEquipos() {
                                 isSoloChip: !asig.equipo_id && !!asig.chip_id,
                                 tipo_equipo_destino: asig.tipo_equipo_destino || "",
                                 codigo_equipo_destino: asig.codigo_equipo_destino || "",
+                                chip_numero: asig.chip?.numero_linea || "",
                                 estado: asig.estado || "Asignado"
                             });
                             processedIds.add(asig.id);
@@ -483,24 +485,50 @@ export default function MisEquipos() {
                                                                 <span className="text-sm font-medium text-gray-900 line-clamp-1" title={item.codigo_equipo_destino || "S/N"}>{item.codigo_equipo_destino || "S/N"}</span>
                                                             </div>
                                                         </div>
-                                                        <div>
-                                                            <span className="text-[10px] text-gray-400 font-semibold uppercase block">Sede / Ubicación</span>
-                                                            <span className={`text-sm font-bold ${item.usuario_final_sede ? 'text-indigo-600' : 'text-gray-400 italic'}`}>
-                                                                {item.usuario_final_sede || "Ubicación no definida"}
-                                                            </span>
+                                                        <div className="flex justify-between items-center">
+                                                            <div>
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Sede / Ubicación</span>
+                                                                <span className={`text-sm font-bold ${item.usuario_final_sede ? 'text-indigo-600' : 'text-gray-400 italic'}`}>
+                                                                    {item.usuario_final_sede || "Ubicación no definida"}
+                                                                </span>
+                                                            </div>
+                                                            {item.chip_numero && (
+                                                                <div className="text-right">
+                                                                    <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
+                                                                    <span className="text-sm font-mono font-bold text-gray-900">{item.chip_numero}</span>
+                                                                </div>
+                                                            )}
                                                         </div>
                                                     </div>
                                                 ) : item.usuario_final_nombre ? (
                                                     <>
-                                                        <div className="font-semibold text-gray-900 text-sm line-clamp-1" title={item.usuario_final_nombre}>{item.usuario_final_nombre}</div>
+                                                        <div className="font-semibold text-gray-900 text-sm line-clamp-1" title={item.usuario_final_nombre}>
+                                                            {item.usuario_final_nombre}
+                                                        </div>
                                                         <div className="text-xs text-gray-500 mt-1">
                                                             <div>{item.usuario_final_area} {item.usuario_final_sede ? `- ${item.usuario_final_sede}` : ''}</div>
                                                             {item.usuario_final_puesto && <div className="font-medium text-gray-400">{item.usuario_final_puesto}</div>}
                                                         </div>
-                                                        <div className="text-[10px] text-gray-400 mt-1 font-mono">DNI: {item.usuario_final_dni}</div>
+                                                        <div className="flex justify-between items-end mt-1">
+                                                            <div className="text-[10px] text-gray-400 font-mono mb-0.5">DNI: {item.usuario_final_dni}</div>
+                                                            {item.chip_numero && (
+                                                                <div className="text-right">
+                                                                    <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
+                                                                    <span className="text-sm font-mono font-bold text-gray-900 leading-none">{item.chip_numero}</span>
+                                                                </div>
+                                                            )}
+                                                        </div>
                                                     </>
                                                 ) : (
-                                                    <span className="text-sm text-gray-400 italic block py-1">Sin asignar usuario específico</span>
+                                                    <div className="flex justify-between items-end py-1">
+                                                        <span className="text-sm text-gray-400 italic block mb-0.5">Sin asignar usuario específico</span>
+                                                        {item.chip_numero && (
+                                                            <div className="text-right">
+                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
+                                                                <span className="text-sm font-mono font-bold text-gray-900 leading-none">{item.chip_numero}</span>
+                                                            </div>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </div>
                                         </div>
