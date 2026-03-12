@@ -13,6 +13,7 @@ import {
   Plus,
   User,
 } from "lucide-react";
+import { useAuth } from "../../auth/AuthContext";
 import Solicitar from "./Solicitar";
 
 // UI propios
@@ -38,6 +39,7 @@ export default function AdministrarSolicitudes() {
   // Filtros / tabs / paginación
   const [qPlaca, setQPlaca] = React.useState("");
   const [qSol, setQSol] = React.useState("");
+  const [origenFilter, setOrigenFilter] = React.useState("Todos");
 
   // Modal de confirmación
   const [confirm, setConfirm] = React.useState<{
@@ -48,6 +50,9 @@ export default function AdministrarSolicitudes() {
 
   // Modal de Solicitar
   const [isSolicitarModalOpen, setIsSolicitarModalOpen] = React.useState(false);
+
+  // auth context
+  const { user } = useAuth();
 
   // Carga inicial desde Supabase
   React.useEffect(() => {
@@ -77,9 +82,14 @@ export default function AdministrarSolicitudes() {
   const solicitudes: Solicitud[] = camionetasStore.solicitudes;
   const inventario: Vehiculo[] = camionetasStore.inventario;
 
-  const asignadas = solicitudes.filter((s) => s.estado === "Reservada");
-  const enUso = solicitudes.filter((s) => s.estado === "En uso");
-  const disponiblesAll = inventario.filter((v) => v.estado === "Disponible");
+  const filtradasPorOrigen = origenFilter === "Todos" 
+    ? solicitudes 
+    : solicitudes.filter(s => s.origen === origenFilter);
+
+  const asignadas = filtradasPorOrigen.filter((s) => s.estado === "Reservada");
+  const enUso = filtradasPorOrigen.filter((s) => s.estado === "En uso");
+
+  const origenesUnicos = Array.from(new Set(solicitudes.map(s => s.origen))).sort();
 
   const filtro = (s: Solicitud) => {
     const placa = (s.vehiculo ?? "").toUpperCase();
@@ -168,6 +178,9 @@ export default function AdministrarSolicitudes() {
       return `${day}/${month} ${time}`;
     };
 
+    // Permisos: Habilitado solo si es el creador
+    const esCreador = s.creadoPorId === user?.id || (s as any).creado_por_id === user?.id;
+
     return (
       <div
         className={`bg-white rounded-xl p-3 border ${borderClass} transition-all group overflow-hidden relative`}
@@ -235,16 +248,26 @@ export default function AdministrarSolicitudes() {
         <div className="mt-2.5 flex gap-1">
           {((s.estado === "Pendiente" || s.estado === "Reservada") && !isVencido) && (
             <button
-              onClick={() => pedirRechazo(s.id)}
-              className="w-full py-1 rounded-lg text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-colors"
+              onClick={() => esCreador && pedirRechazo(s.id)}
+              disabled={!esCreador}
+              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${
+                esCreador 
+                ? "text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-100" 
+                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+              }`}
             >
               Rechazar
             </button>
           )}
           {s.estado === "En uso" && s.vehiculo && (
             <button
-              onClick={() => pedirDevolucion(s.vehiculo!)}
-              className="w-full py-1 rounded-lg text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-100 hover:bg-sky-100 transition-colors"
+              onClick={() => esCreador && pedirDevolucion(s.vehiculo!)}
+              disabled={!esCreador}
+              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${
+                esCreador 
+                ? "text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100" 
+                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+              }`}
             >
               Registrar Devolución
             </button>
@@ -261,8 +284,8 @@ export default function AdministrarSolicitudes() {
 
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+    <div className="space-y-5">
+      <div className="mx-auto px-1 py-6 lg:py-10">
 
         {/* Encabezado + KPIs */}
         <div className="flex flex-col gap-6 md:flex-row md:items-center md:justify-between mb-8">
@@ -304,16 +327,6 @@ export default function AdministrarSolicitudes() {
                   <p className="text-lg font-bold text-gray-900">{enUso.length}</p>
                 </div>
               </div>
-
-              <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
-                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                  <Truck className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-xs font-medium text-gray-500 uppercase">Flota Disp.</p>
-                  <p className="text-lg font-bold text-gray-900">{disponiblesAll.length}</p>
-                </div>
-              </div>
             </div>
           </div>
         </div>
@@ -328,9 +341,21 @@ export default function AdministrarSolicitudes() {
               </span>
             </div>
 
-            <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
+            <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto">
+              {/* Filtro Origen */}
+              <select
+                value={origenFilter}
+                onChange={(e) => setOrigenFilter(e.target.value)}
+                className="bg-gray-50 border border-gray-200 text-gray-900 text-sm rounded-xl focus:ring-slate-500 focus:border-slate-500 p-2.5 outline-none transition-colors"
+              >
+                <option value="Todos">Todos los Orígenes</option>
+                {origenesUnicos.map(o => (
+                  <option key={o} value={o}>{o}</option>
+                ))}
+              </select>
+
               {/* Búsqueda */}
-              <div className="relative flex-1 min-w-[300px]">
+              <div className="relative flex-1 sm:min-w-[250px]">
                 <div className="absolute inset-y-0 left-0 flex items-center pl-3 pointer-events-none">
                   <Search className="w-4 h-4 text-gray-400" />
                 </div>

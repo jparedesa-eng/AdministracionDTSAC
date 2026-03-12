@@ -170,7 +170,16 @@ export default function HistorialSolicitudes() {
 
       const formatFecha = (iso: string | null) => {
         if (!iso) return "";
-        return new Date(iso).toLocaleString("es-PE");
+        try {
+          // Manual format: YYYY-MM-DDTHH:mm:ss... -> DD/MM/YYYY HH:mm
+          const [datePart, timePart] = iso.split('T');
+          if (!datePart || !timePart) return iso;
+          const [y, m, d] = datePart.split('-');
+          const hhmm = timePart.substring(0, 5);
+          return `${d}/${m}/${y} ${hhmm}`;
+        } catch (e) {
+          return iso;
+        }
       };
 
       const excelData = data.map((item) => ({
@@ -230,13 +239,17 @@ export default function HistorialSolicitudes() {
   };
 
   const formatDate = (dateStr: string) => {
-    return new Date(dateStr).toLocaleDateString("es-PE", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
+    if (!dateStr) return "-";
+    try {
+      // Manual format: YYYY-MM-DDTHH:mm:ss... -> DD/MM/YY HH:mm
+      const [datePart, timePart] = dateStr.split('T');
+      if (!datePart || !timePart) return dateStr;
+      const [y, m, d] = datePart.split('-');
+      const hhmm = timePart.substring(0, 5);
+      return `${d}/${m}/${y.substring(2)} ${hhmm}`;
+    } catch (e) {
+      return dateStr;
+    }
   };
 
   return (
