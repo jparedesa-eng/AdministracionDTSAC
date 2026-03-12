@@ -447,23 +447,19 @@ export default function Solicitar() {
     return `${placa}${marca}${modelo}`;
   }, []);
 
-  const dniValido = /^[0-9]{8}$/.test(dni.trim());
-  const areaUsuario = profile?.area ?? null;
+
 
   const ticketsUsuario = React.useMemo(() => {
     const base = tickets;
     const filtrados = base.filter((s) => {
-      const area =
-        (s as any).creadoPorArea ?? (s as any).creado_por_area ?? null;
-      const porArea = areaUsuario ? area === areaUsuario : true;
-      const porDni = dniValido ? s.dni === dni.trim() : true;
-      return porArea && porDni;
+      // Filtrar solo los registros realizados por el mismo usuario logeado
+      return (s as any).creado_por_id === user?.id || (s as any).creadoPorId === user?.id;
     });
 
     return filtrados.sort(
       (a, b) => +new Date(b.createdAt as any) - +new Date(a.createdAt as any)
     );
-  }, [tickets, areaUsuario, dniValido, dni]);
+  }, [tickets, user?.id]);
 
   // Filtro: "Reservados / En uso" en un solo filtro
   const filteredTickets = React.useMemo(() => {
@@ -492,7 +488,7 @@ export default function Solicitar() {
 
   React.useEffect(() => {
     setTicketsToShow(10);
-  }, [ticketFilter, dniValido, dni, areaUsuario]);
+  }, [ticketFilter, user?.id]);
 
   const visibleTickets = filteredTickets.slice(0, ticketsToShow);
 
@@ -1104,7 +1100,7 @@ export default function Solicitar() {
           <div className="flex items-center justify-between gap-2">
             <div>
               <h2 className="text-lg font-semibold text-gray-900">
-                {dniValido ? "Tus tickets" : "Tickets tu área"}
+                Tus tickets
               </h2>
               <p className="mt-1 text-xs text-gray-500">
                 Lista de tickets recientes. Usa el filtro para ver sólo
