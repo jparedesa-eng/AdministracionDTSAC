@@ -94,7 +94,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
   // ======= Visibilidad por ítem (Logic copied from previous Sidebar) =======
   // Camionetas
-  const canSeeCam_Solicitar = hasAccess("/camionetas/solicitar");
+  // const canSeeCam_Solicitar = hasAccess("/camionetas/solicitar");
   const canSeeCam_Admin = hasAccess("/camionetas/administrar");
   const canSeeCam_Inventario = hasAccess("/camionetas/inventario");
   const canSeeCam_Conductores = hasAccess("/camionetas/conductores");
@@ -161,7 +161,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
     // 1. Camionetas
     const camionetasSubItems: NavItem[] = [];
-    if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
+    // if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
     if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: Layers });
     if (hasAccess("/camionetas/historial")) camionetasSubItems.push({ id: 'cam-hist', label: 'Historial', path: '/camionetas/historial', icon: Database });
     if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });

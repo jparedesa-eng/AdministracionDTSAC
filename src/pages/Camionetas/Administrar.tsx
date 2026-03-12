@@ -10,7 +10,10 @@ import {
   Hourglass,
   Loader2,
   TriangleAlert,
+  Plus,
+  User,
 } from "lucide-react";
+import Solicitar from "./Solicitar";
 
 // UI propios
 import { Modal } from "../../components/ui/Modal";
@@ -42,6 +45,9 @@ export default function AdministrarSolicitudes() {
     kind: "rechazar" | "devolucion" | null;
     payload?: { id?: string; placa?: string };
   }>({ open: false, kind: null });
+
+  // Modal de Solicitar
+  const [isSolicitarModalOpen, setIsSolicitarModalOpen] = React.useState(false);
 
   // Carga inicial desde Supabase
   React.useEffect(() => {
@@ -138,72 +144,99 @@ export default function AdministrarSolicitudes() {
     const estadoLower = (s.estado ?? "").toString().toLowerCase();
     const inicio = new Date(s.usoInicio.slice(0, 16));
     const fin = new Date(s.usoFin.slice(0, 16));
+    const entrega = s.entregaGaritaAt ? new Date(s.entregaGaritaAt) : null;
+    const termino = s.terminoUsoGaritaAt ? new Date(s.terminoUsoGaritaAt) : null;
 
-    // Variables no usadas eliminadas para evitar lints
-
-    // Card Colors based on state
+    // Card Colors and styling based on state
     let borderClass = "border-gray-200 hover:border-gray-300";
-    if (isVencido) borderClass = "border-neutral-200 hover:border-neutral-300";
-    else if (estadoLower.startsWith("reserv"))
-      borderClass = "border-emerald-200 hover:border-emerald-300";
-    else if (estadoLower === "en uso")
-      borderClass = "border-sky-200 hover:border-sky-300";
+    let accentClass = "bg-gray-500";
+    if (isVencido) {
+      borderClass = "border-neutral-200 hover:border-neutral-300";
+      accentClass = "bg-neutral-400";
+    } else if (estadoLower.startsWith("reserv")) {
+      borderClass = "border-emerald-200 hover:border-emerald-300 shadow-sm shadow-emerald-50";
+      accentClass = "bg-emerald-500";
+    } else if (estadoLower === "en uso") {
+      borderClass = "border-sky-200 hover:border-sky-300 shadow-sm shadow-sky-50";
+      accentClass = "bg-sky-500";
+    }
+
+    const fmtDT = (d: Date) => {
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+      const time = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      return `${day}/${month} ${time}`;
+    };
 
     return (
       <div
-        className={`bg-white rounded-xl p-2 border ${borderClass} transition-all group`}
+        className={`bg-white rounded-xl p-3 border ${borderClass} transition-all group overflow-hidden relative`}
       >
-        <div className="flex justify-between items-start mb-1.5">
-          <span className="text-[9px] text-gray-400 font-mono">
-            #{s.id.slice(0, 6)}
-          </span>
-          {isVencido && (
-            <span className="px-1 py-px rounded text-[9px] font-bold bg-neutral-100 text-neutral-600 border border-neutral-200">
-              Vencido
-            </span>
-          )}
-        </div>
+        {/* Color accent line */}
+        <div className={`absolute left-0 top-0 bottom-0 w-1 ${accentClass} opacity-80`} />
 
-        <div className="flex items-center gap-2 mb-1.5">
-          {estadoLower === "en uso" ? (
-            <div className="p-0.5 rounded pl-1 pr-1 bg-sky-50 text-sky-600">
-              <Hourglass className="h-3 w-3" />
-            </div>
-          ) : (
-            <div className="p-0.5 rounded pl-1 pr-1 bg-emerald-50 text-emerald-600">
-              <Truck className="h-3 w-3" />
-            </div>
-          )}
-          <div>
-            <h4 className="text-[11px] font-bold text-gray-900 leading-tight">
-              {s.vehiculo ?? "Sin Asignar"}
+        <div className="flex justify-between items-start mb-2 pl-1.5">
+          <div className="flex flex-col min-w-0">
+            <span className="text-[8px] text-gray-400 font-mono tracking-tighter">
+              #{s.id.slice(0, 6)}
+            </span>
+            <h4 className="text-[12px] font-black text-gray-900 leading-none truncate">
+              {s.vehiculo ?? "SIN PLACA"}
             </h4>
           </div>
-        </div>
-
-        <div className="bg-gray-50 rounded-lg p-1.5 text-[9px] space-y-0.5 mb-1.5 border border-gray-100">
-          <div className="flex justify-between">
-            <span className="text-gray-500">Solicitante:</span>
-            <span className="font-medium text-gray-800 truncate max-w-[110px]" title={s.nombre}>
-              {s.nombre.split(" ")[0]} {s.nombre.split(" ")[1]?.charAt(0)}.
+          <div className="flex flex-col items-end gap-1">
+            <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
+              estadoLower === "en uso" ? "bg-sky-50 text-sky-700 border border-sky-100" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+            }`}>
+              {s.estado}
             </span>
           </div>
-          <div className="pt-0.5 mt-0.5 border-t border-gray-200">
-            <div className="flex justify-between items-center">
-              <span className="text-gray-500">I-F:</span>
-              <span className="font-mono text-gray-700">
-                {inicio.toLocaleDateString(undefined, { month: 'numeric', day: 'numeric' })} {inicio.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - {fin.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </span>
+        </div>
+
+        <div className="space-y-2 pl-1.5">
+          {/* Solicitante Section */}
+          <div className="flex items-center gap-2">
+            <User className="h-3 w-3 text-gray-400" />
+            <div className="flex-1 min-w-0">
+              <p className="text-[10px] font-bold text-gray-800 truncate leading-none">
+                {s.nombre.split(' ')[0]} {s.nombre.split(' ')[1] || ''}
+              </p>
+              <p className="text-[8px] text-gray-500 font-medium leading-none mt-0.5">
+                {s.dni} • {(s as any).creadoPorArea || "S/A"}
+              </p>
             </div>
+          </div>
+
+          {/* Rutas (Compact) */}
+          <div className="flex items-center gap-1.5 bg-slate-50 px-1.5 py-1 rounded-lg border border-slate-100">
+            <p className="text-[9px] font-bold text-slate-700 truncate max-w-[80px]">{s.origen || "—"}</p>
+            <span className="text-slate-300 text-[8px]">→</span>
+            <p className="text-[9px] font-bold text-slate-700 truncate max-w-[80px]">{s.destino || "—"}</p>
+          </div>
+
+          {/* Horarios (Ultra compact) */}
+          <div className="space-y-1 py-1 border-t border-gray-100 border-dashed">
+            <div className="flex justify-between items-center text-[9px]">
+              <span className="text-gray-400 font-medium">Programado:</span>
+              <span className="text-gray-700 font-bold">{fmtDT(inicio)} - {fmtDT(fin)}</span>
+            </div>
+            {(entrega || termino) && (
+              <div className="flex justify-between items-center text-[9px]">
+                <span className="text-sky-500 font-medium">Ejecutado:</span>
+                <span className="text-sky-700 font-bold">
+                  {entrega ? fmtDT(entrega) : '—'} - {termino ? fmtDT(termino) : '...'}
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Actions */}
-        <div className="flex justify-end pt-1 border-t border-gray-100 gap-1 opacity-80 group-hover:opacity-100 transition-opacity">
+        {/* Action Button (Simplified) */}
+        <div className="mt-2.5 flex gap-1">
           {((s.estado === "Pendiente" || s.estado === "Reservada") && !isVencido) && (
             <button
               onClick={() => pedirRechazo(s.id)}
-              className="text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-1 py-0.5 rounded transition-colors"
+              className="w-full py-1 rounded-lg text-[10px] font-bold text-rose-600 bg-rose-50 border border-rose-100 hover:bg-rose-100 transition-colors"
             >
               Rechazar
             </button>
@@ -211,16 +244,17 @@ export default function AdministrarSolicitudes() {
           {s.estado === "En uso" && s.vehiculo && (
             <button
               onClick={() => pedirDevolucion(s.vehiculo!)}
-              className="text-[9px] font-bold text-sky-600 hover:text-sky-800 hover:bg-sky-50 px-1 py-0.5 rounded transition-colors"
+              className="w-full py-1 rounded-lg text-[10px] font-bold text-sky-600 bg-sky-50 border border-sky-100 hover:bg-sky-100 transition-colors"
             >
-              Devolución
+              Registrar Devolución
             </button>
           )}
           {isVencido && (
-            <span className="text-[9px] text-gray-400 italic">Sin acciones</span>
+            <div className="w-full text-center py-0.5 border border-dashed border-neutral-100 rounded-lg">
+              <span className="text-[8px] text-neutral-400 italic">Vencido</span>
+            </div>
           )}
         </div>
-
       </div>
     );
   };
@@ -241,34 +275,44 @@ export default function AdministrarSolicitudes() {
             </p>
           </div>
 
-          <div className="flex gap-4">
-            <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
-              <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
-                <CheckCircle className="h-5 w-5" />
-              </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase">Reservadas</p>
-                <p className="text-lg font-bold text-gray-900">{asignadas.length}</p>
-              </div>
-            </div>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <button
+              onClick={() => setIsSolicitarModalOpen(true)}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-6 py-2.5 text-sm font-bold text-white hover:bg-[#cc0000] transition-colors shadow-lg shadow-red-100"
+            >
+              <Plus className="h-4 w-4" />
+              Asignar volante
+            </button>
 
-            <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
-              <div className="p-2 bg-sky-50 rounded-lg text-sky-600">
-                <Hourglass className="h-5 w-5" />
+            <div className="flex gap-4">
+              <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
+                <div className="p-2 bg-emerald-50 rounded-lg text-emerald-600">
+                  <CheckCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Reservadas</p>
+                  <p className="text-lg font-bold text-gray-900">{asignadas.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase">En uso</p>
-                <p className="text-lg font-bold text-gray-900">{enUso.length}</p>
-              </div>
-            </div>
 
-            <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
-              <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
-                <Truck className="h-5 w-5" />
+              <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
+                <div className="p-2 bg-sky-50 rounded-lg text-sky-600">
+                  <Hourglass className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase">En uso</p>
+                  <p className="text-lg font-bold text-gray-900">{enUso.length}</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-medium text-gray-500 uppercase">Flota Disp.</p>
-                <p className="text-lg font-bold text-gray-900">{disponiblesAll.length}</p>
+
+              <div className="bg-white px-4 py-2 rounded-xl border border-gray-200 flex items-center gap-3">
+                <div className="p-2 bg-indigo-50 rounded-lg text-indigo-600">
+                  <Truck className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-gray-500 uppercase">Flota Disp.</p>
+                  <p className="text-lg font-bold text-gray-900">{disponiblesAll.length}</p>
+                </div>
               </div>
             </div>
           </div>
@@ -372,7 +416,7 @@ export default function AdministrarSolicitudes() {
                   </span>
                 </div>
 
-                <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
+                <div className="p-3 space-y-4">
                   {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).map(s => {
                     const now = new Date();
                     const fin = new Date(s.usoFin.slice(0, 16));
@@ -563,6 +607,18 @@ export default function AdministrarSolicitudes() {
             Confirmar
           </button>
         </div>
+      </Modal>
+
+      <Modal
+        open={isSolicitarModalOpen}
+        title="Asignar Volante (Nueva Solicitud)"
+        size="lg"
+        onClose={() => {
+          setIsSolicitarModalOpen(false);
+          refresh(); // Refrescar datos al cerrar
+        }}
+      >
+        <Solicitar isPopup={true} />
       </Modal>
 
       {/* Toast global */}

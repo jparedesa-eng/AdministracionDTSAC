@@ -51,7 +51,7 @@ function minutosDelDiaDate(d: Date) {
 /* =========================
    Componente principal
 ========================= */
-export default function Solicitar() {
+export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
   const { user, profile } = useAuth();
 
   const [dni, setDni] = React.useState("");
@@ -115,6 +115,12 @@ export default function Solicitar() {
 
   // Toast global
   const [toast, setToast] = React.useState<ToastState>(null);
+
+  React.useEffect(() => {
+    if (isPopup) {
+      setShowForm(true);
+    }
+  }, [isPopup]);
 
   // Modal para confirmar cancelación
   const [ticketToCancel, setTicketToCancel] = React.useState<any | null>(null);
@@ -585,30 +591,32 @@ export default function Solicitar() {
   ========================== */
 
   return (
-    <div className="min-h-screen">
-      <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+    <div className={isPopup ? "" : "min-h-screen"}>
+      <div className={isPopup ? "py-2" : "mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 py-6 lg:py-10"}>
         {/* Título + botón nuevo ticket */}
-        <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-              Solicitar Camioneta
-            </h1>
-            <p className="mt-1 text-sm text-gray-600">
-              Elige primero el rango de uso y la camioneta disponible; luego
-              completa los datos del solicitante.
-            </p>
-          </div>
-          {!showForm && (
-            <button
-              type="button"
-              onClick={() => setShowForm(true)}
-              className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#cc0000] transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Nuevo ticket
-            </button>
-          )}
-        </header>
+        {!isPopup && (
+          <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
+                Solicitar Camioneta
+              </h1>
+              <p className="mt-1 text-sm text-gray-600">
+                Elige primero el rango de uso y la camioneta disponible; luego
+                completa los datos del solicitante.
+              </p>
+            </div>
+            {!showForm && (
+              <button
+                type="button"
+                onClick={() => setShowForm(true)}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2.5 text-sm font-medium text-white hover:bg-[#cc0000] transition-colors"
+              >
+                <Plus className="h-4 w-4" />
+                Nuevo ticket
+              </button>
+            )}
+          </header>
+        )}
 
         {/* Estado / mensajes */}
         {msg && (
@@ -1062,22 +1070,24 @@ export default function Solicitar() {
             </div>
 
             <div className="pt-1 flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => {
-                  setShowForm(false);
-                  setMsg(null);
-                  setSelectedPlaca("");
-                }}
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
-              >
-                <X className="h-4 w-4" />
-                Cancelar
-              </button>
+              {!isPopup && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setMsg(null);
+                    setSelectedPlaca("");
+                  }}
+                  className="inline-flex items-center gap-2 rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                  Cancelar
+                </button>
+              )}
               <button
                 type="submit"
                 disabled={submitting || checking || !selectedPlaca || msg?.type === "err" || !!cecoError}
-                className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-[#cc0000] disabled:opacity-60"
+                className="inline-flex items-center gap-2 rounded-xl bg-[#ff0000] px-4 py-2 text-sm font-medium text-white hover:bg-[#cc0000] disabled:opacity-60 w-full md:w-auto justify-center"
               >
                 {submitting ? (
                   <>
@@ -1096,280 +1106,282 @@ export default function Solicitar() {
         )}
 
         {/* Tickets del usuario */}
-        <section className="mt-8">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h2 className="text-lg font-semibold text-gray-900">
-                Tus tickets
-              </h2>
-              <p className="mt-1 text-xs text-gray-500">
-                Lista de tickets recientes. Usa el filtro para ver sólo
-                reservados/en uso o todos.
-              </p>
+        {!isPopup && (
+          <section className="mt-8">
+            <div className="flex items-center justify-between gap-2">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Tus tickets
+                </h2>
+                <p className="mt-1 text-xs text-gray-500">
+                  Lista de tickets recientes. Usa el filtro para ver sólo
+                  reservados/en uso o todos.
+                </p>
+              </div>
+
+              {/* Filtro Reservados / En uso / Todos */}
+              <div className="inline-flex rounded-full bg-gray-100 p-0.5 text-xs">
+                <button
+                  type="button"
+                  onClick={() => setTicketFilter("reservados")}
+                  className={
+                    "px-3 py-1 rounded-full font-medium transition " +
+                    (ticketFilter === "reservados"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500")
+                  }
+                >
+                  Reservados / En uso
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setTicketFilter("todos")}
+                  className={
+                    "px-3 py-1 rounded-full font-medium transition " +
+                    (ticketFilter === "todos"
+                      ? "bg-white text-gray-900 shadow-sm"
+                      : "text-gray-500")
+                  }
+                >
+                  Todos
+                </button>
+              </div>
             </div>
 
-            {/* Filtro Reservados / En uso / Todos */}
-            <div className="inline-flex rounded-full bg-gray-100 p-0.5 text-xs">
-              <button
-                type="button"
-                onClick={() => setTicketFilter("reservados")}
-                className={
-                  "px-3 py-1 rounded-full font-medium transition " +
-                  (ticketFilter === "reservados"
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500")
-                }
-              >
-                Reservados / En uso
-              </button>
-              <button
-                type="button"
-                onClick={() => setTicketFilter("todos")}
-                className={
-                  "px-3 py-1 rounded-full font-medium transition " +
-                  (ticketFilter === "todos"
-                    ? "bg-white text-gray-900 shadow-sm"
-                    : "text-gray-500")
-                }
-              >
-                Todos
-              </button>
-            </div>
-          </div>
+            {visibleTickets.length === 0 ? (
+              <div className="mt-4 rounded-xl bg-white p-3 border border-gray-100">
+                <p className="text-sm text-gray-500">
+                  {ticketFilter === "reservados"
+                    ? "No hay tickets reservados o en uso con los filtros actuales."
+                    : "No hay tickets con los filtros actuales."}
+                </p>
+              </div>
+            ) : (
+              <>
+                <ul className="mt-4 space-y-2">
+                  {visibleTickets.map((s) => {
+                    const creadoPorNombre =
+                      (s as any).creadoPorNombre ??
+                      (s as any).creado_por_nombre ??
+                      null;
+                    const creadoPorArea =
+                      (s as any).creadoPorArea ??
+                      (s as any).creado_por_area ??
+                      null;
+                    const conductorNombre = (s as any).nombre ?? null;
 
-          {visibleTickets.length === 0 ? (
-            <div className="mt-4 rounded-xl bg-white p-3 border border-gray-100">
-              <p className="text-sm text-gray-500">
-                {ticketFilter === "reservados"
-                  ? "No hay tickets reservados o en uso con los filtros actuales."
-                  : "No hay tickets con los filtros actuales."}
-              </p>
-            </div>
-          ) : (
-            <>
-              <ul className="mt-4 space-y-2">
-                {visibleTickets.map((s) => {
-                  const creadoPorNombre =
-                    (s as any).creadoPorNombre ??
-                    (s as any).creado_por_nombre ??
-                    null;
-                  const creadoPorArea =
-                    (s as any).creadoPorArea ??
-                    (s as any).creado_por_area ??
-                    null;
-                  const conductorNombre = (s as any).nombre ?? null;
+                    const inicio = new Date(s.usoInicio.slice(0, 16));
+                    const fin = new Date(s.usoFin.slice(0, 16));
 
-                  const inicio = new Date(s.usoInicio.slice(0, 16));
-                  const fin = new Date(s.usoFin.slice(0, 16));
+                    // tiempos extra desde garita
+                    const entregaGaritaRaw =
+                      (s as any).entrega_garita_at ??
+                      (s as any).entregaGaritaAt ??
+                      null;
+                    const terminoUsoGaritaRaw =
+                      (s as any).termino_uso_garita_at ??
+                      (s as any).terminoUsoGaritaAt ??
+                      null;
 
-                  // tiempos extra desde garita
-                  const entregaGaritaRaw =
-                    (s as any).entrega_garita_at ??
-                    (s as any).entregaGaritaAt ??
-                    null;
-                  const terminoUsoGaritaRaw =
-                    (s as any).termino_uso_garita_at ??
-                    (s as any).terminoUsoGaritaAt ??
-                    null;
+                    const entregaGarita = entregaGaritaRaw
+                      ? new Date(entregaGaritaRaw.slice(0, 16))
+                      : null;
+                    const terminoUsoGarita = terminoUsoGaritaRaw
+                      ? new Date(terminoUsoGaritaRaw.slice(0, 16))
+                      : null;
 
-                  const entregaGarita = entregaGaritaRaw
-                    ? new Date(entregaGaritaRaw.slice(0, 16))
-                    : null;
-                  const terminoUsoGarita = terminoUsoGaritaRaw
-                    ? new Date(terminoUsoGaritaRaw.slice(0, 16))
-                    : null;
+                    const estado = (s.estado ?? "").toString();
+                    const estadoLower = estado.toLowerCase();
 
-                  const estado = (s.estado ?? "").toString();
-                  const estadoLower = estado.toLowerCase();
+                    const now = new Date();
+                    const isVencido = !estadoLower.startsWith("cancel") && now > fin;
 
-                  const now = new Date();
-                  const isVencido = !estadoLower.startsWith("cancel") && now > fin;
+                    let estadoDisplay = estado;
+                    if (isVencido) estadoDisplay = "Vencido";
 
-                  let estadoDisplay = estado;
-                  if (isVencido) estadoDisplay = "Vencido";
+                    let estadoDot = "bg-gray-400";
+                    if (isVencido) estadoDot = "bg-neutral-500";
+                    else if (estadoLower.startsWith("reserv"))
+                      estadoDot = "bg-emerald-500";
+                    else if (estadoLower.startsWith("cancel"))
+                      estadoDot = "bg-rose-500";
+                    else if (estadoLower === "en uso")
+                      estadoDot = "bg-sky-500";
 
-                  let estadoDot = "bg-gray-400";
-                  if (isVencido) estadoDot = "bg-neutral-500";
-                  else if (estadoLower.startsWith("reserv"))
-                    estadoDot = "bg-emerald-500";
-                  else if (estadoLower.startsWith("cancel"))
-                    estadoDot = "bg-rose-500";
-                  else if (estadoLower === "en uso")
-                    estadoDot = "bg-sky-500";
+                    let estadoPill =
+                      "bg-gray-100 text-gray-700 ring-gray-200";
+                    if (isVencido)
+                      estadoPill = "bg-neutral-100 text-neutral-600 ring-neutral-200";
+                    else if (estadoLower.startsWith("reserv"))
+                      estadoPill =
+                        "bg-emerald-50 text-emerald-800 ring-emerald-200";
+                    else if (estadoLower.startsWith("cancel"))
+                      estadoPill =
+                        "bg-rose-50 text-rose-800 ring-rose-200";
+                    else if (estadoLower === "en uso")
+                      estadoPill =
+                        "bg-sky-50 text-sky-800 ring-sky-200";
+                    else if (estadoLower)
+                      estadoPill =
+                        "bg-slate-50 text-slate-800 ring-slate-200";
 
-                  let estadoPill =
-                    "bg-gray-100 text-gray-700 ring-gray-200";
-                  if (isVencido)
-                    estadoPill = "bg-neutral-100 text-neutral-600 ring-neutral-200";
-                  else if (estadoLower.startsWith("reserv"))
-                    estadoPill =
-                      "bg-emerald-50 text-emerald-800 ring-emerald-200";
-                  else if (estadoLower.startsWith("cancel"))
-                    estadoPill =
-                      "bg-rose-50 text-rose-800 ring-rose-200";
-                  else if (estadoLower === "en uso")
-                    estadoPill =
-                      "bg-sky-50 text-sky-800 ring-sky-200";
-                  else if (estadoLower)
-                    estadoPill =
-                      "bg-slate-50 text-slate-800 ring-slate-200";
+                    return (
+                      <li
+                        key={s.id}
+                        className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm"
+                      >
+                        {/* fila superior compacta */}
+                        <div className="flex items-start gap-3">
+                          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-700 text-white">
+                            <Car className="h-4 w-4" />
+                          </div>
 
-                  return (
-                    <li
-                      key={s.id}
-                      className="rounded-xl border border-gray-200 bg-white px-3 py-3 text-sm"
-                    >
-                      {/* fila superior compacta */}
-                      <div className="flex items-start gap-3">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-sky-700 text-white">
-                          <Car className="h-4 w-4" />
-                        </div>
-
-                        <div className="flex-1 space-y-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <div>
-                              <p className="text-sm font-semibold text-gray-900">
-                                {s.vehiculo ?? "—"}
-                              </p>
-                              {s.origen && s.destino && (
-                                <p className="mt-0.5 inline-flex items-center rounded-full bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 ring-1 ring-gray-100">
-                                  {s.origen}
-                                  <span className="mx-1 text-gray-400">
-                                    →
-                                  </span>
-                                  {s.destino}
+                          <div className="flex-1 space-y-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-semibold text-gray-900">
+                                  {s.vehiculo ?? "—"}
                                 </p>
-                              )}
-                            </div>
+                                {s.origen && s.destino && (
+                                  <p className="mt-0.5 inline-flex items-center rounded-full bg-gray-50 px-2.5 py-0.5 text-[11px] font-medium text-gray-700 ring-1 ring-gray-100">
+                                    {s.origen}
+                                    <span className="mx-1 text-gray-400">
+                                      →
+                                    </span>
+                                    {s.destino}
+                                  </p>
+                                )}
+                              </div>
 
-                            <span
-                              className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${estadoPill}`}
-                            >
                               <span
-                                className={`h-2 w-2 rounded-full ${estadoDot}`}
-                              />
-                              {estadoDisplay || "—"}
-                            </span>
-                          </div>
+                                className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ring-1 ${estadoPill}`}
+                              >
+                                <span
+                                  className={`h-2 w-2 rounded-full ${estadoDot}`}
+                                />
+                                {estadoDisplay || "—"}
+                              </span>
+                            </div>
 
-                          {conductorNombre && (
-                            <p className="text-[11px] text-gray-600">
-                              Conductor{" "}
-                              <span className="font-semibold text-gray-800">
-                                {conductorNombre}
-                              </span>
-                            </p>
-                          )}
-                          {(creadoPorNombre ?? "").trim() && (
-                            <p className="text-[11px] text-gray-500">
-                              Reservado por{" "}
-                              <span className="font-semibold text-gray-800">
-                                {creadoPorNombre}
-                              </span>
-                              {creadoPorArea && (
-                                <span className="text-gray-400">
-                                  {" "}
-                                  · {creadoPorArea}
+                            {conductorNombre && (
+                              <p className="text-[11px] text-gray-600">
+                                Conductor{" "}
+                                <span className="font-semibold text-gray-800">
+                                  {conductorNombre}
                                 </span>
-                              )}
-                            </p>
-                          )}
+                              </p>
+                            )}
+                            {(creadoPorNombre ?? "").trim() && (
+                              <p className="text-[11px] text-gray-500">
+                                Reservado por{" "}
+                                <span className="font-semibold text-gray-800">
+                                  {creadoPorNombre}
+                                </span>
+                                {creadoPorArea && (
+                                  <span className="text-gray-400">
+                                    {" "}
+                                    · {creadoPorArea}
+                                  </span>
+                                )}
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
 
-                      {/* fila inferior: horario + acciones */}
-                      <div className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-gray-200 pt-2 text-[11px] text-gray-600">
-                        <div className="flex-1">
-                          <span className="font-semibold text-gray-800">
-                            Horario
-                          </span>{" "}
-                          <span>
-                            {inicio.toLocaleDateString()} ·{" "}
-                            {inicio.toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}{" "}
-                            –{" "}
-                            {fin.toLocaleTimeString([], {
-                              hour: "2-digit",
-                              minute: "2-digit",
-                            })}
-                          </span>
-                          <div className="mt-0.5 text-[10px] text-gray-400">
-                            Creado el{" "}
-                            {inicio.toLocaleDateString(undefined, {
-                              day: "2-digit",
-                              month: "2-digit",
-                              year: "2-digit",
-                            })}
+                        {/* fila inferior: horario + acciones */}
+                        <div className="mt-2 flex items-center justify-between gap-2 border-t border-dashed border-gray-200 pt-2 text-[11px] text-gray-600">
+                          <div className="flex-1">
+                            <span className="font-semibold text-gray-800">
+                              Horario
+                            </span>{" "}
+                            <span>
+                              {inicio.toLocaleDateString()} ·{" "}
+                              {inicio.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}{" "}
+                              –{" "}
+                              {fin.toLocaleTimeString([], {
+                                hour: "2-digit",
+                                minute: "2-digit",
+                              })}
+                            </span>
+                            <div className="mt-0.5 text-[10px] text-gray-400">
+                              Creado el{" "}
+                              {inicio.toLocaleDateString(undefined, {
+                                day: "2-digit",
+                                month: "2-digit",
+                                year: "2-digit",
+                              })}
+                            </div>
+
+                            {entregaGarita && (
+                              <div className="mt-0.5 text-[10px] text-gray-500">
+                                Entrega en garita:{" "}
+                                {entregaGarita.toLocaleDateString()} ·{" "}
+                                {entregaGarita.toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            )}
+                            {terminoUsoGarita && (
+                              <div className="mt-0.5 text-[10px] text-gray-500">
+                                Término de uso en garita:{" "}
+                                {terminoUsoGarita.toLocaleDateString()} ·{" "}
+                                {terminoUsoGarita.toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            )}
                           </div>
 
-                          {entregaGarita && (
-                            <div className="mt-0.5 text-[10px] text-gray-500">
-                              Entrega en garita:{" "}
-                              {entregaGarita.toLocaleDateString()} ·{" "}
-                              {entregaGarita.toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          )}
-                          {terminoUsoGarita && (
-                            <div className="mt-0.5 text-[10px] text-gray-500">
-                              Término de uso en garita:{" "}
-                              {terminoUsoGarita.toLocaleDateString()} ·{" "}
-                              {terminoUsoGarita.toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          )}
-                        </div>
-
-                        <div className="flex flex-col items-end gap-1.5">
-                          {((estadoLower.startsWith("reserv") ||
-                            estadoLower === "en uso") && !isVencido) && (
+                          <div className="flex flex-col items-end gap-1.5">
+                            {((estadoLower.startsWith("reserv") ||
+                              estadoLower === "en uso") && !isVencido) && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleOpenQr(s)}
+                                  className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
+                                >
+                                  Ver QR
+                                </button>
+                              )}
+                            {(puedeCancelar(s.estado) && !isVencido) && (
                               <button
                                 type="button"
-                                onClick={() => handleOpenQr(s)}
-                                className="inline-flex min-w-[120px] items-center justify-center rounded-full bg-sky-600 px-4 py-2 text-xs font-semibold text-white hover:bg-sky-700 active:bg-sky-800"
+                                onClick={() => setTicketToCancel(s)}
+                                disabled={cancellingId === s.id}
+                                className="inline-flex min-w-[120px] items-center justify-center rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
                               >
-                                Ver QR
+                                {cancellingId === s.id
+                                  ? "Cancelando…"
+                                  : "Cancelar"}
                               </button>
                             )}
-                          {(puedeCancelar(s.estado) && !isVencido) && (
-                            <button
-                              type="button"
-                              onClick={() => setTicketToCancel(s)}
-                              disabled={cancellingId === s.id}
-                              className="inline-flex min-w-[120px] items-center justify-center rounded-full border border-gray-300 px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-60"
-                            >
-                              {cancellingId === s.id
-                                ? "Cancelando…"
-                                : "Cancelar"}
-                            </button>
-                          )}
+                          </div>
                         </div>
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
+                      </li>
+                    );
+                  })}
+                </ul>
 
-              {visibleTickets.length < filteredTickets.length && (
-                <div className="mt-4 flex justify-center">
-                  <button
-                    type="button"
-                    onClick={() => setTicketsToShow((prev) => prev + 10)}
-                    className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
-                  >
-                    Cargar 10 más
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-        </section>
+                {visibleTickets.length < filteredTickets.length && (
+                  <div className="mt-4 flex justify-center">
+                    <button
+                      type="button"
+                      onClick={() => setTicketsToShow((prev) => prev + 10)}
+                      className="rounded-full border border-gray-200 bg-white px-4 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50"
+                    >
+                      Cargar 10 más
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        )}
 
         {/* Modal de confirmación de cancelación */}
         <Modal
