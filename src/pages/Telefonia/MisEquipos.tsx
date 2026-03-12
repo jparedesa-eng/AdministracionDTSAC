@@ -3,7 +3,20 @@ import { telefoniaStore } from "../../store/telefoniaStore";
 import { useAuth } from "../../auth/AuthContext";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
-import { Loader2, Search, Smartphone, User, MapPin, UserPlus, Check, Cpu, RefreshCw, CornerUpLeft, AlertTriangle, ClipboardCheck, Layers, CheckCircle2 } from "lucide-react";
+import { 
+    Smartphone, 
+    UserPlus, 
+    CornerUpLeft, 
+    Loader2, 
+    Cpu, 
+    Check, 
+    RefreshCw, 
+    MapPin, 
+    User, 
+    AlertTriangle,
+    Search,
+    ShieldAlert
+} from "lucide-react";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 
 interface AsignacionUI {
@@ -46,6 +59,8 @@ export default function MisEquipos() {
     const [loading, setLoading] = useState(false);
     const [toast, setToast] = useState<ToastState>(null);
     const [assignments, setAssignments] = useState<AsignacionUI[]>([]);
+    const [stolenAssignments, setStolenAssignments] = useState<AsignacionUI[]>([]);
+    const [activeTab, setActiveTab] = useState<"activos" | "robados">("activos");
     const [q, setQ] = useState("");
     const { sedes } = getSedesState();
     const [returnModalOpen, setReturnModalOpen] = useState(false);
@@ -65,20 +80,10 @@ export default function MisEquipos() {
         setLoading(true);
         try {
             const allMyAssignments: AsignacionUI[] = [];
-            const processedIds = new Set<string>(); // Avoid duplicates if filters overlap
+            const allStolenAssignments: AsignacionUI[] = [];
+            const processedIds = new Set<string>();
 
-            // 1. Fetch from Tickets (Created by me) - REMOVED (Deprecated created_by logic)
-            // Logic moved to Direct Assignments check only for 'Mis Equipos' concept.
-            /* 
-            await telefoniaStore.fetchSolicitudes(); 
-            const myTickets = telefoniaStore.solicitudes.filter(s => s.usuario_creador_id === user.id);
-
-            myTickets.forEach(ticket => {
-                // ... (Logic removed to rely on responsible check)
-            }); 
-            */
-
-            // 2. Fetch from Direct Assignments (Where I am Responsable)
+            // 1. Fetch Direct Assignments (Active)
             if (profile?.dni) {
                 const directAssignments = await telefoniaStore.fetchAsignacionesPorResponsable(profile.dni);
                 if (directAssignments) {
@@ -98,7 +103,7 @@ export default function MisEquipos() {
                                 usuario_final_puesto: asig.usuario_final_puesto || "",
                                 usuario_final_sede: asig.usuario_final_sede || "",
                                 fecha_entrega: asig.fecha_entrega || "",
-                                solicitud_id: asig.solicitud_id, // Might be null
+                                solicitud_id: asig.solicitud_id,
                                 fecha_entrega_final: asig.fecha_entrega_final || "",
                                 editMode: false,
                                 temp_dni: asig.usuario_final_dni || "",
@@ -110,7 +115,6 @@ export default function MisEquipos() {
                                 temp_fecha_entrega_final: asig.fecha_entrega_final || "",
                                 temp_condicion_retorno: "Bueno",
                                 temp_observacion_retorno: "",
-
                                 isSoloChip: !asig.equipo_id && !!asig.chip_id,
                                 tipo_equipo_destino: asig.tipo_equipo_destino || "",
                                 codigo_equipo_destino: asig.codigo_equipo_destino || "",
@@ -121,9 +125,45 @@ export default function MisEquipos() {
                         }
                     });
                 }
+
+                // 2. Fetch Stolen Assignments
+                const stolenAsigs = await telefoniaStore.fetchAsignacionesRobadasPorResponsable(profile.dni);
+                if (stolenAsigs) {
+                    stolenAsigs.forEach(asig => {
+                        allStolenAssignments.push({
+                            id: asig.id,
+                            equipo_id: asig.equipo_id || "",
+                            equipo_marca: asig.equipo?.marca || "Desconocido",
+                            equipo_modelo: asig.equipo?.modelo || "",
+                            equipo_imei: asig.equipo?.imei || "",
+                            equipo_categoria: asig.equipo?.categoria || "TELEFONIA",
+                            equipo_ubicacion: asig.equipo?.ubicacion || "BASE",
+                            usuario_final_dni: asig.usuario_final_dni || "",
+                            usuario_final_nombre: asig.usuario_final_nombre || "",
+                            usuario_final_area: asig.usuario_final_area || "",
+                            usuario_final_puesto: asig.usuario_final_puesto || "",
+                            usuario_final_sede: asig.usuario_final_sede || "",
+                            fecha_entrega: asig.fecha_entrega || "",
+                            solicitud_id: asig.solicitud_id,
+                            fecha_entrega_final: asig.fecha_entrega_final || "",
+                            editMode: false,
+                            temp_dni: asig.usuario_final_dni || "",
+                            temp_nombre: asig.usuario_final_nombre || "",
+                            temp_area: asig.usuario_final_area || "",
+                            temp_puesto: asig.usuario_final_puesto || "",
+                            temp_sede: asig.usuario_final_sede || "",
+                            equipo_custodio: asig.equipo?.custodio || "",
+                            temp_fecha_entrega_final: asig.fecha_entrega_final || "",
+                            isSoloChip: !asig.equipo_id && !!asig.chip_id,
+                            chip_numero: asig.chip?.numero_linea || "",
+                            estado: asig.estado || "Devuelto"
+                        });
+                    });
+                }
             }
 
             setAssignments(allMyAssignments);
+            setStolenAssignments(allStolenAssignments);
 
         } catch (error) {
             console.error(error);
@@ -358,7 +398,7 @@ export default function MisEquipos() {
                 <div className="flex gap-3">
                     <div className="flex items-center gap-3 bg-gray-50/80 px-4 py-2.5 rounded-xl border border-gray-100 min-w-[120px]">
                         <div className="p-2 bg-white rounded-lg border border-gray-100">
-                            <Layers className="h-4 w-4 text-gray-500" />
+                            <Smartphone className="h-4 w-4 text-gray-500" />
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">Total</span>
@@ -367,11 +407,20 @@ export default function MisEquipos() {
                     </div>
                     <div className="flex items-center gap-3 bg-indigo-50/80 px-4 py-2.5 rounded-xl border border-indigo-100 min-w-[120px]">
                         <div className="p-2 bg-white rounded-lg border border-indigo-100">
-                            <CheckCircle2 className="h-4 w-4 text-indigo-500" />
+                            <Check className="h-4 w-4 text-indigo-500" />
                         </div>
                         <div className="flex flex-col">
                             <span className="text-[10px] font-bold text-indigo-600 uppercase tracking-wider">Asignados</span>
                             <span className="text-xl font-black text-indigo-700 leading-none">{assignments.filter(a => a.usuario_final_nombre).length}</span>
+                        </div>
+                    </div>
+                    <div className="flex items-center gap-3 bg-red-50/80 px-4 py-2.5 rounded-xl border border-red-100 min-w-[120px]">
+                        <div className="p-2 bg-white rounded-lg border border-red-100">
+                            <ShieldAlert className="h-4 w-4 text-red-500" />
+                        </div>
+                        <div className="flex flex-col">
+                            <span className="text-[10px] font-bold text-red-600 uppercase tracking-wider">Robados</span>
+                            <span className="text-xl font-black text-red-700 leading-none">{stolenAssignments.length}</span>
                         </div>
                     </div>
                 </div>
@@ -380,42 +429,64 @@ export default function MisEquipos() {
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
 
-            {/* Filter */}
-            <div className="flex flex-col sm:flex-row gap-4 max-w-3xl">
+            {/* Filters */}
+            <div className="flex flex-col sm:flex-row gap-4 mb-6">
                 <div className="relative flex-1">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         type="text"
-                        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-1 focus:ring-indigo-500 hover:border-gray-300 transition-colors bg-gray-50/50"
-                        placeholder="Buscar por modelo, usuario o área..."
+                        className="w-full pl-9 pr-4 py-2 border border-gray-200 rounded-xl text-sm focus:ring-1 focus:ring-indigo-500 hover:border-gray-300 transition-colors bg-white"
+                        placeholder="Buscar por equipo, usuario o área..."
                         value={q}
                         onChange={e => setQ(e.target.value)}
                     />
                 </div>
-                <div className="sm:w-64">
+                <div className="flex gap-4">
                     <select
-                        className="w-full border-gray-200 rounded-xl text-sm focus:ring-1 focus:ring-indigo-500 py-2 px-3 border hover:border-gray-300 transition-colors bg-gray-50/50"
+                        className="border-gray-200 rounded-xl text-sm focus:ring-1 focus:ring-indigo-500 py-2 px-3 border hover:border-gray-300 transition-colors bg-white"
                         value={sedeFilter}
                         onChange={e => setSedeFilter(e.target.value)}
                     >
-                        <option value="">Todas las Sedes (Asignaciones)</option>
+                        <option value="">Todas las Sedes</option>
                         {uniqueSedes.map(sede => (
                             <option key={sede} value={sede}>{sede}</option>
                         ))}
                     </select>
+                    
+                    <div className="flex items-center gap-3 px-3 py-2 border border-gray-200 rounded-xl bg-white">
+                        <span className="text-xs font-medium text-gray-600">Custodio</span>
+                        <button
+                            onClick={() => setCustodioFilter(!custodioFilter)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none ${
+                                custodioFilter ? "bg-indigo-600" : "bg-gray-200"
+                            }`}
+                        >
+                            <span
+                                className={`inline-block h-3 w-3 transform rounded-full bg-white transition-transform ${
+                                    custodioFilter ? "translate-x-5" : "translate-x-1"
+                                }`}
+                            />
+                        </button>
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 bg-gray-50/50 px-3 py-2 border border-gray-200 rounded-xl whitespace-nowrap hover:border-gray-300 transition-colors">
-                    <input 
-                        type="checkbox" 
-                        id="custodio-filter"
-                        className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 h-4 w-4 cursor-pointer"
-                        checked={custodioFilter}
-                        onChange={e => setCustodioFilter(e.target.checked)}
-                    />
-                    <label htmlFor="custodio-filter" className="text-sm text-gray-700 font-medium cursor-pointer select-none">
-                        Solo En Custodio
-                    </label>
-                </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="flex border-b border-gray-200">
+                <button
+                    className={`px-6 py-3 text-sm font-medium transition-colors relative ${activeTab === "activos" ? "text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                    onClick={() => setActiveTab("activos")}
+                >
+                    Equipos Activos
+                    {activeTab === "activos" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+                </button>
+                <button
+                    className={`px-6 py-3 text-sm font-medium transition-colors relative ${activeTab === "robados" ? "text-indigo-600" : "text-gray-500 hover:text-gray-700"}`}
+                    onClick={() => setActiveTab("robados")}
+                >
+                    Equipos Robados
+                    {activeTab === "robados" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-indigo-600 rounded-full" />}
+                </button>
             </div>
 
             {
@@ -423,186 +494,180 @@ export default function MisEquipos() {
                     <div className="flex justify-center py-10">
                         <Loader2 className="h-8 w-8 animate-spin text-gray-400" />
                     </div>
-                ) : filtered.length === 0 ? (
-                    <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
-                        <Smartphone className="mx-auto h-12 w-12 text-gray-300" />
-                        <h3 className="mt-2 text-sm font-semibold text-gray-900">No tienes equipos asignados</h3>
-                        <p className="mt-1 text-sm text-gray-500">Cuando recibas equipos, aparecerán aquí para que asignes su usuario final.</p>
-                    </div>
                 ) : (
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                        {filtered.map(item => (
-                            <div key={item.id} className="relative flex flex-col bg-white border border-gray-200 rounded-xl overflow-hidden hover:border-indigo-200 transition-colors">
-                                <div className="p-4 flex-1">
-                                    <div className="flex items-start justify-between">
-                                        <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-lg ${item.isSoloChip ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
-                                                {item.isSoloChip ? <Cpu className="h-6 w-6" /> : <Smartphone className="h-6 w-6" />}
-                                            </div>
-                                            <div>
-                                                <h3 className="font-semibold text-gray-900">
-                                                    {item.isSoloChip
-                                                        ? (item.tipo_equipo_destino || "Línea Móvil (Solo Chip)")
-                                                        : `${item.equipo_marca} ${item.equipo_modelo}`}
-                                                </h3>
-                                                <p className="text-xs text-gray-500 font-mono mb-1">
-                                                    {item.isSoloChip
-                                                        ? `En equipo: ${item.codigo_equipo_destino || 'N/A'}`
-                                                        : `IMEI: ${item.equipo_imei}`}
-                                                </p>
-                                                <div className="flex gap-2">
-                                                    <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${item.isSoloChip ? 'bg-orange-100 text-orange-800' : 'bg-blue-100 text-blue-800'
-                                                        }`}>
-                                                        {item.isSoloChip ? "CHIP" : item.equipo_categoria}
-                                                    </span>
-                                                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-gray-100 text-gray-800">
-                                                        <MapPin className="w-3 h-3 mr-1" />
-                                                        {item.equipo_ubicacion}
-                                                    </span>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    <div className="mt-3 space-y-2">
-                                        {/* User Info */}
-                                        <div className="bg-gray-50 rounded-lg p-3 border border-gray-100">
-                                            <div className="flex items-center gap-2 text-[10px] font-bold text-gray-500 mb-2 uppercase tracking-wide">
-                                                <User className="h-3 w-3" />
-                                                Usuario Final
-                                            </div>
-
-                                            <div className="pl-1">
-                                                {item.isSoloChip ? (
-                                                    <div className="space-y-2">
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <div>
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">EQUIPO</span>
-                                                                <span className="text-sm font-medium text-gray-900 line-clamp-1" title={item.tipo_equipo_destino || "No especificado"}>{item.tipo_equipo_destino || "No especificado"}</span>
-                                                            </div>
-                                                            <div>
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Código / IMEI</span>
-                                                                <span className="text-sm font-medium text-gray-900 line-clamp-1" title={item.codigo_equipo_destino || "S/N"}>{item.codigo_equipo_destino || "S/N"}</span>
-                                                            </div>
-                                                        </div>
-                                                        <div className="flex justify-between items-center">
-                                                            <div>
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Sede / Ubicación</span>
-                                                                <span className={`text-sm font-bold ${item.usuario_final_sede ? 'text-indigo-600' : 'text-gray-400 italic'}`}>
-                                                                    {item.usuario_final_sede || "Ubicación no definida"}
-                                                                </span>
-                                                            </div>
-                                                            {item.chip_numero && (
-                                                                <div className="text-right">
-                                                                    <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
-                                                                    <span className="text-sm font-mono font-bold text-gray-900">{item.chip_numero}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </div>
-                                                ) : item.usuario_final_nombre ? (
-                                                    <>
-                                                        <div className="font-semibold text-gray-900 text-sm line-clamp-1" title={item.usuario_final_nombre}>
-                                                            {item.usuario_final_nombre}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            <div>{item.usuario_final_area} {item.usuario_final_sede ? `- ${item.usuario_final_sede}` : ''}</div>
-                                                            {item.usuario_final_puesto && <div className="font-medium text-gray-400">{item.usuario_final_puesto}</div>}
-                                                        </div>
-                                                        <div className="flex justify-between items-end mt-1">
-                                                            <div className="text-[10px] text-gray-400 font-mono mb-0.5">DNI: {item.usuario_final_dni}</div>
-                                                            {item.chip_numero && (
-                                                                <div className="text-right">
-                                                                    <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
-                                                                    <span className="text-sm font-mono font-bold text-gray-900 leading-none">{item.chip_numero}</span>
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </>
-                                                ) : (
-                                                    <div className="flex justify-between items-end py-1">
-                                                        <span className="text-sm text-gray-400 italic block mb-0.5">Sin asignar usuario específico</span>
-                                                        {item.chip_numero && (
-                                                            <div className="text-right">
-                                                                <span className="text-[10px] text-gray-400 font-semibold uppercase block">Teléfono / Chip</span>
-                                                                <span className="text-sm font-mono font-bold text-gray-900 leading-none">{item.chip_numero}</span>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-col gap-1 text-[11px] text-gray-500 px-1">
-                                            <div className="flex items-center gap-2">
-                                                <MapPin className="h-3 w-3 text-gray-400" />
-                                                Recibido: <span className="font-medium text-gray-700">{new Date(item.fecha_entrega).toLocaleDateString()}</span>
-                                            </div>
-                                            {item.fecha_entrega_final && (
-                                                <div className="flex items-center gap-2 text-indigo-600">
-                                                    <Check className="h-3 w-3" />
-                                                    Entrega Final: <span className="font-semibold">{new Date(item.fecha_entrega_final).toLocaleDateString()}</span>
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
-                                </div>
-
-                                <div className="bg-gray-50 px-4 py-3 border-t border-gray-100 flex items-center justify-between">
-                                    {!item.usuario_final_nombre ? (
-                                        item.equipo_custodio === "Administración" ? (
-                                            <div className="w-full py-2 text-center text-sm font-medium text-gray-500 bg-gray-100 rounded-lg cursor-not-allowed border border-gray-200">
-                                                En Custodia (Admin)
-                                            </div>
-                                        ) : (
-                                            <button
-                                                onClick={() => handleOpenAssignModal(item.id)}
-                                                className="w-full flex items-center justify-center gap-2 py-2 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors border border-indigo-100"
-                                            >
-                                                <UserPlus className="h-4 w-4" />
-                                                Asignar Responsable
-                                            </button>
-                                        )
-                                    ) : (
-                                        <div className="flex w-full gap-2">
-                                            {item.estado === "PARA DEVOLUCION" ? (
-                                                <div className="flex-1 py-2 text-center text-sm font-bold text-amber-600 bg-amber-50 rounded-lg border border-amber-200 cursor-default flex items-center justify-center gap-2">
-                                                    <RefreshCw className="h-4 w-4 animate-spin-slow" />
-                                                    En Devolución
-                                                </div>
-                                            ) : item.estado === "PARA REVISION" ? (
-                                                <div className="flex-1 py-2 text-center text-sm font-bold text-purple-600 bg-purple-50 rounded-lg border border-purple-200 cursor-default flex items-center justify-center gap-2">
-                                                    <ClipboardCheck className="h-4 w-4" />
-                                                    En Revisión
-                                                </div>
-                                            ) : (
-                                                <>
-                                                    {item.equipo_categoria === 'PROYECTO' && (
-                                                        <button
-                                                            onClick={() => handleOpenReturnCustodio(item)}
-                                                            className="flex-1 py-2 rounded-lg text-indigo-600 bg-indigo-50 hover:bg-indigo-100 border border-indigo-100 font-medium text-sm transition-colors flex items-center justify-center gap-1"
-                                                            title="Devolver a Custodio"
-                                                        >
-                                                            <User className="h-4 w-4" />
-                                                            Custodio
-                                                        </button>
-                                                    )}
-                                                    <button
-                                                        onClick={() => handleOpenReturn(item)}
-                                                        className="flex-1 py-2 rounded-lg text-red-600 bg-red-50 hover:bg-red-100 border border-red-100 font-medium text-sm transition-colors flex items-center justify-center gap-1"
-                                                        title="Devolver equipo"
-                                                    >
-                                                        <CornerUpLeft className="h-4 w-4" />
-                                                        Devolver
-                                                    </button>
-                                                </>
-                                            )}
-                                        </div>
-                                    )}
-                                </div>
+                    activeTab === "activos" ? (
+                        filtered.length === 0 ? (
+                            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                                <Smartphone className="mx-auto h-12 w-12 text-gray-300" />
+                                <h3 className="mt-2 text-sm font-semibold text-gray-900">No tienes equipos asignados</h3>
+                                <p className="mt-1 text-sm text-gray-500">Cuando recibas equipos, aparecerán aquí para que asignes su usuario final.</p>
                             </div>
-                        ))}
-                    </div>
+                        ) : (
+                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-gray-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Equipo</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">N° Chip</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Usuario Final</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Sede / Área</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-gray-500 uppercase tracking-wider">Entrega</th>
+                                            <th className="px-4 py-3 text-right text-[10px] font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {filtered.map(item => (
+                                            <tr key={item.id} className="hover:bg-gray-50/50 transition-colors group">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className={`p-1.5 rounded-lg ${item.isSoloChip ? 'bg-orange-50 text-orange-600' : 'bg-indigo-50 text-indigo-600'}`}>
+                                                            {item.isSoloChip ? <Cpu className="h-4 w-4" /> : <Smartphone className="h-4 w-4" />}
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-gray-900 text-sm">
+                                                                {item.isSoloChip
+                                                                    ? (item.tipo_equipo_destino || "Línea Móvil")
+                                                                    : `${item.equipo_marca} ${item.equipo_modelo}`}
+                                                            </div>
+                                                            <div className="text-[10px] text-gray-500 font-mono">
+                                                                {item.isSoloChip ? `En: ${item.codigo_equipo_destino || 'N/A'}` : `IMEI: ${item.equipo_imei}`}
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-sm font-mono text-gray-700">{item.chip_numero || '—'}</div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    {item.usuario_final_nombre ? (
+                                                        <div>
+                                                            <div className="text-sm font-medium text-gray-900">{item.usuario_final_nombre}</div>
+                                                            <div className="text-[10px] text-gray-500">DNI: {item.usuario_final_dni}</div>
+                                                        </div>
+                                                    ) : (
+                                                        <span className="text-sm text-gray-400 italic">Sin asignar</span>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-xs text-gray-700 font-medium">{item.usuario_final_area}</div>
+                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {item.usuario_final_sede || "BASE"}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-gray-600">
+                                                    <div>{new Date(item.fecha_entrega).toLocaleDateString()}</div>
+                                                    {item.fecha_entrega_final && (
+                                                        <div className="text-indigo-600 font-medium text-[10px]">
+                                                            Final: {new Date(item.fecha_entrega_final).toLocaleDateString()}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                                <td className="px-4 py-3 text-right">
+                                                    {!item.usuario_final_nombre ? (
+                                                        <button
+                                                            onClick={() => handleOpenAssignModal(item.id)}
+                                                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg border border-indigo-100 transition-colors"
+                                                        >
+                                                            <UserPlus className="h-3.5 w-3.5" />
+                                                            Asignar
+                                                        </button>
+                                                    ) : (
+                                                        <div className="flex justify-end gap-2">
+                                                            {item.estado === "PARA DEVOLUCION" ? (
+                                                                <span className="inline-flex items-center gap-1 px-2 py-1 text-[10px] font-bold text-amber-600 bg-amber-50 rounded-lg border border-amber-200">
+                                                                    <RefreshCw className="h-3 w-3 animate-spin-slow" />
+                                                                    DEV
+                                                                </span>
+                                                            ) : (
+                                                                <>
+                                                                    {item.equipo_categoria === 'PROYECTO' && (
+                                                                        <button
+                                                                            onClick={() => handleOpenReturnCustodio(item)}
+                                                                            className="p-1.5 rounded-lg text-indigo-600 hover:bg-indigo-100 bg-indigo-50 border border-indigo-100 transition-colors"
+                                                                            title="Custodio"
+                                                                        >
+                                                                            <User className="h-4 w-4" />
+                                                                        </button>
+                                                                    )}
+                                                                    <button
+                                                                        onClick={() => handleOpenReturn(item)}
+                                                                        className="p-1.5 rounded-lg text-red-600 hover:bg-red-100 bg-red-50 border border-red-100 transition-colors"
+                                                                        title="Devolver"
+                                                                    >
+                                                                        <CornerUpLeft className="h-4 w-4" />
+                                                                    </button>
+                                                                </>
+                                                            )}
+                                                        </div>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )
+                    ) : (
+                        /* Tabs: Robados */
+                        stolenAssignments.length === 0 ? (
+                            <div className="text-center py-12 bg-white rounded-xl border border-dashed border-gray-300">
+                                <AlertTriangle className="mx-auto h-12 w-12 text-gray-300" />
+                                <h3 className="mt-2 text-sm font-semibold text-gray-900">No hay registros de robos</h3>
+                                <p className="mt-1 text-sm text-gray-500">Aquí aparecerán los equipos que fueron marcados como robados.</p>
+                            </div>
+                        ) : (
+                            <div className="bg-white border border-gray-200 rounded-xl overflow-hidden overflow-x-auto">
+                                <table className="min-w-full divide-y divide-gray-200">
+                                    <thead className="bg-red-50">
+                                        <tr>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-red-700 uppercase tracking-wider">Equipo Robado</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-red-700 uppercase tracking-wider">N° Chip</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-red-700 uppercase tracking-wider">Último Usuario Holder</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-red-700 uppercase tracking-wider">Área / Sede</th>
+                                            <th className="px-4 py-3 text-left text-[10px] font-bold text-red-700 uppercase tracking-wider">Día del Reporte</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="bg-white divide-y divide-gray-200">
+                                        {stolenAssignments.map(item => (
+                                            <tr key={item.id} className="hover:bg-red-50/10 transition-colors">
+                                                <td className="px-4 py-3">
+                                                    <div className="flex items-center gap-3">
+                                                        <div className="p-1.5 rounded-lg bg-red-50 text-red-600">
+                                                            <Smartphone className="h-4 w-4" />
+                                                        </div>
+                                                        <div>
+                                                            <div className="font-semibold text-gray-900 text-sm">{item.equipo_marca} {item.equipo_modelo}</div>
+                                                            <div className="text-[10px] text-gray-500 font-mono">IMEI: {item.equipo_imei}</div>
+                                                        </div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-sm font-mono text-gray-700">{item.chip_numero || '—'}</div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div>
+                                                        <div className="text-sm font-medium text-gray-900">{item.usuario_final_nombre}</div>
+                                                        <div className="text-[10px] text-gray-500 font-medium">DNI: {item.usuario_final_dni}</div>
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3">
+                                                    <div className="text-xs text-gray-700 font-medium">{item.usuario_final_area}</div>
+                                                    <div className="text-[10px] text-gray-500 flex items-center gap-1">
+                                                        <MapPin className="h-3 w-3" />
+                                                        {item.usuario_final_sede || "BASE"}
+                                                    </div>
+                                                </td>
+                                                <td className="px-4 py-3 text-xs text-red-600 font-semibold">
+                                                    {item.fecha_entrega_final ? new Date(item.fecha_entrega_final).toLocaleDateString() : 'N/A'}
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )
+                    )
                 )
             }
 
