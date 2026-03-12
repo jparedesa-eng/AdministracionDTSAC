@@ -13,14 +13,17 @@ import {
     IdCard,
     Search,
     Calendar,
-    History,
     X,
     QrCode,
+    Eye,
+    CheckCircle,
+    History as HistoryIcon,
 } from "lucide-react";
 import QRCode from "react-qr-code";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { Modal } from "../../components/ui/Modal";
+import { CHECKLIST_CONFIG } from "../../data/checklistConfig";
 
 /* =========================
    Tipos
@@ -56,6 +59,35 @@ type ConductorAsignadoFull = {
     fecha_fin?: string;
     activo: boolean;
 };
+
+/* --- Checklist Types --- */
+type ChecklistRow = {
+    id: string;
+    created_at: string;
+    fecha?: string | null;
+    hora?: string | null;
+    sede?: string | null;
+    placa?: string | null;
+    kilometraje?: number | null;
+    responsable_inspeccion?: string | null;
+    usuario_dni?: string | null;
+    dni_usuario?: string | null;
+    usuario_nombre?: string | null;
+    nombre_usuario?: string | null;
+    usuario_correo?: string | null;
+    correo_usuario?: string | null;
+    firma_base64?: string | null;
+    firma_usuario_dataurl?: string | null;
+    observaciones?: string | null;
+    aprobado?: boolean | null;
+    fecha_ingreso?: string | null;
+    grupos?: any;
+    tipo?: "entrega" | "regular";
+    codigo?: string;
+};
+
+type CkItem = { name: string; ok: boolean; status?: string; nota?: string };
+type CkGroup = { titulo: string; items: CkItem[] };
 
 /* =========================
    Componentes UI
@@ -145,6 +177,15 @@ export default function MiCamioneta() {
     const [openDelete, setOpenDelete] = React.useState(false);
     const [driverToDelete, setDriverToDelete] = React.useState<{ id: string, name: string } | null>(null);
 
+    // Checklist State
+    const [checklists, setChecklists] = React.useState<ChecklistRow[]>([]);
+    const [loadingChecklists, setLoadingChecklists] = React.useState(false);
+    const [visibleCount, setVisibleCount] = React.useState(5);
+    const [openView, setOpenView] = React.useState(false);
+    const [viewRow, setViewRow] = React.useState<ChecklistRow | null>(null);
+    const [viewGrupos, setViewGrupos] = React.useState<CkGroup[]>([]);
+    const [loadingView, setLoadingView] = React.useState(false);
+
     /* Filtrado de conductores para mostrar */
     const filteredDrivers = React.useMemo(() => {
         return asignados.filter(a => showHistory ? !a.activo : a.activo);
@@ -187,12 +228,76 @@ export default function MiCamioneta() {
                 // 3. Cargar conductores asignados al primer vehículo (o todos? por ahora mantenemos lógica de conductores adicionales para la unidad principal)
                 // El usuario solo pidió mostrar las tarjetas.
                 await loadAsignados(vData[0].id);
+                await loadChecklists(vData[0].placa, vData[0].id);
             }
         } catch (e: any) {
             console.error(e);
             setToast({ type: "error", message: "Error al cargar datos de mi camioneta." });
         } finally {
             setLoading(false);
+        }
+    };
+    const loadChecklists = async (placa: string, vehiculoId: string) => {
+        if (!profile?.dni) return;
+        setLoadingChecklists(true);
+        setVisibleCount(5); // Reset a 5 al cargar
+        try {
+            // 1. Obtener rangos de asignación del historial
+            const { data: hData, error: hError } = await supabase
+                .from("vehiculos_historial_responsables")
+                .select("*")
+                .eq("vehiculo_id", vehiculoId)
+                .eq("dni_responsable", profile.dni);
+
+            if (hError) throw hError;
+
+            if (!hData || hData.length === 0) {
+                setChecklists([]);
+                return;
+            }
+
+            // 2. Obtener checklists de esta placa (ordenados por 'fecha' descendente desde DB)
+            const { data: cData, error: cError } = await supabase
+                .from("checklists")
+                .select("*")
+                .eq("placa", placa)
+                .order("fecha", { ascending: false });
+
+            if (cError) throw cError;
+
+            // 3. Filtrar en memoria: solo los que caen en ALGUNO de los rangos de asignación
+            const filteredChecklists = (cData || []).filter(checklist => {
+                if (!checklist.fecha) return false;
+                const ckTime = new Date(checklist.fecha).getTime();
+
+                return hData.some(range => {
+                    const start = new Date(range.fecha_inicio).getTime();
+                    // Si fecha_fin es null, es la asignación actual (usamos tiempo actual)
+                    const end = range.fecha_fin ? new Date(range.fecha_fin).getTime() : new Date().getTime();
+
+                    // Ajustamos el margen del fin para que sea inclusivo del día completo si es solo fecha
+                    // Si el timestamp ya tiene hora, esto sigue siendo seguro para la inclusión
+                    const adjustedEnd = range.fecha_fin && !range.fecha_fin.includes('T')
+                        ? end + 86399999
+                        : end;
+
+                    return ckTime >= start && ckTime <= adjustedEnd;
+                });
+            });
+
+            // 4. Ordenar estrictamente por 'fecha' descendente (más recientes primero)
+            filteredChecklists.sort((a, b) => {
+                const fa = a.fecha || "";
+                const fb = b.fecha || "";
+                return fb.localeCompare(fa);
+            });
+
+            setChecklists(filteredChecklists);
+        } catch (e) {
+            console.error("Error loading checklists:", e);
+            setToast({ type: "error", message: "Error al cargar el historial de checklists." });
+        } finally {
+            setLoadingChecklists(false);
         }
     };
 
@@ -364,6 +469,134 @@ export default function MiCamioneta() {
         }
     };
 
+    /* --- Checklist Helpers --- */
+    const openDetails = async (row: ChecklistRow) => {
+        setViewRow(row);
+        setOpenView(true);
+        setViewGrupos([]);
+        setLoadingView(true);
+        try {
+            const grupos = await fetchGruposFor(row);
+            setViewGrupos(grupos);
+        } catch (e: any) {
+            alert(e?.message ?? "No se pudieron cargar los ítems del checklist.");
+        } finally {
+            setLoadingView(false);
+        }
+    };
+
+    async function fetchGruposFor(row: ChecklistRow): Promise<CkGroup[]> {
+        // Primero intentamos desde el JSONB embebido (si existe)
+        if (row.grupos && Array.isArray(row.grupos)) {
+            return row.grupos.map((g: any) => ({
+                titulo: String(g.title ?? g.titulo ?? "OTROS"),
+                items: Array.isArray(g.items)
+                    ? g.items.map((it: any) => ({
+                        name: String(it.name ?? ""),
+                        ok: Boolean(it.ok),
+                        status: it.status,
+                        nota: it.nota || ""
+                    }))
+                    : [],
+            }));
+        }
+
+        // Si no, buscamos en la tabla plana
+        const { data, error } = await supabase
+            .from("checklist_items")
+            .select("*")
+            .eq("checklist_id", row.id)
+            .order("id", { ascending: true });
+
+        if (error) throw error;
+        const byGroup = new Map<string, CkGroup>();
+        (data as any[]).forEach((r) => {
+            const key = (r.grupo ?? "OTROS").toString();
+            if (!byGroup.has(key)) byGroup.set(key, { titulo: key, items: [] });
+            byGroup.get(key)!.items.push({
+                name: r.name,
+                ok: !!r.ok,
+                status: undefined,
+                nota: r.nota ?? ""
+            });
+        });
+        return Array.from(byGroup.values());
+    }
+
+    const getDni = (r: ChecklistRow) => r.usuario_dni ?? r.dni_usuario ?? "—";
+    const getNombre = (r: ChecklistRow) => r.usuario_nombre ?? r.nombre_usuario ?? "—";
+    const getCorreo = (r: ChecklistRow) => r.usuario_correo ?? r.correo_usuario ?? "—";
+
+    function resolveFirmaSource(raw: string | null | undefined): string | null {
+        if (!raw) return null;
+        let cleaned = raw.replace(/\s/g, "");
+        if (!cleaned) return null;
+        if (cleaned.startsWith("http://") || cleaned.startsWith("https://")) return cleaned;
+        const base64Marker = "base64,";
+        const markerIdx = cleaned.toLowerCase().indexOf(base64Marker);
+        let payload: string;
+        if (markerIdx !== -1) {
+            payload = cleaned.substring(markerIdx + base64Marker.length);
+        } else if (cleaned.includes(",")) {
+            const parts = cleaned.split(",");
+            payload = parts[parts.length - 1];
+        } else {
+            payload = cleaned;
+        }
+        return `data:image/png;base64,${payload}`;
+    }
+
+    const getFirma = (r: ChecklistRow) => {
+        const raw = r.firma_base64 ?? r.firma_usuario_dataurl;
+        return resolveFirmaSource(raw);
+    };
+
+    function dataURLtoBlob(dataURL: string): Blob {
+        const parts = dataURL.split(',');
+        const byteString = atob(parts[1]);
+        const mimeString = parts[0].split(':')[1].split(';')[0];
+        const ab = new ArrayBuffer(byteString.length);
+        const ia = new Uint8Array(ab);
+        for (let i = 0; i < byteString.length; i++) {
+            ia[i] = byteString.charCodeAt(i);
+        }
+        return new Blob([ab], { type: mimeString });
+    }
+
+    function createBlobURL(dataURL: string | null): string | null {
+        if (!dataURL) return null;
+        try {
+            const blob = dataURLtoBlob(dataURL);
+            return URL.createObjectURL(blob);
+        } catch (error) {
+            return dataURL;
+        }
+    }
+
+    function formatFechaHoraLocal(valor?: string | null, fallback?: string): string {
+        const src = valor ?? fallback;
+        if (!src) return "—";
+        const d = new Date(src);
+        if (!isNaN(d.getTime())) return d.toLocaleString();
+        return src;
+    }
+
+    function calculateSeniority(fechaIngreso?: string | null): string {
+        if (!fechaIngreso) return "—";
+        try {
+            const start = new Date(fechaIngreso);
+            const end = new Date();
+            if (isNaN(start.getTime())) return "—";
+            let years = end.getFullYear() - start.getFullYear();
+            let months = end.getMonth() - start.getMonth();
+            if (months < 0) { years--; months += 12; }
+            const yearStr = years > 0 ? `${years} ${years === 1 ? "año" : "años"}` : "";
+            const monthStr = months > 0 ? `${months} ${months === 1 ? "mes" : "meses"}` : "";
+            if (yearStr && monthStr) return `${yearStr} y ${monthStr}`;
+            return yearStr || monthStr || "Menos de un mes";
+        } catch (e) { return "—"; }
+    }
+
     /* Render */
     if (loading) {
         return (
@@ -470,9 +703,9 @@ export default function MiCamioneta() {
                 <div key={v.id} className="rounded-3xl border border-gray-200 bg-white p-6 md:p-8">
                     <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
 
-                        <div className="flex gap-4">
-                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
-                                <Truck className="h-8 w-8" />
+                        <div className="flex gap-6">
+                            <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
+                                <Truck className="h-10 w-10" />
                             </div>
                             <div>
                                 <div className="flex items-center gap-3">
@@ -483,10 +716,10 @@ export default function MiCamioneta() {
                                 <p className="text-lg font-medium text-gray-600">
                                     {v.marca} {v.modelo}
                                 </p>
+                                <p className="text-xs font-normal">
+                                    {v.color}
+                                </p>
                                 <div className="mt-2 flex items-center gap-2">
-                                    <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
-                                        {v.color}
-                                    </span>
                                     <span
                                         className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${v.estado === "Disponible"
                                             ? "bg-emerald-100 text-emerald-700"
@@ -498,7 +731,7 @@ export default function MiCamioneta() {
                                         {v.estado}
                                     </span>
                                     {v.categoria && (
-                                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-black uppercase ${v.categoria === 'Permanente'
+                                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium uppercase ${v.categoria === 'Permanente'
                                             ? "bg-indigo-50 text-indigo-700"
                                             : v.categoria === 'Temporal'
                                                 ? "bg-orange-50 text-orange-700"
@@ -548,7 +781,7 @@ export default function MiCamioneta() {
                                 : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
                                 }`}
                         >
-                            <History className="h-4 w-4" />
+                            <HistoryIcon className="h-4 w-4" />
                             <span>{showHistory ? "Ocultar Historial" : "Ver Historial"}</span>
                         </button>
                         <button
@@ -646,6 +879,111 @@ export default function MiCamioneta() {
                                     )}
                                 </div>
                             ))
+                        )}
+                    </div>
+                </div>
+            </div>
+
+            {/* Sección Últimos Checklists Realizados */}
+            <div className="space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 px-1">
+                    <div>
+                        <h3 className="text-lg font-bold text-gray-900">
+                            Últimos Checklists Realizados
+                        </h3>
+                        <p className="text-sm text-gray-500">
+                            Historial de inspecciones realizadas a esta unidad durante tu periodo de asignación.
+                        </p>
+                    </div>
+                </div>
+
+                <div className="rounded-xl border border-gray-200 bg-white overflow-hidden">
+                    <div className="divide-y divide-gray-100">
+                        {loadingChecklists ? (
+                            <div className="flex h-32 items-center justify-center">
+                                <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+                            </div>
+                        ) : checklists.length === 0 ? (
+                            <div className="p-10 text-center">
+                                <div className="mx-auto h-12 w-12 rounded-full bg-gray-50 flex items-center justify-center mb-3">
+                                    <HistoryIcon className="h-6 w-6 text-gray-300" />
+                                </div>
+                                <p className="text-sm font-medium text-gray-900">
+                                    No hay checklists registrados.
+                                </p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    Los registros de inspección aparecerán aquí una vez realizados.
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto">
+                                <table className="min-w-full text-left text-sm">
+                                    <thead>
+                                        <tr className="bg-gray-50/50 text-gray-600 border-b border-gray-100 text-[11px] uppercase tracking-wider font-bold">
+                                            <th className="px-6 py-4">Fecha / Hora</th>
+                                            <th className="px-6 py-4">Tipo</th>
+                                            <th className="px-6 py-4">Estado</th>
+                                            <th className="px-6 py-4 text-right">Detalles</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100">
+                                        {checklists.slice(0, visibleCount).map((c) => (
+                                            <tr key={c.id} className="hover:bg-gray-50/50 transition-colors">
+                                                <td className="px-6 py-4 whitespace-nowrap">
+                                                    <div className="flex flex-col">
+                                                        <span className="font-bold text-gray-900">
+                                                            {c.fecha ? new Date(c.fecha).toLocaleDateString("es-PE", { day: '2-digit', month: '2-digit', year: 'numeric' }) : "-"}
+                                                        </span>
+                                                        <span className="text-[10px] text-gray-400 font-medium">
+                                                            {c.fecha ? new Date(c.fecha).toLocaleTimeString("es-PE", { hour: '2-digit', minute: '2-digit' }) : (c.hora || "")}
+                                                        </span>
+                                                    </div>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className={`inline-flex items-center rounded-md px-2 py-0.5 text-[10px] font-black uppercase border shrink-0 ${c.tipo === "entrega" ? "bg-purple-50 text-purple-700 border-purple-100" : "bg-blue-50 text-blue-700 border-blue-100"
+                                                        }`}>
+                                                        {c.tipo ? c.tipo : "REGULAR"}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {c.aprobado ? (
+                                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700 border border-emerald-100">
+                                                            <CheckCircle className="h-3 w-3" />
+                                                            Aprobado
+                                                        </span>
+                                                    ) : (
+                                                        <span className="inline-flex items-center gap-1.5 rounded-full bg-rose-50 px-2.5 py-1 text-xs font-bold text-rose-700 border border-rose-100">
+                                                            <AlertCircle className="h-3 w-3" />
+                                                            Observado
+                                                        </span>
+                                                    )}
+                                                </td>
+                                                <td className="px-6 py-4 text-right">
+                                                    <button
+                                                        onClick={() => openDetails(c)}
+                                                        className="inline-flex items-center gap-2 rounded-lg bg-white border border-gray-200 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95"
+                                                    >
+                                                        <Eye className="h-3.5 w-3.5 text-gray-400" />
+                                                        Ver
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                        {/* Botón Mostrar Más */}
+                        {!loadingChecklists && checklists.length > visibleCount && (
+                            <div className="p-4 border-t border-gray-100 bg-gray-50/30 flex justify-center">
+                                <button
+                                    onClick={() => setVisibleCount(prev => prev + 5)}
+                                    className="flex items-center gap-2 rounded-xl bg-white border border-gray-200 px-6 py-2 text-sm font-bold text-slate-700 hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm active:scale-95"
+                                >
+                                    <HistoryIcon className="h-4 w-4 text-slate-400" />
+                                    Mostrar más
+                                </button>
+                            </div>
                         )}
                     </div>
                 </div>
@@ -840,6 +1178,191 @@ export default function MiCamioneta() {
                     </div>
                 </div>
             </Modal>
+
+            {/* MODAL: Ver detalle de Checklist */}
+            {openView && viewRow && (
+                <div className="fixed inset-0 z-[60]">
+                    <div
+                        className="absolute inset-0 bg-black/30 backdrop-blur-sm"
+                        onClick={() => setOpenView(false)}
+                        aria-hidden
+                    />
+                    <div className="absolute inset-0 flex items-center justify-center p-2 sm:p-4 pointer-events-none">
+                        <div className="w-full max-w-5xl max-h-[90vh] flex flex-col overflow-hidden rounded-3xl border border-gray-200 bg-white pointer-events-auto animate-in zoom-in-95 duration-200">
+                            {/* Header */}
+                            <div className="flex items-center justify-between border-b border-gray-100 px-6 py-5 bg-gray-50/50">
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900">
+                                        Detalle de Checklist
+                                    </h3>
+                                    <p className="text-xs font-medium text-gray-500 mt-0.5 uppercase tracking-wider">
+                                        N°: {viewRow.codigo ?? viewRow.id.slice(0, 8)} • {formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)}
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenView(false)}
+                                    className="rounded-full p-2 h-10 w-10 flex items-center justify-center bg-white border border-gray-200 text-gray-400 hover:text-gray-900 hover:bg-gray-50 transition-colors"
+                                >
+                                    <X className="h-5 w-5" />
+                                </button>
+                            </div>
+
+                            {/* Body */}
+                            <div className="flex-1 overflow-y-auto px-6 py-6 space-y-8">
+                                {/* Datos generales */}
+                                <section>
+                                    <h4 className="flex items-center gap-2 mb-4 text-sm font-bold text-gray-400 uppercase tracking-widest">
+                                        <div className="h-px w-4 bg-gray-200"></div>
+                                        Datos Generales
+                                    </h4>
+                                    <div className="grid gap-3 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3">
+                                        {[
+                                            ["Fecha Registro", formatFechaHoraLocal(viewRow.fecha, viewRow.created_at)],
+                                            ["Sede", viewRow.sede ?? "—"],
+                                            ["Placa", viewRow.placa ?? "—"],
+                                            ["Kilometraje", viewRow.kilometraje?.toString() ?? "—"],
+                                            ["Resp. Inspección", viewRow.responsable_inspeccion ?? "—"],
+                                            ["Usuario de Unidad", getNombre(viewRow)],
+                                            ["Correo Usuario", getCorreo(viewRow)],
+                                            ["DNI Usuario", getDni(viewRow)],
+                                            ["Tipo de Checklist", viewRow.tipo ? viewRow.tipo.toUpperCase() : "REGULAR"],
+                                            ["Antigüedad Unidad", calculateSeniority(viewRow.fecha_ingreso)],
+                                        ].map(([label, val]) => (
+                                            <div key={label as string} className="flex flex-col p-3 rounded-2xl bg-gray-50/50 border border-gray-200">
+                                                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">{label}</span>
+                                                <span className="text-sm font-semibold text-gray-900 mt-1">{val as string}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </section>
+
+                                {/* Firma */}
+                                <section>
+                                    <h4 className="flex items-center gap-2 mb-4 text-sm font-bold text-gray-400 uppercase tracking-widest">
+                                        <div className="h-px w-4 bg-gray-200"></div>
+                                        Firma de Conformidad
+                                    </h4>
+                                    <div className="inline-block p-4 rounded-2xl bg-white border border-gray-200">
+                                        {(() => {
+                                            const dataUrl = getFirma(viewRow);
+                                            if (!dataUrl) return <span className="text-xs text-gray-400 italic">No se registró firma</span>;
+                                            const blobUrl = createBlobURL(dataUrl);
+                                            return (
+                                                <img
+                                                    src={blobUrl!}
+                                                    alt="Firma"
+                                                    className="h-28 w-auto object-contain"
+                                                    onError={(e) => { (e.target as any).src = ''; }}
+                                                />
+                                            );
+                                        })()}
+                                    </div>
+                                </section>
+
+                                {/* Observaciones Generales */}
+                                <section>
+                                    <h4 className="flex items-center gap-2 mb-4 text-sm font-bold text-gray-400 uppercase tracking-widest">
+                                        <div className="h-px w-4 bg-gray-200"></div>
+                                        Observaciones Generales
+                                    </h4>
+                                    <div className="p-4 rounded-2xl bg-gray-50/50 border border-gray-200 min-h-[60px]">
+                                        <p className="text-sm text-gray-700 leading-relaxed">
+                                            {viewRow.observaciones?.trim() || "Sin observaciones generales registradas."}
+                                        </p>
+                                    </div>
+                                </section>
+
+                                {/* Ítems Detallados */}
+                                <section>
+                                    <h4 className="flex items-center gap-2 mb-6 text-sm font-bold text-gray-400 uppercase tracking-widest">
+                                        <div className="h-px w-4 bg-gray-200"></div>
+                                        Inspección Detallada
+                                    </h4>
+
+                                    {loadingView ? (
+                                        <div className="flex items-center gap-3 p-8 justify-center text-gray-400">
+                                            <Loader2 className="h-5 w-5 animate-spin" />
+                                            <span className="text-sm font-medium">Cargando ítems...</span>
+                                        </div>
+                                    ) : viewGrupos.length === 0 ? (
+                                        <div className="bg-gray-50/50 border border-dashed border-gray-200 rounded-2xl p-8 text-center">
+                                            <p className="text-sm text-gray-500 font-medium">No hay registros de ítems individuales para este checklist.</p>
+                                        </div>
+                                    ) : (
+                                        <div className="grid gap-8">
+                                            {viewGrupos.map((g) => (
+                                                <div key={g.titulo} className="space-y-4">
+                                                    <h5 className="text-xs font-black text-slate-800 uppercase tracking-tight bg-slate-100 px-3 py-1 rounded inline-block">
+                                                        {g.titulo}
+                                                    </h5>
+                                                    <div className="grid gap-3 sm:grid-cols-2">
+                                                        {g.items.map((it) => {
+                                                            const statusKey = it.status || it.nota || "";
+
+                                                            const getStatusColor = () => {
+                                                                // Buscar en configuración global para colores precisos
+                                                                const groupCfg = CHECKLIST_CONFIG.find(gc => gc.title.toUpperCase() === g.titulo.toUpperCase());
+                                                                const itemCfg = groupCfg?.items.find(ic => ic.name === it.name);
+                                                                const option = itemCfg?.options.find(opt =>
+                                                                    opt.value === statusKey || opt.label.toUpperCase() === statusKey.toUpperCase()
+                                                                );
+
+                                                                if (option) {
+                                                                    switch (option.color) {
+                                                                        case 'green': return "bg-emerald-50 text-emerald-700 border-emerald-100";
+                                                                        case 'yellow': return "bg-yellow-50 text-yellow-700 border-yellow-100";
+                                                                        case 'orange': return "bg-orange-50 text-orange-700 border-orange-100";
+                                                                        case 'red': return "bg-rose-50 text-rose-700 border-rose-100";
+                                                                        default: return "bg-gray-50 text-gray-700 border-gray-100";
+                                                                    }
+                                                                }
+                                                                return it.ok ? "bg-emerald-50 text-emerald-700 border-emerald-100" : "bg-rose-50 text-rose-700 border-rose-100";
+                                                            };
+
+                                                            const colorClasses = getStatusColor();
+                                                            const displayLabel = it.status ? (it.status.charAt(0).toUpperCase() + it.status.slice(1).replace(/_/g, ' ')) : (it.ok ? "Conforme" : "Incorrecto");
+                                                            const hasExtraObs = it.nota && it.nota !== statusKey;
+
+                                                            return (
+                                                                <div key={it.name} className="flex flex-col gap-2 p-3 rounded-2xl border border-gray-200 bg-white hover:border-gray-200 transition-colors">
+                                                                    <div className="flex items-center justify-between gap-3">
+                                                                        <span className="text-sm font-semibold text-gray-700 leading-tight">{it.name}</span>
+                                                                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-black uppercase border shrink-0 ${colorClasses}`}>
+                                                                            {displayLabel}
+                                                                        </span>
+                                                                    </div>
+                                                                    {hasExtraObs && (
+                                                                        <div className="text-[11px] text-gray-500 font-medium italic border-t border-gray-50 pt-2 mt-1">
+                                                                            <span className="text-gray-400 not-italic uppercase font-bold text-[9px] mr-1">Obs: </span>
+                                                                            {it.nota}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            );
+                                                        })}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </section>
+                            </div>
+
+                            {/* Footer */}
+                            <div className="border-t border-gray-100 px-6 py-5 flex justify-end">
+                                <button
+                                    type="button"
+                                    onClick={() => setOpenView(false)}
+                                    className="px-8 py-2.5 rounded-2xl bg-slate-800 text-sm font-bold text-white hover:bg-slate-900 transition-all active:scale-[0.98]"
+                                >
+                                    Cerrar Detalle
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
