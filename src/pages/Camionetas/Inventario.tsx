@@ -16,10 +16,16 @@ import {
   AlertCircle,
   UserPlus,
   History,
+  Info,
   ChevronsLeft,
   ChevronsRight,
 } from "lucide-react";
-import { camionetasStore, type HistorialResponsable } from "../../store/camionetasStore";
+import {
+  camionetasStore,
+  type HistorialResponsable,
+  type HistorialCategoria,
+  type CategoriaVehiculo,
+} from "../../store/camionetasStore";
 import { searchByDni } from "../../store/personalStore";
 import { supabase } from "../../supabase/supabaseClient";
 import { Modal } from "../../components/ui/Modal";
@@ -53,6 +59,8 @@ type Vehiculo = {
   revTecnica: string; // YYYY-MM-DD
   soat: string; // YYYY-MM-DD
   fechaIngreso?: string; // NUEVO
+  categoria: CategoriaVehiculo; // Permanente | Temporal | Replacement
+  fechaFinContrato?: string | null;
   estado: EstadoVehiculoDB;
   volante: VolanteTipo;
   volanteInicio?: string | null;
@@ -74,6 +82,8 @@ const fromDb = (r: any): Vehiculo => ({
   revTecnica: r.rev_tecnica,
   soat: r.soat,
   fechaIngreso: r.fecha_ingreso,
+  categoria: (r.categoria as CategoriaVehiculo) || "Permanente",
+  fechaFinContrato: r.fecha_fin_contrato,
   estado: r.estado as EstadoVehiculoDB,
   volante:
     r.volante === "Si" || r.volante === "No"
@@ -98,6 +108,8 @@ const toDb = (v: Vehiculo) => ({
   rev_tecnica: v.revTecnica,
   soat: v.soat,
   fecha_ingreso: v.fechaIngreso,
+  categoria: v.categoria || "Permanente",
+  fecha_fin_contrato: v.fechaFinContrato || null,
   estado: v.estado,
   volante: v.volante,
   volante_inicio: v.volanteInicio || null,
@@ -115,7 +127,6 @@ const sanitizePlaca = (val: string) =>
 function EstadoBadge({ estado }: { estado: EstadoVehiculoDB }) {
   const styles: Record<EstadoVehiculoDB, string> = {
     Disponible: "bg-emerald-100 text-emerald-800 ring-emerald-200",
-    // Mantengo estilo para "En uso" por compatibilidad (si existen registros viejos)
     "En uso": "bg-blue-100 text-blue-800 ring-blue-200",
     Mantenimiento: "bg-amber-100 text-amber-800 ring-amber-200",
     Inactivo: "bg-rose-100 text-rose-800 ring-rose-200",
@@ -126,6 +137,19 @@ function EstadoBadge({ estado }: { estado: EstadoVehiculoDB }) {
         }`}
     >
       {estado}
+    </span>
+  );
+}
+
+function CategoriaBadge({ categoria }: { categoria: CategoriaVehiculo }) {
+  const styles: Record<CategoriaVehiculo, string> = {
+    Permanente: "text-indigo-700",
+    Temporal: "text-orange-700",
+    Replacement: "text-purple-700",
+  };
+  return (
+    <span className={`text-[10px] font-black uppercase ${styles[categoria] || "text-gray-700"}`}>
+      {categoria}
     </span>
   );
 }
@@ -177,6 +201,7 @@ async function apiFetchVehiculos({
   pageSize,
   soloVolantes,
   zona,
+  categoria,
 }: {
   q: string;
   estado: FiltroTipo;
@@ -184,6 +209,7 @@ async function apiFetchVehiculos({
   pageSize: number;
   soloVolantes?: boolean;
   zona?: string;
+  categoria?: string;
 }) {
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -214,6 +240,10 @@ async function apiFetchVehiculos({
 
   if (zona && zona !== "Todas") {
     query = query.eq("zona", zona);
+  }
+
+  if (categoria && categoria !== "Todas") {
+    query = query.eq("categoria", categoria);
   }
 
   const { data, error, count } = await query;
@@ -270,6 +300,17 @@ async function apiUpdateEstado(id: string, estado: EstadoVehiculoUI) {
   return fromDb(data);
 }
 
+async function apiFetchReplacementVehicles() {
+  const { data, error } = await supabase
+    .from("vehiculos")
+    .select("*")
+    .eq("estado", "Disponible")
+    .or("categoria.eq.Temporal,categoria.eq.Replacement");
+
+  if (error) throw error;
+  return (data || []).map(fromDb);
+}
+
 async function apiUpdateVolante(id: string, volante: VolanteTipo, volanteInicio: string | null = null, volanteFin: string | null = null) {
   const { data, error } = await supabase
     .from("vehiculos")
@@ -289,12 +330,12 @@ async function apiFetchVehiculoStats() {
   // Pedimos solo la columna estado de TODOS los vehículos
   const { data, error } = await supabase
     .from("vehiculos")
-    // Traemos estado, rev_tecnica y soat para calcular estadísticas
-    .select("estado, rev_tecnica, soat");
+    // Traemos estado, rev_tecnica, soat, categoria y zona para calcular estadísticas
+    .select("estado, rev_tecnica, soat, categoria, zona");
 
   if (error) {
     console.error("Error fetching stats:", error);
-    return { disponible: 0, mantenimiento: 0, inactivo: 0, docVencida: 0 };
+    return { disponible: 0, mantenimiento: 0, inactivo: 0, docVencida: 0, porZona: {} };
   }
 
   const rows = data || [];
@@ -311,7 +352,14 @@ async function apiFetchVehiculoStats() {
     return revVencida || soatVencido;
   }).length;
 
-  return { disponible, mantenimiento, inactivo, docVencida };
+  // Estadísticas por zona (Solo Categoría Permanente)
+  const porZona: Record<string, number> = {};
+  rows.filter(r => r.categoria === 'Permanente' && r.zona).forEach(r => {
+    const z = r.zona as string;
+    porZona[z] = (porZona[z] || 0) + 1;
+  });
+
+  return { disponible, mantenimiento, inactivo, docVencida, porZona };
 }
 
 /* =========================
@@ -326,6 +374,7 @@ export default function Inventario() {
   const [estadoFiltro, setEstadoFiltro] =
     React.useState<FiltroTipo>("Todos");
   const [zonaFiltro, setZonaFiltro] = React.useState<string>("Todas");
+  const [categoriaFiltro, setCategoriaFiltro] = React.useState<string>("Todas");
   const [page, setPage] = React.useState(1);
 
   // Datos de backend
@@ -342,6 +391,8 @@ export default function Inventario() {
   const [statusVeh, setStatusVeh] = React.useState<Vehiculo | null>(null);
   const [statusDraft, setStatusDraft] =
     React.useState<EstadoVehiculoUI>("Disponible");
+  const [repVehicles, setRepVehicles] = React.useState<Vehiculo[]>([]);
+  const [selectedRepId, setSelectedRepId] = React.useState<string>("");
 
   const [soloVolantes, setSoloVolantes] = React.useState(false);
 
@@ -363,6 +414,8 @@ export default function Inventario() {
     estado: "Disponible",
     volante: "No",
     zona: null,
+    categoria: "Permanente",
+    fechaFinContrato: null,
   });
 
   // Confirmación de cambio de volante
@@ -385,6 +438,7 @@ export default function Inventario() {
     mantenimiento: 0,
     inactivo: 0,
     docVencida: 0,
+    porZona: {} as Record<string, number>,
   });
 
   // Estado para Asignación
@@ -407,7 +461,12 @@ export default function Inventario() {
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLoading, setHistoryLoading] = React.useState(false);
   const [historyData, setHistoryData] = React.useState<HistorialResponsable[]>([]);
+  const [historyCatData, setHistoryCatData] = React.useState<HistorialCategoria[]>([]);
+  const [historyTab, setHistoryTab] = React.useState<"responsables" | "categorias">("responsables");
   const [historyVehiculo, setHistoryVehiculo] = React.useState<Vehiculo | null>(null);
+
+  // Estado para observación de categoría al editar
+  const [catObs, setCatObs] = React.useState("");
 
   // Toast global
   const [toast, setToast] = React.useState<ToastState>(null);
@@ -427,6 +486,7 @@ export default function Inventario() {
         pageSize: rowsPerPage === 0 ? 10000 : rowsPerPage, // Handle "All"
         soloVolantes,
         zona: zonaFiltro,
+        categoria: categoriaFiltro,
       });
       setRows(res.rows);
       setTotal(res.total);
@@ -440,7 +500,7 @@ export default function Inventario() {
     } finally {
       setLoading(false);
     }
-  }, [q, estadoFiltro, page, rowsPerPage, soloVolantes, zonaFiltro]);
+  }, [q, estadoFiltro, page, rowsPerPage, soloVolantes, zonaFiltro, categoriaFiltro]);
 
   const loadStats = React.useCallback(async () => {
     try {
@@ -483,6 +543,7 @@ export default function Inventario() {
   /* Acciones */
   const openEdit = (v: Vehiculo) => {
     setEditDraft({ ...v });
+    setCatObs("");
     setEditOpen(true);
   };
 
@@ -498,9 +559,25 @@ export default function Inventario() {
     if (!editDraft) return;
     setEditLoading(true);
     try {
+      const original = rows.find(r => r.id === editDraft.id);
+
+      // Si cambió categoria, f_ingreso o f_fin, registramos en historial
+      if (original && (
+        original.categoria !== editDraft.categoria ||
+        original.fechaIngreso !== editDraft.fechaIngreso ||
+        original.fechaFinContrato !== editDraft.fechaFinContrato
+      )) {
+        await camionetasStore.cambiarCategoriaVehiculo({
+          vehiculoId: editDraft.id,
+          categoria: editDraft.categoria,
+          fechaIngreso: editDraft.fechaIngreso || null,
+          fechaFinContrato: editDraft.fechaFinContrato || null,
+          observacion: catObs || "Cambio manual en inventario",
+        });
+      }
+
       const updated = await apiUpdateVehiculo(editDraft);
       setRows((arr) => arr.map((it) => (it.id === updated.id ? updated : it)));
-      // Actualizamos stats por si cambió estado via edit (aunque raro)
       loadStats();
       setToast({
         type: "success",
@@ -515,15 +592,28 @@ export default function Inventario() {
       setEditLoading(false);
       setEditOpen(false);
       setEditDraft(null);
+      setCatObs("");
     }
   };
 
-  const openChangeStatus = (v: Vehiculo) => {
+  const openChangeStatus = async (v: Vehiculo) => {
     setStatusVeh(v);
     const safe =
       v.estado === "En uso" ? "Disponible" : (v.estado as EstadoVehiculoUI);
     setStatusDraft(safe);
+    setSelectedRepId("");
+    setRepVehicles([]);
     setStatusOpen(true);
+
+    // Si tiene responsable y vamos a mantenimiento (o ya es mantenimiento), buscamos reemplazos
+    if (v.responsable) {
+      try {
+        const reps = await apiFetchReplacementVehicles();
+        setRepVehicles(reps);
+      } catch (error) {
+        console.error("Error fetching replacement vehicles", error);
+      }
+    }
   };
 
   const handleStatusSubmit = async (e: React.FormEvent) => {
@@ -531,13 +621,30 @@ export default function Inventario() {
     if (!statusVeh) return;
     setStatusLoading(true);
     try {
+      // 1. Cambiar estado del vehículo principal
       const updated = await apiUpdateEstado(statusVeh.id, statusDraft);
+
+      // 2. Si es mantenimiento y se seleccionó reemplazo, asignar responsable al reemplazo
+      if (statusDraft === "Mantenimiento" && selectedRepId && statusVeh.responsable) {
+        await camionetasStore.asignarResponsable({
+          vehiculoId: selectedRepId,
+          responsable: statusVeh.responsable,
+          dniResponsable: statusVeh.dniResponsable || "",
+          fechaInicio: new Date().toISOString(),
+          fechaFin: null,
+          tipoAsignacion: "Indefinida",
+          observacion: `Reemplazo temporal por mantenimiento de ${statusVeh.placa}`,
+          zona: statusVeh.zona as any
+        });
+      }
+
       setRows((arr) => arr.map((it) => (it.id === updated.id ? updated : it)));
       loadStats();
       setToast({
         type: "success",
         message: "Estado actualizado correctamente.",
       });
+      load(); // Recargar para ver cambios en responsable del reemplazo si aplica
     } catch (e: any) {
       setToast({
         type: "error",
@@ -547,6 +654,7 @@ export default function Inventario() {
       setStatusLoading(false);
       setStatusOpen(false);
       setStatusVeh(null);
+      setSelectedRepId("");
     }
   };
 
@@ -570,6 +678,8 @@ export default function Inventario() {
       estado: "Disponible",
       volante: "No",
       zona: null,
+      categoria: "Permanente",
+      fechaFinContrato: null,
     });
   };
 
@@ -745,9 +855,14 @@ export default function Inventario() {
     setHistoryVehiculo(v);
     setHistoryOpen(true);
     setHistoryLoading(true);
+    setHistoryTab("responsables");
     try {
-      const data = await camionetasStore.fetchHistorial(v.id);
-      setHistoryData(data);
+      const [resp, cats] = await Promise.all([
+        camionetasStore.fetchHistorial(v.id),
+        camionetasStore.fetchHistorialCategorias(v.id)
+      ]);
+      setHistoryData(resp);
+      setHistoryCatData(cats);
     } catch (error: any) {
       setToast({ type: "error", message: "Error cargando historial." });
     } finally {
@@ -773,7 +888,7 @@ export default function Inventario() {
 
 
       {/* KPIs Simplificados */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 md:grid-cols-3 lg:grid-cols-5">
         {/* Disponibles */}
         <div className="rounded-xl border border-gray-200 bg-white p-5">
           <div className="flex items-center justify-between">
@@ -831,6 +946,31 @@ export default function Inventario() {
             </div>
           </div>
         </div>
+
+        {/* Permanentes por Zona */}
+        <div className="rounded-xl border border-gray-200 bg-white p-5">
+          <div className="flex flex-col h-full">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-1">
+                Permanentes / Zona <Info className="h-2.5 w-2.5" />
+              </p>
+            </div>
+            <div className="space-y-1.5 max-h-[100px] overflow-y-auto pr-1 custom-scrollbar">
+              {Object.entries(kpiStats.porZona).length === 0 ? (
+                <span className="text-[10px] text-gray-400 italic">Sin datos</span>
+              ) : (
+                Object.entries(kpiStats.porZona)
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([zona, count]) => (
+                    <div key={zona} className="flex items-center justify-between text-[11px] font-bold">
+                      <span className="text-gray-600 truncate mr-2">{zona}</span>
+                      <span className="text-indigo-600 bg-indigo-50 px-1.5 rounded min-w-[20px] text-center">{count}</span>
+                    </div>
+                  ))
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {/* Filtros / Acciones - Diseño Limpio */}
@@ -876,6 +1016,18 @@ export default function Inventario() {
             <option value="Venturosa">Venturosa</option>
           </select>
 
+          {/* Filtro de Categoría */}
+          <select
+            value={categoriaFiltro}
+            onChange={(e) => setCategoriaFiltro(e.target.value)}
+            className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm text-gray-700 outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+          >
+            <option value="Todas">Todas Categorías</option>
+            <option value="Permanente">Permanente</option>
+            <option value="Temporal">Temporal</option>
+            <option value="Replacement">Replacement</option>
+          </select>
+
           <div className="flex rounded-lg border border-gray-200 bg-white p-1">
             {(
               ["Todos", "Disponible", "Mantenimiento", "Inactivo", "DocVencida"] as FiltroTipo[]
@@ -911,16 +1063,14 @@ export default function Inventario() {
           <table className="min-w-full text-left text-sm">
             <thead className="bg-gray-50 border-b border-gray-200 text-xs font-medium text-gray-500 uppercase tracking-wider">
               <tr>
-                <th className="px-4 py-3">Placa / Info</th>
+                <th className="px-4 py-3">Vehículo</th>
                 <th className="px-4 py-3">Marca / Modelo</th>
-                <th className="px-4 py-3">Zona</th>
-                <th className="px-4 py-3">Volante</th>
+                <th className="px-4 py-3">Categoría</th>
                 <th className="px-4 py-3">Responsable</th>
+                <th className="px-4 py-3 text-center">Ubicación</th>
                 <th className="px-4 py-3">Proveedor</th>
-                <th className="px-4 py-3">Fecha Ingreso</th>
-                <th className="px-4 py-3">Rev. Técnica</th>
-                <th className="px-4 py-3">SOAT</th>
-                <th className="px-4 py-3">Estado</th>
+                <th className="px-4 py-3">Documentación</th>
+                <th className="px-4 py-3 text-center">Estado</th>
                 <th className="px-4 py-3 text-right">Acciones</th>
               </tr>
             </thead>
@@ -928,7 +1078,7 @@ export default function Inventario() {
               {loading && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={9}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     <div className="flex items-center justify-center gap-2">
@@ -942,7 +1092,7 @@ export default function Inventario() {
               {!loading && rows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={11}
+                    colSpan={9}
                     className="px-4 py-10 text-center text-sm text-gray-500"
                   >
                     {errMsg ?? "No se encontraron vehículos."}
@@ -961,7 +1111,7 @@ export default function Inventario() {
                         <span className="font-bold text-gray-900 text-base">
                           {v.placa}
                         </span>
-                        <span className="text-xs text-gray-500">
+                        <span className="text-[10px] text-gray-500 uppercase font-medium">
                           {v.color} • {v.traccion}
                         </span>
                       </div>
@@ -974,48 +1124,66 @@ export default function Inventario() {
                         <span className="text-xs text-gray-500">{v.modelo}</span>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-gray-700 font-medium">
-                      {v.zona || <span className="text-gray-300">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {v.volante === "Si" ? (
-                        <div className="flex flex-col">
-                          <span className="font-semibold text-emerald-600">Sí</span>
-                          {v.volanteInicio && v.volanteFin && (
-                            <span className="text-xs text-gray-500">{v.volanteInicio} - {v.volanteFin}</span>
-                          )}
-                        </div>
-                      ) : "No"}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col gap-1">
+                        <CategoriaBadge categoria={v.categoria} />
+                        {v.fechaFinContrato && (
+                          <span className="text-[9px] text-gray-500 font-bold uppercase">
+                            Fin: {new Date(v.fechaFinContrato).toLocaleDateString("es-PE", { day: '2-digit', month: '2-digit', year: '2-digit' })}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {v.responsable ? (
                         <div className="flex flex-col">
-                          <span className="text-sm font-medium text-gray-900">
+                          <span className="text-sm font-medium text-gray-900 leading-none">
                             {v.responsable}
                           </span>
                           {v.dniResponsable && (
-                            <span className="text-xs text-gray-400 font-mono">
-                              DNI: {v.dniResponsable}
+                            <span className="text-[10px] text-gray-400 font-mono mt-1">
+                              {v.dniResponsable}
                             </span>
                           )}
                         </div>
                       ) : (
-                        <span className="text-gray-300 text-xs italic">- Sin asignar -</span>
+                        <span className="text-gray-300 text-[10px] italic">- Sin asignar -</span>
                       )}
                     </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {v.proveedor || <span className="text-gray-300">-</span>}
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 text-xs">
-                      {v.fechaIngreso || <span className="text-gray-300">-</span>}
+                    <td className="px-4 py-3">
+                      <div className="flex flex-col items-center gap-1.5">
+                        <span className="text-xs font-black text-indigo-700 uppercase tracking-tight">{v.zona || "-"}</span>
+                        {v.volante === "Si" ? (
+                          <div className="flex flex-col items-center">
+                            <div className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-emerald-50 border border-emerald-100 shadow-sm">
+                              <RefreshCw className="h-2.5 w-2.5 text-emerald-600 animate-spin-slow" />
+                              <span className="text-[8px] text-emerald-700 font-black uppercase">Volante</span>
+                            </div>
+                            {v.volanteInicio && (
+                              <span className="text-[8px] text-gray-400 mt-0.5 font-bold tracking-tighter">
+                                {v.volanteInicio}-{v.volanteFin}
+                              </span>
+                            )}
+                          </div>
+                        ) : null}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
-                      <FechaVencimiento dateStr={v.revTecnica} />
+                      <span className="text-xs text-gray-600 font-medium">{v.proveedor || "-"}</span>
                     </td>
                     <td className="px-4 py-3">
-                      <FechaVencimiento dateStr={v.soat} />
+                      <div className="flex flex-col gap-1.5 min-w-[80px]">
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-gray-400 font-black">RT</span>
+                          <FechaVencimiento dateStr={v.revTecnica} />
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-[9px] text-gray-400 font-black">SOAT</span>
+                          <FechaVencimiento dateStr={v.soat} />
+                        </div>
+                      </div>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 text-center">
                       <EstadoBadge estado={v.estado} />
                     </td>
                     <td className="px-4 py-3">
@@ -1349,6 +1517,50 @@ export default function Inventario() {
                   required
                 />
               </div>
+
+              {/* Categorización */}
+              <div className="md:col-span-3 border-t border-gray-100 pt-4 mt-2">
+                <h3 className="text-xs font-black uppercase text-gray-400 tracking-widest mb-3">Categorización y Contrato</h3>
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Categoría</label>
+                    <select
+                      value={editDraft.categoria}
+                      onChange={(e) => handleEditChange("categoria", e.target.value as CategoriaVehiculo)}
+                      className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    >
+                      <option value="Permanente">Permanente</option>
+                      <option value="Temporal">Temporal</option>
+                      <option value="Replacement">Replacement</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label className="text-sm font-medium text-gray-700">Fin de Contrato</label>
+                    <input
+                      type="date"
+                      value={editDraft.fechaFinContrato || ""}
+                      onChange={(e) => handleEditChange("fechaFinContrato", e.target.value || null)}
+                      className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </div>
+                  {(rows.find(r => r.id === editDraft.id)?.categoria !== editDraft.categoria ||
+                    rows.find(r => r.id === editDraft.id)?.fechaIngreso !== editDraft.fechaIngreso ||
+                    rows.find(r => r.id === editDraft.id)?.fechaFinContrato !== editDraft.fechaFinContrato) && (
+                      <div className="md:col-span-1">
+                        <label className="text-sm font-medium text-emerald-700 flex items-center gap-1">
+                          Motivo del cambio <AlertCircle className="h-3 w-3" />
+                        </label>
+                        <input
+                          value={catObs}
+                          onChange={(e) => setCatObs(e.target.value)}
+                          placeholder="Ej: Camioneta enviada a mantenimiento..."
+                          className="mt-1 w-full rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm shadow-sm outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500"
+                          required
+                        />
+                      </div>
+                    )}
+                </div>
+              </div>
             </div>
 
             <div className="mt-5 flex items-center justify-end gap-2">
@@ -1414,6 +1626,38 @@ export default function Inventario() {
               <option value="Mantenimiento">Mantenimiento</option>
               <option value="Inactivo">Inactivo</option>
             </select>
+
+            {statusDraft === "Mantenimiento" && statusVeh.responsable && repVehicles.length > 0 && (
+              <div className="mt-4 p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <label className="text-xs font-bold text-blue-700 uppercase flex items-center gap-1 mb-2">
+                  Asignar Camioneta de Reemplazo <Info className="h-3 w-3" />
+                </label>
+                <p className="text-[10px] text-blue-600 mb-2 leading-tight">
+                  El responsable <b>{statusVeh.responsable}</b> se quedará sin vehículo. Seleccione una unidad temporal:
+                </p>
+                <select
+                  value={selectedRepId}
+                  onChange={(e) => setSelectedRepId(e.target.value)}
+                  className="w-full rounded-lg border border-blue-200 bg-white px-3 py-1.5 text-xs outline-none focus:border-blue-500 transition-all font-medium"
+                >
+                  <option value="">- No asignar reemplazo -</option>
+                  {repVehicles.map(rv => (
+                    <option key={rv.id} value={rv.id}>
+                      {rv.placa} ({rv.categoria}) - {rv.marca}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {statusDraft === "Mantenimiento" && statusVeh.responsable && repVehicles.length === 0 && (
+              <div className="mt-4 p-3 bg-amber-50 rounded-xl border border-amber-100">
+                <p className="text-[10px] text-amber-700 leading-tight">
+                  <AlertCircle className="h-3 w-3 inline mr-1" />
+                  No hay camionetas disponibles de categoría <b>Temporal</b> o <b>Replacement</b> para asignar como reemplazo.
+                </p>
+              </div>
+            )}
 
             <div className="mt-5 flex items-center justify-end gap-2">
               <button
@@ -1649,6 +1893,29 @@ export default function Inventario() {
                 required
               />
             </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Categoría</label>
+              <select
+                value={createDraft.categoria}
+                onChange={(e) => handleCreateChange("categoria", e.target.value as CategoriaVehiculo)}
+                className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value="Permanente">Permanente</option>
+                <option value="Temporal">Temporal</option>
+                <option value="Replacement">Replacement</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-sm font-medium text-gray-700">Fin de Contrato</label>
+              <input
+                type="date"
+                value={createDraft.fechaFinContrato || ""}
+                onChange={(e) => handleCreateChange("fechaFinContrato", e.target.value || null)}
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none transition-all duration-200 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+
             <div>
               <label className="text-sm font-medium text-gray-700">
                 Estado
@@ -1930,48 +2197,94 @@ export default function Inventario() {
         size="lg"
         onClose={() => setHistoryOpen(false)}
       >
+        <div className="flex border-b border-gray-100 mb-4">
+          <button
+            onClick={() => setHistoryTab("responsables")}
+            className={`px-4 py-2 text-sm font-bold transition-colors border-b-2 ${historyTab === "responsables" ? "border-red-600 text-red-600" : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+          >
+            Responsables
+          </button>
+          <button
+            onClick={() => setHistoryTab("categorias")}
+            className={`px-4 py-2 text-sm font-bold transition-colors border-b-2 ${historyTab === "categorias" ? "border-red-600 text-red-600" : "border-transparent text-gray-400 hover:text-gray-600"
+              }`}
+          >
+            Categorías y Contratos
+          </button>
+        </div>
+
         <div className="max-h-[60vh] overflow-y-auto">
           {historyLoading ? (
             <div className="flex justify-center py-8">
               <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
             </div>
-          ) : historyData.length === 0 ? (
-            <p className="py-8 text-center text-sm text-gray-500">
-              No hay historial registrado.
-            </p>
-          ) : (
-            <table className="min-w-full text-left text-sm">
-              <thead className="bg-gray-50 text-xs text-gray-500 uppercase">
-                <tr>
-                  <th className="px-3 py-2">Responsable</th>
-                  <th className="px-3 py-2">DNI</th>
-                  <th className="px-3 py-2">Inicio</th>
-                  <th className="px-3 py-2">Fin</th>
-                  <th className="px-3 py-2">Tipo</th>
-                  <th className="px-3 py-2">Obs</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 border-t border-gray-100">
-                {historyData.map((h) => (
-                  <tr key={h.id} className="hover:bg-gray-50">
-                    <td className="px-3 py-2 font-medium text-gray-900">
-                      {h.responsable}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">{h.dniResponsable || "-"}</td>
-                    <td className="px-3 py-2 text-gray-500">
-                      {new Date(h.fechaInicio).toLocaleDateString()}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">
-                      {h.fechaFin ? new Date(h.fechaFin).toLocaleDateString() : "-"}
-                    </td>
-                    <td className="px-3 py-2 text-gray-500">{h.tipoAsignacion}</td>
-                    <td className="px-3 py-2 text-gray-500 italic">
-                      {h.observacion || "-"}
-                    </td>
+          ) : historyTab === "responsables" ? (
+            historyData.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500">No hay historial de responsables.</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-gray-50 text-[10px] text-gray-500 uppercase font-black">
+                  <tr>
+                    <th className="px-3 py-2 text-gray-900 font-black">Responsable</th>
+                    <th className="px-3 py-2">DNI</th>
+                    <th className="px-3 py-2">Inicio</th>
+                    <th className="px-3 py-2">Fin</th>
+                    <th className="px-3 py-2">Motivo / Obs</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-gray-100 border-t border-gray-100">
+                  {historyData.map((h) => (
+                    <tr key={h.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2 font-medium text-gray-900 leading-none">
+                        {h.responsable}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 font-mono text-xs">{h.dniResponsable || "-"}</td>
+                      <td className="px-3 py-2 text-gray-500 text-xs">
+                        {new Date(h.fechaInicio).toLocaleDateString()}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 text-xs">
+                        {h.fechaFin ? new Date(h.fechaFin).toLocaleDateString() : <span className="text-emerald-500 font-bold uppercase text-[9px]">Activo</span>}
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 italic text-xs">
+                        {h.observacion || "-"}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          ) : (
+            historyCatData.length === 0 ? (
+              <p className="py-8 text-center text-sm text-gray-500">No hay historial de categorías.</p>
+            ) : (
+              <table className="min-w-full text-left text-sm">
+                <thead className="bg-gray-100 text-[10px] text-gray-500 uppercase font-black">
+                  <tr>
+                    <th className="px-3 py-2 text-gray-900 font-black">Categoría</th>
+                    <th className="px-3 py-2">F. Ingreso</th>
+                    <th className="px-3 py-2">F. Fin Contrato</th>
+                    <th className="px-3 py-2">Motivo</th>
+                    <th className="px-3 py-2">Fecha Cambio</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100 border-t border-gray-100">
+                  {historyCatData.map((h) => (
+                    <tr key={h.id} className="hover:bg-gray-50 transition-colors">
+                      <td className="px-3 py-2">
+                        <CategoriaBadge categoria={h.categoria} />
+                      </td>
+                      <td className="px-3 py-2 text-gray-500 text-xs">{h.fechaIngreso ? new Date(h.fechaIngreso).toLocaleDateString() : "-"}</td>
+                      <td className="px-3 py-2 text-gray-500 text-xs">{h.fechaFinContrato ? new Date(h.fechaFinContrato).toLocaleDateString() : "-"}</td>
+                      <td className="px-3 py-2 text-gray-500 italic text-xs">{h.observacion || "-"}</td>
+                      <td className="px-3 py-2 text-gray-400 text-[10px]">
+                        {new Date(h.createdAt).toLocaleDateString()} {new Date(h.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
           )}
         </div>
       </Modal>

@@ -4,6 +4,8 @@ import { notificationsStore } from "./notificationsStore";
 /* =========================
  * Tipos
  * ========================= */
+export type CategoriaVehiculo = "Permanente" | "Temporal" | "Replacement";
+
 export type EstadoVehiculo = "Disponible" | "En uso" | "Mantenimiento" | "Inactivo";
 
 /** Estados de solicitud (incluye Cancelado y Reservada) */
@@ -32,6 +34,9 @@ export interface Vehiculo {
   soat?: string | null;
   /** Nuevo: fecha de ingreso de la camioneta */
   fechaIngreso?: string | null;
+  /** Categoría y fin de contrato */
+  categoria?: CategoriaVehiculo;
+  fechaFinContrato?: string | null;
   /** Nuevo: si el vehículo tiene volante físico (tarjeta) asignado */
   volante?: "Si" | "No";
   volanteInicio?: string | null;
@@ -84,6 +89,8 @@ type VehiculoRow = {
   soat: string | null;
   /** Nuevo col */
   fecha_ingreso: string | null;
+  categoria: string | null;
+  fecha_fin_contrato: string | null;
   /** Nuevo: columna en BD */
   volante: "Si" | "No" | null;
   volante_inicio: string | null;
@@ -109,6 +116,8 @@ function vFromRow(r: VehiculoRow): Vehiculo {
     revTecnica: r.rev_tecnica,
     soat: r.soat,
     fechaIngreso: r.fecha_ingreso,
+    categoria: (r.categoria as CategoriaVehiculo) || "Permanente",
+    fechaFinContrato: r.fecha_fin_contrato,
     /** Si viene null, por defecto "No" */
     volante: (r.volante as "Si" | "No" | null) ?? "No",
     volanteInicio: r.volante_inicio,
@@ -136,6 +145,8 @@ function vToRow(v: Partial<Vehiculo>): Partial<VehiculoRow> {
   if (v.revTecnica !== undefined) out.rev_tecnica = v.revTecnica ?? null;
   if (v.soat !== undefined) out.soat = v.soat ?? null;
   if (v.fechaIngreso !== undefined) out.fecha_ingreso = v.fechaIngreso ?? null;
+  if (v.categoria !== undefined) out.categoria = v.categoria ?? "Permanente";
+  if (v.fechaFinContrato !== undefined) out.fecha_fin_contrato = v.fechaFinContrato ?? null;
   if (v.volante !== undefined) out.volante = (v.volante as "Si" | "No") ?? "No";
   if (v.volanteInicio !== undefined) out.volante_inicio = v.volanteInicio ?? null;
   if (v.volanteFin !== undefined) out.volante_fin = v.volanteFin ?? null;
@@ -772,14 +783,17 @@ export const camionetasStore = {
     if (payload.dniResponsable) {
       const { data: existing, error: errExist } = await supabase
         .from("vehiculos")
-        .select("placa")
+        .select("placa, estado")
         .eq("dni_responsable", payload.dniResponsable)
-        .neq("id", payload.vehiculoId)
-        .limit(1);
+        .neq("id", payload.vehiculoId);
 
       if (errExist) throw errExist;
       if (existing && existing.length > 0) {
-        throw new Error(`El conductor con DNI ${payload.dniResponsable} ya tiene asignada la camioneta ${existing[0].placa}. No puede tener dos vehículos a su cargo.`);
+        // Permitimos asignar 2da camioneta solo si las actuales están en Mantenimiento
+        const activas = existing.filter((x) => x.estado !== "Mantenimiento");
+        if (activas.length > 0) {
+          throw new Error(`El conductor con DNI ${payload.dniResponsable} ya tiene asignada la camioneta ${activas[0].placa}. No puede tener dos vehículos a su cargo.`);
+        }
       }
     }
 
@@ -842,7 +856,83 @@ export const camionetasStore = {
       };
     }
   },
+
+  /* =========================================================
+   * Historial de Categorías
+   * ======================================================= */
+  async fetchHistorialCategorias(vehiculoId: string): Promise<HistorialCategoria[]> {
+    const { data, error } = await supabase
+      .from("vehiculos_historial_categorias")
+      .select("*")
+      .eq("vehiculo_id", vehiculoId)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+    return (data || []).map((r: any) => ({
+      id: r.id,
+      vehiculoId: r.vehiculo_id,
+      categoria: r.categoria as CategoriaVehiculo,
+      fechaIngreso: r.fecha_ingreso,
+      fechaFinContrato: r.fecha_fin_contrato,
+      observacion: r.observacion,
+      createdAt: r.created_at,
+    }));
+  },
+
+  async cambiarCategoriaVehiculo(payload: {
+    vehiculoId: string;
+    categoria: CategoriaVehiculo;
+    fechaIngreso: string | null;
+    fechaFinContrato: string | null;
+    observacion: string;
+  }): Promise<void> {
+    // 1. Insertar en historial
+    const { error: histError } = await supabase
+      .from("vehiculos_historial_categorias")
+      .insert([{
+        vehiculo_id: payload.vehiculoId,
+        categoria: payload.categoria,
+        fecha_ingreso: payload.fechaIngreso,
+        fecha_fin_contrato: payload.fechaFinContrato,
+        observacion: payload.observacion || null
+      }]);
+    
+    if (histError) {
+      console.error("Error insertando en historial de categorías", histError);
+      throw histError;
+    }
+
+    // 2. Actualizar vehículo main
+    const { data, error: updError } = await supabase
+      .from("vehiculos")
+      .update({
+        categoria: payload.categoria,
+        fecha_ingreso: payload.fechaIngreso,
+        fecha_fin_contrato: payload.fechaFinContrato,
+      })
+      .eq("id", payload.vehiculoId)
+      .select("*")
+      .single();
+
+    if (updError) throw updError;
+
+    // 3. Update local state
+    const idx = this.inventario.findIndex((v) => v.id === payload.vehiculoId);
+    if (idx >= 0) {
+      this.inventario[idx] = vFromRow(data as VehiculoRow);
+    }
+  }
 };
+
+export interface HistorialCategoria {
+  id: string;
+  vehiculoId: string;
+  categoria: CategoriaVehiculo;
+  fechaIngreso: string | null;
+  fechaFinContrato: string | null;
+  observacion: string | null;
+  createdAt: string;
+}
 
 export interface HistorialResponsable {
   id: string;

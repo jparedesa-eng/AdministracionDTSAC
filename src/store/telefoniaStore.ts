@@ -2190,6 +2190,22 @@ export const telefoniaStore = {
         return data as Asignacion[];
     },
 
+    async fetchAsignacionesRobadasPorResponsable(dni: string) {
+        const { data, error } = await supabase
+            .from("telefonia_solicitud_asignaciones")
+            .select(`
+                *,
+                equipo:telefonia_equipos(*),
+                chip:telefonia_chips(*)
+            `)
+            .eq("responsable_dni", dni)
+            .eq("condicion_retorno", "Robado")
+            .order("fecha_devolucion", { ascending: false });
+
+        if (error) throw error;
+        return data as Asignacion[];
+    },
+
     async asignarEquipos(solicitudId: string, items: { equipoId: string; chipId?: string | null }[], firma?: string, gr?: string) {
         // 0. Fetch Ticket Data to propagate fields (e.g. tipo_equipo_destino) and location
         const { data: ticketData } = await supabase
