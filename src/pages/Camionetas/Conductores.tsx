@@ -16,7 +16,9 @@ import {
   User,
   AlertCircle,
   Trash2,
+  QrCode,
 } from "lucide-react";
+import QRCode from "react-qr-code";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
@@ -127,6 +129,9 @@ export default function Conductores() {
   // Modal crear/editar
   const [openModal, setOpenModal] = React.useState(false);
   const [editing, setEditing] = React.useState<Driver | null>(null);
+
+  // QR Modal
+  const [qrDriver, setQrDriver] = React.useState<Driver | null>(null);
 
   // Form controlado
   const [nombreReadOnly, setNombreReadOnly] = React.useState(false);
@@ -542,6 +547,16 @@ export default function Conductores() {
                         <PencilLine className="h-4 w-4" />
                       </button>
 
+                      {d.activo && (
+                        <button
+                          onClick={() => setQrDriver(d)}
+                          className="rounded-lg border border-red-600 bg-[#ff0000] p-2 text-white hover:bg-[#cc0000] hover:shadow-sm transition-all"
+                          title="Ver QR"
+                        >
+                          <QrCode className="h-4 w-4" />
+                        </button>
+                      )}
+
                       <div className="flex items-center gap-1 rounded-lg bg-gray-50 border border-gray-100 p-1 ml-1">
                         <button
                           onClick={() => toggleActivo(d)}
@@ -771,6 +786,38 @@ export default function Conductores() {
           </div>
         </form >
       </Modal >
+
+      {/* Modal QR */}
+      <Modal
+        open={!!qrDriver}
+        title={`Código QR - ${qrDriver?.nombre}`}
+        onClose={() => setQrDriver(null)}
+        size="sm"
+      >
+        <div className="flex flex-col items-center justify-center p-6 space-y-4">
+          <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+            {qrDriver && (
+              <QRCode
+                value={qrDriver.id}
+                size={200}
+                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                viewBox={`0 0 256 256`}
+              />
+            )}
+          </div>
+          <p className="text-center text-sm text-gray-500">
+            Escanea este código para obtener el UID del conductor.
+          </p>
+          <div className="w-full pt-4">
+            <button
+              onClick={() => setQrDriver(null)}
+              className="w-full rounded-xl bg-slate-800 py-2.5 text-sm font-medium text-white hover:bg-slate-900 transition-colors"
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
+      </Modal>
     </div >
   );
 }

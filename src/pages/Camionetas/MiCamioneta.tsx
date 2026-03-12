@@ -15,7 +15,9 @@ import {
     Calendar,
     History,
     X,
+    QrCode,
 } from "lucide-react";
+import QRCode from "react-qr-code";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { Modal } from "../../components/ui/Modal";
@@ -33,6 +35,7 @@ type VehiculoResumen = {
     soat: string; // YYYY-MM-DD
     rev_tecnica: string; // YYYY-MM-DD
     estado: string;
+    categoria: string;
 };
 
 type Conductor = {
@@ -115,9 +118,13 @@ export default function MiCamioneta() {
     const [loading, setLoading] = React.useState(true);
     const [toast, setToast] = React.useState<ToastState>(null);
 
-    const [vehiculo, setVehiculo] = React.useState<VehiculoResumen | null>(null);
+    const [vehiculos, setVehiculos] = React.useState<VehiculoResumen[]>([]);
     const [asignados, setAsignados] = React.useState<ConductorAsignadoFull[]>([]);
     const [ownerDriver, setOwnerDriver] = React.useState<Conductor | null>(null); // Para mostrar en el Header
+
+    // QR Modal
+    const [openQR, setOpenQR] = React.useState(false);
+    const [selectedQR, setSelectedQR] = React.useState<{ id: string, placa: string } | null>(null);
 
     // Modal Agregar
     const [openAdd, setOpenAdd] = React.useState(false);
@@ -140,7 +147,7 @@ export default function MiCamioneta() {
 
     /* Filtrado de conductores para mostrar */
     const filteredDrivers = React.useMemo(() => {
-        return asignados.filter(a => showHistory || a.activo);
+        return asignados.filter(a => showHistory ? !a.activo : a.activo);
     }, [asignados, showHistory]);
 
     /* Carga inicial */
@@ -156,14 +163,12 @@ export default function MiCamioneta() {
         setLoading(true);
         try {
             // 1. Buscar vehículo asignado al DNI del usuario
-            const { data: vDataRows, error: vError } = await supabase
+            const { data: vData, error: vError } = await supabase
                 .from("vehiculos")
-                .select("id, placa, marca, modelo, color, soat, rev_tecnica, estado")
-                .eq("dni_responsable", profile?.dni)
-                .limit(1);
+                .select("id, placa, marca, modelo, color, soat, rev_tecnica, estado, categoria")
+                .eq("dni_responsable", profile?.dni);
 
             if (vError) throw vError;
-            const vData = vDataRows?.[0] || null;
 
             // 2. Buscar datos del conductor (usuario actual) para el header
             if (profile?.dni) {
@@ -175,12 +180,13 @@ export default function MiCamioneta() {
                 if (dData) setOwnerDriver(dData);
             }
 
-            if (!vData) {
-                setVehiculo(null);
+            if (!vData || vData.length === 0) {
+                setVehiculos([]);
             } else {
-                setVehiculo(vData);
-                // 3. Cargar conductores asignados a este vehículo
-                await loadAsignados(vData.id);
+                setVehiculos(vData);
+                // 3. Cargar conductores asignados al primer vehículo (o todos? por ahora mantenemos lógica de conductores adicionales para la unidad principal)
+                // El usuario solo pidió mostrar las tarjetas.
+                await loadAsignados(vData[0].id);
             }
         } catch (e: any) {
             console.error(e);
@@ -272,7 +278,9 @@ export default function MiCamioneta() {
 
     const handleAddSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!vehiculo || !selectedDriverId) return;
+        if (vehiculos.length === 0 || !selectedDriverId) return;
+
+        const mainVeh = vehiculos[0];
 
         // Validaciones
         if (authType === 'rango') {
@@ -293,7 +301,7 @@ export default function MiCamioneta() {
         setAdding(true);
         try {
             const payload = {
-                vehiculo_id: vehiculo.id,
+                vehiculo_id: mainVeh.id,
                 conductor_id: selectedDriverId,
                 tipo_autorizacion: authType,
                 fecha_inicio: dateStart,
@@ -314,7 +322,7 @@ export default function MiCamioneta() {
             setToast({ type: "success", message: "Conductor autorizado correctamente." });
             setOpenAdd(false);
             setSelectedDriverId("");
-            await loadAsignados(vehiculo.id);
+            await loadAsignados(mainVeh.id);
         } catch (e: any) {
             console.error(e);
             if (e.code === '23505') {
@@ -347,7 +355,7 @@ export default function MiCamioneta() {
             if (error) throw error;
 
             setToast({ type: "success", message: "Autorización finalizada." });
-            if (vehiculo) await loadAsignados(vehiculo.id);
+            if (vehiculos.length > 0) await loadAsignados(vehiculos[0].id);
         } catch (e: any) {
             setToast({ type: "error", message: "Error al finalizar autorización." });
         } finally {
@@ -365,7 +373,7 @@ export default function MiCamioneta() {
         );
     }
 
-    if (!vehiculo) {
+    if (vehiculos.length === 0) {
         return (
             <div className="flex h-full flex-col items-center justify-center p-8 text-center">
                 <div className="rounded-full bg-gray-100 p-4">
@@ -381,6 +389,11 @@ export default function MiCamioneta() {
             </div>
         );
     }
+
+    const openQRCode = (v: VehiculoResumen) => {
+        setSelectedQR({ id: v.id, placa: v.placa });
+        setOpenQR(true);
+    };
 
 
     /* Render */
@@ -452,46 +465,69 @@ export default function MiCamioneta() {
                 </div>
             </div>
 
-            {/* Header Camioneta */}
-            <div className="rounded-3xl border border-gray-200 bg-white p-6 md:p-8">
-                <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
+            {/* Cards de Camionetas */}
+            {vehiculos.map((v) => (
+                <div key={v.id} className="rounded-3xl border border-gray-200 bg-white p-6 md:p-8">
+                    <div className="flex flex-col gap-6 md:flex-row md:items-start md:justify-between">
 
-                    <div className="flex gap-4">
-                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
-                            <Truck className="h-8 w-8" />
+                        <div className="flex gap-4">
+                            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-gray-50 text-gray-400">
+                                <Truck className="h-8 w-8" />
+                            </div>
+                            <div>
+                                <div className="flex items-center gap-3">
+                                    <h2 className="text-3xl font-bold tracking-tight text-gray-900">
+                                        {v.placa}
+                                    </h2>
+                                </div>
+                                <p className="text-lg font-medium text-gray-600">
+                                    {v.marca} {v.modelo}
+                                </p>
+                                <div className="mt-2 flex items-center gap-2">
+                                    <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
+                                        {v.color}
+                                    </span>
+                                    <span
+                                        className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${v.estado === "Disponible"
+                                            ? "bg-emerald-100 text-emerald-700"
+                                            : v.estado === "Mantenimiento"
+                                                ? "bg-amber-100 text-amber-700"
+                                                : "bg-gray-100 text-gray-700"
+                                            }`}
+                                    >
+                                        {v.estado}
+                                    </span>
+                                    {v.categoria && (
+                                        <span className={`inline-flex items-center rounded-md px-2 py-1 text-[10px] font-black uppercase ${v.categoria === 'Permanente'
+                                            ? "bg-indigo-50 text-indigo-700"
+                                            : v.categoria === 'Temporal'
+                                                ? "bg-orange-50 text-orange-700"
+                                                : "bg-purple-50 text-purple-700"
+                                            }`}>
+                                            {v.categoria}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-3xl font-bold tracking-tight text-gray-900">
-                                {vehiculo.placa}
-                            </h2>
-                            <p className="text-lg font-medium text-gray-600">
-                                {vehiculo.marca} {vehiculo.modelo}
-                            </p>
-                            <div className="mt-2 flex items-center gap-2">
-                                <span className="inline-flex items-center rounded-md bg-gray-100 px-2 py-1 text-xs font-medium text-gray-600">
-                                    {vehiculo.color}
-                                </span>
-                                <span
-                                    className={`inline-flex items-center rounded-md px-2 py-1 text-xs font-medium ${vehiculo.estado === "Disponible"
-                                        ? "bg-emerald-100 text-emerald-700"
-                                        : "bg-amber-100 text-amber-700"
-                                        }`}
+
+                        <div className="flex w-full flex-col gap-3 md:w-auto">
+                            {/* Tarjetas de vencimiento y QR */}
+                            <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 md:grid-cols-2 lg:grid-cols-3">
+                                <ExpirationCard label="Rev. Técnica" dateStr={v.rev_tecnica} />
+                                <ExpirationCard label="SOAT" dateStr={v.soat} />
+                                <button
+                                    onClick={() => openQRCode(v)}
+                                    className="col-span-2 sm:col-span-1 md:col-span-2 lg:col-span-1 flex flex-col items-center justify-center rounded-xl border border-red-600 bg-[#ff0000] p-4 text-white hover:bg-[#cc0000] transition-all shadow-sm group"
                                 >
-                                    {vehiculo.estado}
-                                </span>
+                                    <QrCode className="h-11 w-11 mb-2 group-hover:scale-110 transition-transform" />
+                                    <span className="text-[10px] font-bold uppercase tracking-wider">Ver QR</span>
+                                </button>
                             </div>
                         </div>
                     </div>
-
-                    <div className="flex w-full flex-col gap-3 md:w-auto">
-                        {/* Tarjetas de vencimiento */}
-                        <div className="grid gap-3 sm:grid-cols-2 md:grid-cols-1 lg:grid-cols-2">
-                            <ExpirationCard label="Rev. Técnica" dateStr={vehiculo.rev_tecnica} />
-                            <ExpirationCard label="SOAT" dateStr={vehiculo.soat} />
-                        </div>
-                    </div>
                 </div>
-            </div>
+            ))}
 
             {/* Sección Conductores Autorizados */}
             <div className="space-y-4">
@@ -590,7 +626,14 @@ export default function MiCamioneta() {
 
                                     {/* Action Buttons */}
                                     {item.activo && (
-                                        <div className="mt-3 sm:mt-0 flex justify-end">
+                                        <div className="mt-3 sm:mt-0 flex items-center justify-end gap-2">
+                                            <button
+                                                onClick={() => openQRCode({ id: item.id, placa: item.conductor?.nombre || 'Conductor' } as any)}
+                                                className="flex items-center gap-2 rounded-lg border border-red-600 bg-[#ff0000] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#cc0000] transition-all shadow-sm"
+                                            >
+                                                <QrCode className="h-3.5 w-3.5" />
+                                                Ver QR
+                                            </button>
                                             <button
                                                 onClick={() => item.conductor && confirmRemove(item.id, item.conductor.nombre)}
                                                 className="p-2 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-lg transition-all active:scale-95 border border-transparent hover:border-rose-100 flex items-center gap-2"
@@ -617,7 +660,7 @@ export default function MiCamioneta() {
             >
                 <form onSubmit={handleAddSubmit} className="mt-4 space-y-5">
                     <p className="text-sm text-gray-600">
-                        Selecciona un conductor de la lista general para autorizarlo en la unidad <strong>{vehiculo.placa}</strong>.
+                        Selecciona un conductor de la lista general para autorizarlo en la unidad <strong>{vehiculos[0].placa}</strong>.
                     </p>
 
                     {/* Buscador de Conductor */}
@@ -700,72 +743,19 @@ export default function MiCamioneta() {
                         )}
                     </div>
 
-                    {/* Tipo de Autorización */}
-                    <div>
-                        <label className="mb-2 block text-sm font-medium text-gray-700">Tipo de Autorización</label>
-                        <div className="grid grid-cols-2 gap-3">
-                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-medium transition-all ${authType === 'permanente'
-                                ? "border-slate-800 bg-slate-50 text-slate-900"
-                                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                                }`}>
-                                <input
-                                    type="radio"
-                                    name="authType"
-                                    value="permanente"
-                                    className="sr-only"
-                                    checked={authType === 'permanente'}
-                                    onChange={() => setAuthType('permanente')}
-                                />
-                                <span>Permanente</span>
-                            </label>
-
-                            <label className={`flex cursor-pointer items-center justify-center gap-2 rounded-xl border p-3 text-sm font-medium transition-all ${authType === 'rango'
-                                ? "border-slate-800 bg-slate-50 text-slate-900"
-                                : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50"
-                                }`}>
-                                <input
-                                    type="radio"
-                                    name="authType"
-                                    value="rango"
-                                    className="sr-only"
-                                    checked={authType === 'rango'}
-                                    onChange={() => setAuthType('rango')}
-                                />
-                                <span>Por Rango/Temporal</span>
-                            </label>
-                        </div>
-                    </div>
-
                     {/* Fechas */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                         <div>
                             <label className="mb-1 block text-sm font-medium text-gray-700">
-                                Inicio <span className="text-red-500">*</span>
+                                Fecha de Autorización
                             </label>
                             <input
                                 type="date"
-                                required
-                                className="w-full rounded-xl border-gray-200 focus:border-gray-400 focus:ring-gray-200 sm:text-sm py-2.5 px-3 border outline-none"
+                                readOnly
+                                className="w-full rounded-xl border-gray-100 bg-gray-50 sm:text-sm py-2.5 px-3 border outline-none text-gray-500 cursor-not-allowed"
                                 value={dateStart}
-                                onChange={(e) => setDateStart(e.target.value)}
                             />
                         </div>
-
-                        {authType === 'rango' && (
-                            <div className="animate-in fade-in zoom-in slide-in-from-left-4 duration-300">
-                                <label className="mb-1 block text-sm font-medium text-gray-700">
-                                    Fin <span className="text-red-500">*</span>
-                                </label>
-                                <input
-                                    type="date"
-                                    required
-                                    className="w-full rounded-xl border-gray-200 focus:border-gray-400 focus:ring-gray-200 sm:text-sm py-2.5 px-3 border outline-none"
-                                    value={dateEnd}
-                                    onChange={(e) => setDateEnd(e.target.value)}
-                                    min={dateStart}
-                                />
-                            </div>
-                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 pt-2">
@@ -814,6 +804,38 @@ export default function MiCamioneta() {
                             className="rounded-xl bg-slate-800 px-4 py-2 text-sm font-medium text-white hover:bg-slate-900"
                         >
                             Sí, Quitar
+                        </button>
+                    </div>
+                </div>
+            </Modal>
+
+            {/* Modal QR */}
+            <Modal
+                open={openQR}
+                onClose={() => setOpenQR(false)}
+                title={`Código QR - ${selectedQR?.placa}`}
+                size="sm"
+            >
+                <div className="flex flex-col items-center justify-center p-6 space-y-4">
+                    <div className="p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                        {selectedQR && (
+                            <QRCode
+                                value={selectedQR.id}
+                                size={200}
+                                style={{ height: "auto", maxWidth: "100%", width: "100%" }}
+                                viewBox={`0 0 256 256`}
+                            />
+                        )}
+                    </div>
+                    <p className="text-center text-sm text-gray-500">
+                        Muestra tu QR para el escaneo rapido en los puntos de control.
+                    </p>
+                    <div className="w-full pt-4">
+                        <button
+                            onClick={() => setOpenQR(false)}
+                            className="w-full rounded-xl bg-slate-800 py-2.5 text-sm font-medium text-white hover:bg-slate-900 transition-colors"
+                        >
+                            Cerrar
                         </button>
                     </div>
                 </div>
