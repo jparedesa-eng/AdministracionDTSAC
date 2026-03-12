@@ -103,6 +103,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeCam_Mantenimiento = hasAccess("/camionetas/mantenimiento");
   const canSeeCam_Garita = hasAccess("/camionetas/garita");
   const canSeeCam_MiCamioneta = hasAccess("/camionetas/mi-camioneta");
+  const canSeeCam_AsignarTercero = hasAccess("/camionetas/asignar-tercero");
 
   // Pasajes & Hospedaje
   const canSeePas_Solicitar = hasAccess("/pasajes/solicitar");
@@ -164,6 +165,7 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: Layers });
     if (hasAccess("/camionetas/historial")) camionetasSubItems.push({ id: 'cam-hist', label: 'Historial', path: '/camionetas/historial', icon: Database });
     if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });
+    if (canSeeCam_AsignarTercero) camionetasSubItems.push({ id: 'cam-asig-terc', label: 'Asignar Tercero', path: '/camionetas/asignar-tercero', icon: User });
     if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Car });
     if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Car });
     if (canSeeCam_Conductores) camionetasSubItems.push({ id: 'cam-cond', label: 'Conductores', path: '/camionetas/conductores', icon: Users });

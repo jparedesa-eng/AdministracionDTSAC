@@ -1,4 +1,4 @@
-// src/pages/Camionetas/Solicitar.tsx
+// src/pages/Camionetas/AsignarTercero.tsx
 import React from "react";
 import { camionetasStore } from "../../store/camionetasStore";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
@@ -38,20 +38,11 @@ function filtrarPlacasConVolante(placas: string[]): string[] {
   });
 }
 
-function minutosDelDiaStr(timeStr: string) {
-  if (!timeStr) return 0;
-  const parts = timeStr.split(":");
-  return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10);
-}
-
-function minutosDelDiaDate(d: Date) {
-  return d.getHours() * 60 + d.getMinutes();
-}
 
 /* =========================
    Componente principal
 ========================= */
-export default function Solicitar() {
+export default function AsignarTercero() {
   const { user, profile } = useAuth();
 
   const [dni, setDni] = React.useState("");
@@ -133,12 +124,19 @@ export default function Solicitar() {
 
   const handleCloseQr = () => setQrTicket(null);
 
-  // Placas pre-cargadas (estado = Disponible y volante = Si)
+  // Placas pre-cargadas (estado = Disponible y asignada al usuario actual)
   const placasDisponibles = React.useMemo(() => {
     return camionetasStore.inventario
-      .filter((v) => v.estado === "Disponible" && v.volante === "Si")
+      .filter((v) => v.estado === "Disponible" && v.dniResponsable === profile?.dni)
       .map((v) => v.placa);
-  }, [camionetasStore.inventario]);
+  }, [camionetasStore.inventario, profile?.dni]);
+
+  // Pre-seleccionar la placa si solo hay una (o la primera disponible)
+  React.useEffect(() => {
+    if (placasDisponibles.length > 0 && !selectedPlaca) {
+      setSelectedPlaca(placasDisponibles[0]);
+    }
+  }, [placasDisponibles, selectedPlaca]);
 
   const calcDisponibilidad = React.useCallback(async () => {
     setMsg(null);
@@ -170,23 +168,7 @@ export default function Solicitar() {
         return;
       }
 
-      // VALIDACIÓN: horario volante del vehiculo seleccionado
-      const vehSeleccionado: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
-      if (vehSeleccionado && vehSeleccionado.volanteInicio && vehSeleccionado.volanteFin) {
-        const vInicioMin = minutosDelDiaStr(vehSeleccionado.volanteInicio);
-        const vFinMin = minutosDelDiaStr(vehSeleccionado.volanteFin);
-        const iMin = minutosDelDiaDate(dInicio);
-        const fMin = minutosDelDiaDate(dFin);
-
-        if (iMin < vInicioMin || fMin > vFinMin) {
-          setChecking(false);
-          setMsg({
-            type: "err",
-            text: `El horario permitido para la placa ${selectedPlaca} es de ${vehSeleccionado.volanteInicio} a ${vehSeleccionado.volanteFin} horas.`,
-          });
-          return;
-        }
-      }
+      // VALIDACIÓN: horario volante del vehiculo seleccionado (ELIMINADO PARA ESTA VISTA)
 
       const { placas } = await camionetasStore.disponibilidadRango(
         inicioISO,
@@ -283,22 +265,7 @@ export default function Solicitar() {
       return;
     }
 
-    // VALIDACIÓN: horario volante del vehiculo seleccionado
-    const vehSeleccionado: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
-    if (vehSeleccionado && vehSeleccionado.volanteInicio && vehSeleccionado.volanteFin) {
-      const vInicioMin = minutosDelDiaStr(vehSeleccionado.volanteInicio);
-      const vFinMin = minutosDelDiaStr(vehSeleccionado.volanteFin);
-      const iMin = minutosDelDiaDate(dInicio);
-      const fMin = minutosDelDiaDate(dFin);
-
-      if (iMin < vInicioMin || fMin > vFinMin) {
-        setMsg({
-          type: "err",
-          text: `El horario permitido para la placa ${selectedPlaca} es de ${vehSeleccionado.volanteInicio} a ${vehSeleccionado.volanteFin} horas.`,
-        });
-        return;
-      }
-    }
+    // VALIDACIÓN: horario volante del vehiculo seleccionado (ELIMINADO PARA ESTA VISTA)
 
     if (!selectedPlaca) {
       setMsg({
@@ -365,8 +332,8 @@ export default function Solicitar() {
         await notificationsStore.notifyUsersByRoleAndArea(
           "jefe",
           "ADMINISTRACION",
-          "Nueva Solicitud de Camioneta",
-          `El usuario ${nombre.trim()} ha generado una solicitud (origen: ${origen}, destino: ${destino}).`,
+          "Nueva Asignación a Tercero",
+          `El usuario ${profile?.nombre ?? nombre.trim()} ha asignado su camioneta (${selectedPlaca}) al tercero ${nombre.trim()} (DNI: ${dni.trim()}) (origen: ${origen}, destino: ${destino}).`,
           "info"
         );
       } catch (e) {
@@ -591,11 +558,10 @@ export default function Solicitar() {
         <header className="mb-6 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl md:text-3xl font-bold tracking-tight">
-              Solicitar Camioneta
+              Asignar Camioneta como Volante
             </h1>
             <p className="mt-1 text-sm text-gray-600">
-              Elige primero el rango de uso y la camioneta disponible; luego
-              completa los datos del solicitante.
+              Asigna tu camioneta a un conductor fuera de tu area indicando el rango de uso y los datos del destinatario.
             </p>
           </div>
           {!showForm && (
@@ -655,10 +621,6 @@ export default function Solicitar() {
                 {/* Leyenda */}
                 <div className="flex items-center gap-4 text-xs font-medium text-gray-600 bg-gray-50 px-3 py-2 rounded-lg border border-gray-100">
                   <div className="flex items-center gap-1.5">
-                    <div className="w-3 h-3 rounded-sm bg-gray-200 border border-gray-300"></div>
-                    <span>Fuera de horario</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
                     <div className="w-3 h-3 rounded-sm bg-emerald-100 border border-emerald-300"></div>
                     <span>Disponible</span>
                   </div>
@@ -673,43 +635,7 @@ export default function Solicitar() {
                 </div>
               </div>
 
-              <div className="relative h-12 bg-gray-200 rounded-lg border border-gray-300 ml-2 mr-2 overflow-hidden shadow-inner">
-                {/* Bloque verde de horario volante */}
-                {(() => {
-                  const veh: any = camionetasStore.inventario.find((v) => v.placa === selectedPlaca);
-                  if (veh && veh.volante === "Si" && veh.volanteInicio && veh.volanteFin) {
-                    const [hIni, mIni] = veh.volanteInicio.split(':').map(Number);
-                    const [hFin, mFin] = veh.volanteFin.split(':').map(Number);
-                    const volStart = hIni + (mIni / 60);
-                    const volEnd = hFin + (mFin / 60);
-
-                    const iDateStr = usoInicioLocal.slice(0, 10);
-                    const fDateStr = usoFinLocal.slice(0, 10);
-                    const diffDays = Math.round((new Date(fDateStr).getTime() - new Date(iDateStr).getTime()) / (1000 * 60 * 60 * 24));
-                    const totalDays = Math.max(1, diffDays + 1);
-                    const totalHours = totalDays * 24;
-
-                    return Array.from({ length: totalDays }).map((_, dayIdx) => {
-                      const tStart = dayIdx * 24 + volStart;
-                      const tEnd = dayIdx * 24 + volEnd;
-                      const left = (tStart / totalHours) * 100;
-                      const width = ((tEnd - tStart) / totalHours) * 100;
-
-                      if (width > 0) {
-                        return (
-                          <div
-                            key={dayIdx}
-                            className="absolute top-0 bottom-0 bg-emerald-100 border-x border-emerald-300 pointer-events-none"
-                            style={{ left: `${left}%`, width: `${width}%` }}
-                          ></div>
-                        );
-                      }
-                      return null;
-                    });
-                  }
-                  return null;
-                })()}
-
+              <div className="relative h-12 bg-emerald-50 rounded-lg border border-emerald-200 ml-2 mr-2 overflow-hidden shadow-inner">
                 {/* Marcas de horas */}
                 {(() => {
                   const iDateStr = usoInicioLocal.slice(0, 10);
@@ -725,7 +651,7 @@ export default function Solicitar() {
                     return (
                       <div
                         key={i}
-                        className={`absolute top-0 bottom-0 border-l ${i % 24 === 0 ? 'border-gray-400 z-0' : 'border-gray-300/60'}`}
+                        className={`absolute top-0 bottom-0 border-l ${i % 24 === 0 ? 'border-gray-400 z-0' : 'border-gray-200'}`}
                         style={{ left: `${(i / totalHours) * 100}%` }}
                       >
                       </div>

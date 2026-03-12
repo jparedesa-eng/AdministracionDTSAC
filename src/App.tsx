@@ -24,6 +24,7 @@ import Garita from "./pages/Camionetas/Garita";
 import MiCamioneta from "./pages/Camionetas/MiCamioneta";
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
 import HistorialSolicitudesCamionetas from "./pages/Camionetas/HistorialSolicitudes";
+import AsignarTercero from "./pages/Camionetas/AsignarTercero";
 
 /* Pasajes & Hospedaje */
 import SolicitarPasaje from "./pages/pasajes/SolicitarView";
@@ -251,6 +252,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/camionetas/registros/checklist">
                 <RegistrosChecklist />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camionetas/asignar-tercero"
+            element={
+              <ProtectedRoute path="/camionetas/asignar-tercero">
+                <AsignarTercero />
               </ProtectedRoute>
             }
           />
