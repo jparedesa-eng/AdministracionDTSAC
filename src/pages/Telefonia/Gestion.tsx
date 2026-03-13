@@ -10,8 +10,11 @@ import {
     Calendar,
     Eraser,
     FileDown,
-    XCircle
+    XCircle,
+    Building2,
+    ChevronDown,
 } from "lucide-react";
+import { useAuth } from "../../auth/AuthContext";
 import { generateTicketPDF } from "../../utils/pdfGeneratorTelefonia";
 import { Html5QrcodeScanner } from "html5-qrcode";
 import { TicketDetailContent } from "../../components/telefonia/TicketDetailContent.tsx";
@@ -91,8 +94,22 @@ function useSignaturePad() {
 
 export default function GestionTelefonia() {
 
+    const { profile } = useAuth();
     const [toast, setToast] = useState<ToastState>(null);
     const [searchTerm, setSearchTerm] = useState("");
+    const [filterGestion, setFilterGestion] = useState("");
+
+    // Access Control: Restricted "Gestión" based on profile
+    const allZones = ["Trujillo", "Olmos", "Arequipa", "Chepen", "Dominus"];
+    const authorizedZones = (!profile?.gestion)
+        ? allZones
+        : profile.gestion.split(',').map(s => s.trim()).filter(z => allZones.includes(z));
+
+    useEffect(() => {
+        if (authorizedZones.length === 1 && !filterGestion) {
+            setFilterGestion(authorizedZones[0]);
+        }
+    }, [authorizedZones]);
 
     // Selected ticket for handling
     const [selectedTicket, setSelectedTicket] = useState<Solicitud | null>(null);
@@ -350,20 +367,30 @@ export default function GestionTelefonia() {
     const getFilteredTickets = () => {
         const search = searchTerm.toLowerCase();
         return telefoniaStore.solicitudes.filter(t => {
-            if (!search) return true;
+            // 1. Access Control: Always respect authorized zones
+            if (authorizedZones.length > 0) {
+                if (!t.gestion || !authorizedZones.includes(t.gestion)) return false;
+            }
 
-            // 1. Search Text (Safe check)
-            const name = t.beneficiario_nombre || "";
-            const dni = t.beneficiario_dni || "";
-            const area = t.beneficiario_area || "";
-            const id = t.id || "";
+            // 2. UI Gestion Filter
+            if (filterGestion && t.gestion !== filterGestion) return false;
 
-            return (
-                name.toLowerCase().includes(search) ||
-                dni.toLowerCase().includes(search) ||
-                area.toLowerCase().includes(search) ||
-                id.toLowerCase().includes(search)
-            );
+            // 3. Search Term Filter
+            if (search) {
+                const name = t.beneficiario_nombre || "";
+                const dni = t.beneficiario_dni || "";
+                const area = t.beneficiario_area || "";
+                const id = t.id || "";
+
+                return (
+                    name.toLowerCase().includes(search) ||
+                    dni.toLowerCase().includes(search) ||
+                    area.toLowerCase().includes(search) ||
+                    id.toLowerCase().includes(search)
+                );
+            }
+
+            return true;
         });
     };
 
@@ -401,7 +428,15 @@ export default function GestionTelefonia() {
             <h4 className="font-bold text-gray-900 text-sm mb-1 truncate" title={ticket.beneficiario_nombre || ""}>
                 {ticket.beneficiario_nombre || "Usuario Desconocido"}
             </h4>
-            <p className="text-xs text-gray-500 mb-2 truncate">{ticket.beneficiario_puesto}</p>
+            <div className="flex items-center gap-1.5 mb-2">
+                <p className="text-xs text-gray-500 truncate flex-1">{ticket.beneficiario_puesto}</p>
+                {ticket.gestion && (
+                    <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 rounded bg-gray-100 text-[10px] text-gray-500 font-medium">
+                        <Building2 className="w-2.5 h-2.5" />
+                        {ticket.gestion}
+                    </span>
+                )}
+            </div>
 
             <div className="bg-gray-50 rounded p-2 text-xs border border-gray-100 mb-2 space-y-1">
                 <div className="flex justify-between">
@@ -446,6 +481,29 @@ export default function GestionTelefonia() {
                     <p className="text-gray-500 text-sm">Monitoreo global del ciclo de vida de solicitudes</p>
                 </div>
                 <div className="flex flex-col sm:flex-row gap-3 items-center">
+                    {/* Gestion Filter Dropdown */}
+                    <div className="relative w-full md:w-48">
+                        <div className="absolute left-3 top-2.5 pointer-events-none">
+                            <Building2 className={`w-4 h-4 ${filterGestion ? "text-indigo-500" : "text-gray-400"}`} />
+                        </div>
+                        <select
+                            className={`pl-9 pr-10 py-2 border rounded-lg text-sm appearance-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 w-full transition-all outline-none ${filterGestion ? "border-indigo-200 bg-indigo-50/30 text-indigo-700 font-medium" : "border-gray-300 bg-white text-gray-600"}`}
+                            value={filterGestion}
+                            onChange={(e) => setFilterGestion(e.target.value)}
+                            disabled={authorizedZones.length === 1}
+                        >
+                            <option value="">Todas las Zonas</option>
+                            {authorizedZones.map(zone => (
+                                <option key={zone} value={zone}>{zone}</option>
+                            ))}
+                        </select>
+                        {authorizedZones.length > 1 && (
+                            <div className="absolute right-3 top-3 pointer-events-none">
+                                <ChevronDown className="w-4 h-4 text-gray-400" />
+                            </div>
+                        )}
+                    </div>
+
                     <div className="relative w-full md:w-64">
                         <input
                             type="text"

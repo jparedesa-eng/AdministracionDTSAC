@@ -68,6 +68,7 @@ export default function InventarioTelefonia() {
     // New Filter
     const [filterVencimiento, setFilterVencimiento] = useState("");
     const [filterCultivo, setFilterCultivo] = useState("");
+    const [filterGestion, setFilterGestion] = useState("");
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
     // Autocomplete State
@@ -88,6 +89,24 @@ export default function InventarioTelefonia() {
         setFilterVencimiento("");
         setFilterCultivo("");
     }, [activeTab]);
+
+    // Access Control: Restricted "Gestión" based on profile
+    const allZones = ["Trujillo", "Olmos", "Arequipa", "Chepen", "Dominus"];
+    const authorizedZones = (!profile?.gestion)
+        ? allZones
+        : profile.gestion.split(',').map(s => s.trim()).filter(z => allZones.includes(z));
+
+    useEffect(() => {
+        if (profile?.gestion) {
+            const authorized = profile.gestion.split(',').map(s => s.trim());
+            if (authorized.length === 1) {
+                setFilterGestion(authorized[0]);
+            } else if (authorized.length > 1 && !authorized.includes(filterGestion)) {
+                // If current filter is not authorized, default to first authorized
+                setFilterGestion(authorized[0]);
+            }
+        }
+    }, [profile, filterGestion]);
 
 
     // Sedes
@@ -166,8 +185,8 @@ export default function InventarioTelefonia() {
     };
 
     // Drafts
-    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE" });
-    const [draftChip, setDraftChip] = useState<Partial<Chip>>({ estado: "Disponible" });
+    const [draftEquipo, setDraftEquipo] = useState<Partial<Equipo>>({ estado: "Disponible", condicion: "Nuevo", fecha_compra: "", categoria: "TELEFONIA", ubicacion: "BASE", gestion: "" });
+    const [draftChip, setDraftChip] = useState<Partial<Chip>>({ estado: "Disponible", gestion: "" });
     const [draftPlan, setDraftPlan] = useState<Partial<PlanTelefonico>>({
         operador: "CLARO",
         active: true,
@@ -1092,6 +1111,10 @@ export default function InventarioTelefonia() {
             if (cultivo !== filterCultivo) return false;
         }
 
+        if (filterGestion) {
+            if (e.gestion !== filterGestion) return false;
+        }
+
         return true;
     });
 
@@ -1165,6 +1188,10 @@ export default function InventarioTelefonia() {
             const cultivo = c.asignacion_activa?.cultivo || "Sin Cultivo";
             if (cultivo !== filterCultivo) return false;
         }
+
+        if (filterGestion) {
+            if (c.gestion !== filterGestion) return false;
+        }
         return true;
     });
 
@@ -1216,34 +1243,55 @@ export default function InventarioTelefonia() {
                     </p>
                 </div>
 
-                {/* Total Counters (Unfiltered) */}
-                <div className="flex gap-3">
+                 {/* Total Counters (Unfiltered) */}
+                <div className="flex flex-wrap items-center gap-3">
+                    {/* Filter: Gestión Global */}
+                    <div className="relative group min-w-[180px]">
+                        <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-indigo-500 z-10" />
+                        <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 z-10 pointer-events-none" />
+                        <select
+                            className={`h-12 w-full appearance-none rounded-xl border border-gray-200 bg-white pl-10 pr-8 text-sm font-semibold text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500 hover:bg-gray-50 transition-colors cursor-pointer shadow-sm ${profile?.rol !== "admin" && profile?.gestion && profile.gestion.split(',').length === 1 ? "opacity-75 cursor-not-allowed" : ""}`}
+                            value={filterGestion}
+                            onChange={(e) => setFilterGestion(e.target.value)}
+                            disabled={profile?.rol !== "admin" && !!profile?.gestion && profile.gestion.split(',').length === 1}
+                        >
+                            {(profile?.rol === "admin" || !profile?.gestion) && <option value="">Gestión (Todos)</option>}
+                            {authorizedZones.map(z => (
+                                <option key={z} value={z}>{z}</option>
+                            ))}
+                        </select>
+                    </div>
+
                     {/* Equipos */}
-                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px]">
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px] shadow-sm">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-indigo-50 text-indigo-600">
                             <Smartphone className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-xs font-medium text-gray-500 uppercase">Equipos</p>
                             <div className="flex items-baseline gap-1">
-                                <p className="text-xl font-bold text-gray-900">{telefoniaStore.equipos.length}</p>
+                                <p className="text-xl font-bold text-gray-900">
+                                    {telefoniaStore.equipos.filter(e => !filterGestion || e.gestion === filterGestion).length}
+                                </p>
                                 <span className="text-xs text-gray-500 font-medium">
-                                    ({telefoniaStore.equipos.filter(e => e.estado === "Asignado").length} asig.)
+                                    ({telefoniaStore.equipos.filter(e => (e.estado === "Asignado") && (!filterGestion || e.gestion === filterGestion)).length} asig.)
                                 </span>
                             </div>
                         </div>
                     </div>
                     {/* Chips */}
-                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px]">
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px] shadow-sm">
                         <div className="flex h-10 w-10 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
                             <CardSim className="h-5 w-5" />
                         </div>
                         <div>
                             <p className="text-xs font-medium text-gray-500 uppercase">Chips</p>
                             <div className="flex items-baseline gap-1">
-                                <p className="text-xl font-bold text-gray-900">{telefoniaStore.chips.length}</p>
+                                <p className="text-xl font-bold text-gray-900">
+                                    {telefoniaStore.chips.filter(c => !filterGestion || c.gestion === filterGestion).length}
+                                </p>
                                 <span className="text-xs text-gray-500 font-medium">
-                                    ({telefoniaStore.chips.filter(c => c.estado === "Asignado").length} asig.)
+                                    ({telefoniaStore.chips.filter(c => (c.estado === "Asignado") && (!filterGestion || c.gestion === filterGestion)).length} asig.)
                                 </span>
                             </div>
                         </div>
@@ -1510,6 +1558,7 @@ export default function InventarioTelefonia() {
                                             {/* Removed F. Compra */}
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado / Categoria</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Ubicación</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Gestión</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Línea</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Resp del Equipo</th>
@@ -1526,6 +1575,7 @@ export default function InventarioTelefonia() {
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Operador</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Plan</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Equipo Vinculado</th>
+                                            <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Gestión</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Estado</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Responsable / Usuario</th>
                                             <th className="px-6 py-3 text-left font-medium text-gray-500 uppercase">Usuario Final</th>
@@ -1593,6 +1643,9 @@ export default function InventarioTelefonia() {
                                                         {item.custodio === 'Administración' ? item.ubicacion : (item.asignacion_activa?.fundo_planta || item.ubicacion)}
                                                     </span>
                                                 </div>
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">
+                                                <span className="font-medium">{item.gestion || "-"}</span>
                                             </td>
                                             <td className="px-6 py-4">
                                                 {item.chip ? (
@@ -1791,6 +1844,9 @@ export default function InventarioTelefonia() {
                                                 ) : (
                                                     <span className="text-gray-400 italic text-xs">Sin vincular</span>
                                                 )}
+                                            </td>
+                                            <td className="px-6 py-4 text-sm text-gray-600">
+                                                <span className="font-medium">{item.gestion || "-"}</span>
                                             </td>
                                             <td className="px-6 py-4"><EstadoBadge estado={item.estado} /></td>
                                             <td className="px-6 py-4">
@@ -2859,6 +2915,22 @@ export default function InventarioTelefonia() {
                         </select>
                     </div>
 
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Gestión</label>
+                        <select
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={draftEquipo.gestion || ""}
+                            onChange={(e) => setDraftEquipo({ ...draftEquipo, gestion: e.target.value })}
+                        >
+                            <option value="">Seleccione...</option>
+                            <option value="Trujillo">Trujillo</option>
+                            <option value="Olmos">Olmos</option>
+                            <option value="Arequipa">Arequipa</option>
+                            <option value="Chepen">Chepen</option>
+                            <option value="Dominus">Dominus</option>
+                        </select>
+                    </div>
+
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium text-gray-700">Categoría</label>
@@ -2977,6 +3049,22 @@ export default function InventarioTelefonia() {
                             <option value="Disponible">Disponible</option>
                             <option value="Asignado">Asignado</option>
                             <option value="Baja">Baja</option>
+                        </select>
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-gray-700">Gestión</label>
+                        <select
+                            className="mt-1 block w-full rounded-md border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm border p-2"
+                            value={draftChip.gestion || ""}
+                            onChange={(e) => setDraftChip({ ...draftChip, gestion: e.target.value })}
+                        >
+                            <option value="">Seleccione...</option>
+                            <option value="Trujillo">Trujillo</option>
+                            <option value="Olmos">Olmos</option>
+                            <option value="Arequipa">Arequipa</option>
+                            <option value="Chepen">Chepen</option>
+                            <option value="Dominus">Dominus</option>
                         </select>
                     </div>
 

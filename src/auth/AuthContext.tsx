@@ -10,6 +10,7 @@ export type Profile = {
   correo: string | null;
   rol: "admin" | "jefe" | "operador" | "visitante";
   allowed_views: string[];
+  gestion?: string | null;
 };
 
 type AuthCtx = {

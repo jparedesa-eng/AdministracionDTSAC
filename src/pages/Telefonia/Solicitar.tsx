@@ -111,6 +111,7 @@ export default function SolicitarTelefonia() {
         condicion_equipo: "", // "Nuevo" | "Segundo Uso"
         tipo_equipo_destino: "", // NEW: EQUIPO, DREAM, SENSOR, TABLET
         codigo_equipo_destino: "", // NEW: IMEI
+        gestion: "", // NEW: Trujillo, Olmos, etc.
     });
 
     const [chipTargets, setChipTargets] = useState<{ type: string; imei: string }[]>([]);
@@ -273,9 +274,13 @@ export default function SolicitarTelefonia() {
                 newState.codigo_equipo_destino = "";
             }
 
-            // Reset cultivo if fundo_planta changes
+            // Reset cultivo and auto-set gestion if fundo_planta changes
             if (field === "fundo_planta") {
                 newState.cultivo = "";
+                const selectedSede = sedes.find(s => s.nombre === value);
+                if (selectedSede) {
+                    newState.gestion = selectedSede.gestion || "";
+                }
             }
 
             return newState;
@@ -619,6 +624,7 @@ export default function SolicitarTelefonia() {
             ceco: ticket.ceco || "",
             categoria: ticket.categoria || "",
             proyecto: ticket.proyecto || "",
+            gestion: ticket.gestion || "",
 
             cantidad_lineas: ticket.cantidad_lineas || 1,
             paquete_asignado: ticket.paquete_asignado || "",
@@ -782,6 +788,7 @@ export default function SolicitarTelefonia() {
                 ceco: formData.ceco, // NEW
                 categoria: formData.categoria, // NEW
                 proyecto: formData.proyecto, // NEW (Renamed from descripcion_categoria)
+                gestion: formData.gestion, // NEW
                 alternativa_modelo: formData.alternativa_modelo, // NEW: Auto-registered suggested equipment
                 tipo_equipo_destino: null, // Legacy field, now handled in assignments
                 codigo_equipo_destino: null, // Legacy field
@@ -834,7 +841,8 @@ export default function SolicitarTelefonia() {
                 fecha_inicio: new Date().toISOString().slice(0, 10), fecha_fin: "",
                 fundo_planta: "", cultivo: "", cantidad_lineas: 1, justificacion: "",
                 paquete_asignado: "", asume_costo: "", cuotas: 3, ceco: "", categoria: "", proyecto: "", perfil_puesto: "", alternativa_modelo: null, condicion_equipo: "",
-                tipo_equipo_destino: "", codigo_equipo_destino: ""
+                tipo_equipo_destino: "", codigo_equipo_destino: "",
+                gestion: (profile?.rol !== "admin" && profile?.gestion && profile.gestion.split(',').length === 1) ? profile.gestion : ""
             });
             setBeneficiaries([]);
             setChipTargets([]);

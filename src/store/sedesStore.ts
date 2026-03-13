@@ -4,6 +4,7 @@ import { supabase } from "../supabase/supabaseClient";
 export type Sede = {
     id: string;
     nombre: string;
+    gestion: string | null;
     created_at?: string | null;
     operadores?: string[]; // ["CLARO", "ENTEL", ...]
     tipo?: 'AGRICOLA' | 'INDUSTRIAL' | null;
@@ -53,7 +54,7 @@ export async function refreshSedes(): Promise<void> {
     // 1. Fetch Sedes
     const { data: sedesData, error: sedesError } = await supabase
         .from("sedes")
-        .select("id, nombre, created_at, tipo, cultivos")
+        .select("id, nombre, gestion, created_at, tipo, cultivos")
         .order("nombre", { ascending: true });
 
     if (sedesError) {
@@ -86,6 +87,7 @@ export async function refreshSedes(): Promise<void> {
     state.sedes = (sedesData || []).map((row) => ({
         id: row.id as string,
         nombre: row.nombre as string,
+        gestion: row.gestion as string,
         created_at: row.created_at,
         operadores: coverageMap.get(row.id) || [],
         tipo: row.tipo,
@@ -99,12 +101,14 @@ export async function refreshSedes(): Promise<void> {
 export async function upsertSede(input: {
     id?: string;
     nombre: string;
+    gestion?: string | null;
     operadores?: string[]; // Optional: update coverage too
     tipo?: 'AGRICOLA' | 'INDUSTRIAL' | null;
     cultivos?: string[];
 }): Promise<void> {
     const payload = {
         nombre: input.nombre,
+        gestion: input.gestion,
         tipo: input.tipo,
         cultivos: input.cultivos,
     };

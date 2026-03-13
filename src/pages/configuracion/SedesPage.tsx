@@ -1,6 +1,6 @@
 // src/pages/configuracion/SedesPage.tsx
 import React, { useEffect, useMemo, useState } from "react";
-import { Plus, Save, PencilLine, Search } from "lucide-react";
+import { Plus, Save, PencilLine, Search, Building2 } from "lucide-react";
 import {
     getSedesState,
     subscribeSedes,
@@ -30,6 +30,7 @@ export default function SedesPage() {
 
     // Formulario (para modal)
     const [nombre, setNombre] = useState<string>("");
+    const [gestion, setGestion] = useState<string>("");
     const [tipo, setTipo] = useState<"AGRICOLA" | "INDUSTRIAL" | null>(null);
     const [cultivos, setCultivos] = useState<string[]>([]);
     const [cultivoInput, setCultivoInput] = useState<string>("");
@@ -77,6 +78,7 @@ export default function SedesPage() {
 
     const resetForm = () => {
         setNombre("");
+        setGestion("");
         setTipo(null);
         setCultivos([]);
         setCultivoInput("");
@@ -87,6 +89,7 @@ export default function SedesPage() {
 
     const openCreate = () => {
         setNombre("");
+        setGestion("");
         setTipo(null);
         setCultivos([]);
         setCultivoInput("");
@@ -97,6 +100,7 @@ export default function SedesPage() {
 
     const openEdit = (s: Sede) => {
         setNombre(s.nombre.toUpperCase());
+        setGestion(s.gestion || "");
         setTipo(s.tipo || null);
         setCultivos(s.cultivos || []);
         setCultivoInput("");
@@ -129,6 +133,7 @@ export default function SedesPage() {
             await upsertSede({
                 id: editingId ?? undefined,
                 nombre: trimmed,
+                gestion: gestion || null,
                 tipo: tipo,
                 cultivos: finalCultivos,
             });
@@ -281,6 +286,7 @@ export default function SedesPage() {
                             <thead className="bg-gray-50 text-xs uppercase text-gray-500">
                                 <tr>
                                     <th className="px-4 py-3">Sede</th>
+                                    <th className="px-4 py-3">Gestión</th>
                                     <th className="px-4 py-3">Tipo</th>
                                     <th className="px-4 py-3">Cultivos</th>
                                     <th className="px-4 py-3 text-right">Acciones</th>
@@ -313,7 +319,19 @@ export default function SedesPage() {
                                     filteredSedes.length > 0 &&
                                     currentRows.map((s: Sede) => (
                                         <tr key={s.id} className="hover:bg-gray-50">
-                                            <td className="px-4 py-3">{s.nombre}</td>
+                                            <td className="px-4 py-3">
+                                                <div className="font-medium text-gray-900">{s.nombre}</div>
+                                            </td>
+                                            <td className="px-4 py-3">
+                                                {s.gestion ? (
+                                                    <span className="inline-flex items-center gap-1 text-gray-600">
+                                                        <Building2 className="h-3 w-3 text-indigo-500" />
+                                                        {s.gestion}
+                                                    </span>
+                                                ) : (
+                                                    <span className="text-gray-400 italic">--</span>
+                                                )}
+                                            </td>
                                             <td className="px-4 py-3">
                                                 {s.tipo ? (
                                                     <span className={`inline-flex items-center px-2 py-1 rounded text-xs font-semibold ${s.tipo === 'AGRICOLA'
@@ -390,6 +408,23 @@ export default function SedesPage() {
                     </div>
 
                     <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label className="mb-1 block text-xs font-medium text-gray-600">
+                                Gestión
+                            </label>
+                            <select
+                                value={gestion}
+                                onChange={(e) => setGestion(e.target.value)}
+                                className="w-full rounded-lg border bg-white px-3 py-2 text-sm outline-none ring-1 ring-transparent focus:ring-gray-300"
+                            >
+                                <option value="">Seleccionar...</option>
+                                <option value="Trujillo">Trujillo</option>
+                                <option value="Olmos">Olmos</option>
+                                <option value="Arequipa">Arequipa</option>
+                                <option value="Chepen">Chepen</option>
+                                <option value="Dominus">Dominus</option>
+                            </select>
+                        </div>
                         <div>
                             <label className="mb-1 block text-xs font-medium text-gray-600">
                                 Tipo

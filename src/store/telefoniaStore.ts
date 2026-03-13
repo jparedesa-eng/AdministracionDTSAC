@@ -56,6 +56,7 @@ export interface Equipo {
     estado: EstadoEquipo;
     condicion?: CondicionEquipo;
     fecha_compra?: string | null;
+    gestion?: string | null;
     created_at?: string;
     // Relations
     chip_id?: string | null;
@@ -117,6 +118,7 @@ export interface Chip {
     operador: string;
     estado: EstadoChip;
     plan_id?: string | null;
+    gestion?: string | null;
     created_at?: string;
     // Relations
     equipo_id?: string | null;
@@ -185,6 +187,7 @@ export interface Solicitud {
     categoria?: string | null;
     proyecto?: string | null; // Renamed from descripcion_categoria
     gr?: string | null;
+    gestion?: string | null;
 
     // New fields for Reposition
     detalle_reposicion?: any; // JSONB
