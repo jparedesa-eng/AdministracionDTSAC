@@ -40,6 +40,7 @@ export default function AdministrarSolicitudes() {
   const [qPlaca, setQPlaca] = React.useState("");
   const [qSol, setQSol] = React.useState("");
   const [origenFilter, setOrigenFilter] = React.useState("Todos");
+  const [fechaDevolucion, setFechaDevolucion] = React.useState("");
 
   // Modal de confirmación
   const [confirm, setConfirm] = React.useState<{
@@ -82,8 +83,8 @@ export default function AdministrarSolicitudes() {
   const solicitudes: Solicitud[] = camionetasStore.solicitudes;
   const inventario: Vehiculo[] = camionetasStore.inventario;
 
-  const filtradasPorOrigen = origenFilter === "Todos" 
-    ? solicitudes 
+  const filtradasPorOrigen = origenFilter === "Todos"
+    ? solicitudes
     : solicitudes.filter(s => s.origen === origenFilter);
 
   const asignadas = filtradasPorOrigen.filter((s) => s.estado === "Reservada");
@@ -103,13 +104,29 @@ export default function AdministrarSolicitudes() {
     );
   };
 
+  const now = new Date();
+  
+  // Regla: Reservadas se ocultan si ya pasaron su horario de fin
+  const filteredAsignadas = asignadas.filter(s => {
+    const fin = new Date(s.usoFin.slice(0, 16));
+    return now <= fin && filtro(s);
+  });
+
+  // Regla: En uso se muestran siempre hasta que se cierren (independiente del horario)
+  const filteredEnUso = enUso.filter(filtro);
+
 
 
   const pedirRechazo = (id: string) =>
     setConfirm({ open: true, kind: "rechazar", payload: { id } });
 
-  const pedirDevolucion = (placa: string) =>
+  const pedirDevolucion = (placa: string) => {
+    // Inicializar con la fecha/hora local actual en formato YYYY-MM-DDTHH:mm
+    const now = new Date();
+    const isoLocal = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+    setFechaDevolucion(isoLocal);
     setConfirm({ open: true, kind: "devolucion", payload: { placa } });
+  };
 
   const ejecutarConfirm = async () => {
     try {
@@ -122,7 +139,9 @@ export default function AdministrarSolicitudes() {
         refresh();
       }
       if (confirm.kind === "devolucion" && confirm.payload?.placa) {
-        await camionetasStore.registrarDevolucion(confirm.payload.placa);
+        // Convertir de local a ISO real antes de enviar
+        const isoReal = new Date(fechaDevolucion).toISOString();
+        await camionetasStore.registrarDevolucion(confirm.payload.placa, isoReal);
         setToast({
           type: "success",
           message: "Devolución registrada. La unidad quedó disponible.",
@@ -161,8 +180,8 @@ export default function AdministrarSolicitudes() {
     let borderClass = "border-gray-200 hover:border-gray-300";
     let accentClass = "bg-gray-500";
     if (isVencido) {
-      borderClass = "border-neutral-200 hover:border-neutral-300";
-      accentClass = "bg-neutral-400";
+      borderClass = "border-red-200 hover:border-red-300 shadow-sm shadow-red-50";
+      accentClass = "bg-[#ff0000]";
     } else if (estadoLower.startsWith("reserv")) {
       borderClass = "border-emerald-200 hover:border-emerald-300 shadow-sm shadow-emerald-50";
       accentClass = "bg-emerald-500";
@@ -199,7 +218,11 @@ export default function AdministrarSolicitudes() {
           </div>
           <div className="flex flex-col items-end gap-1">
             <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-              estadoLower === "en uso" ? "bg-sky-50 text-sky-700 border border-sky-100" : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              isVencido 
+                ? "bg-red-50 text-[#ff0000] border border-red-100" 
+                : estadoLower === "en uso" 
+                  ? "bg-sky-50 text-sky-700 border border-sky-100" 
+                  : "bg-emerald-50 text-emerald-700 border border-emerald-100"
             }`}>
               {s.estado}
             </span>
@@ -250,11 +273,10 @@ export default function AdministrarSolicitudes() {
             <button
               onClick={() => esCreador && pedirRechazo(s.id)}
               disabled={!esCreador}
-              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${
-                esCreador 
-                ? "text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-100" 
-                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
-              }`}
+              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${esCreador
+                  ? "text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-100"
+                  : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+                }`}
             >
               Rechazar
             </button>
@@ -263,18 +285,17 @@ export default function AdministrarSolicitudes() {
             <button
               onClick={() => esCreador && pedirDevolucion(s.vehiculo!)}
               disabled={!esCreador}
-              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${
-                esCreador 
-                ? "text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100" 
-                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
-              }`}
+              className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${esCreador
+                  ? "text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100"
+                  : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+                }`}
             >
               Registrar Devolución
             </button>
           )}
           {isVencido && (
-            <div className="w-full text-center py-0.5 border border-dashed border-neutral-100 rounded-lg">
-              <span className="text-[8px] text-neutral-400 italic">Vencido</span>
+            <div className="w-full text-center py-0.5 border border-dashed border-red-200 bg-red-50/30 rounded-lg">
+              <span className="text-[8px] text-[#ff0000] font-bold italic">Vencido</span>
             </div>
           )}
         </div>
@@ -314,7 +335,7 @@ export default function AdministrarSolicitudes() {
                 </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase">Reservadas</p>
-                  <p className="text-lg font-bold text-gray-900">{asignadas.length}</p>
+                  <p className="text-lg font-bold text-gray-900">{filteredAsignadas.length}</p>
                 </div>
               </div>
 
@@ -324,7 +345,7 @@ export default function AdministrarSolicitudes() {
                 </div>
                 <div>
                   <p className="text-xs font-medium text-gray-500 uppercase">En uso</p>
-                  <p className="text-lg font-bold text-gray-900">{enUso.length}</p>
+                  <p className="text-lg font-bold text-gray-900">{filteredEnUso.length}</p>
                 </div>
               </div>
             </div>
@@ -337,7 +358,7 @@ export default function AdministrarSolicitudes() {
             <div className="flex items-center gap-2">
               <h2 className="text-sm font-bold text-gray-900">Tablero de Control</h2>
               <span className="px-2.5 py-0.5 rounded-full bg-gray-100 text-gray-600 text-xs font-bold border border-gray-200">
-                {asignadas.length + enUso.length} Activos
+                {filteredAsignadas.length + filteredEnUso.length} Activos
               </span>
             </div>
 
@@ -404,15 +425,15 @@ export default function AdministrarSolicitudes() {
                 <div className="p-2 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-gray-50 rounded-t-2xl z-10">
                   <h3 className="font-bold text-gray-700 text-xs flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                    RESERVADAS
+                     RESERVADAS
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {asignadas.filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length}
+                    {filteredAsignadas.length}
                   </span>
                 </div>
 
-                <div className="p-3 space-y-2 max-h-[600px] overflow-y-auto custom-scrollbar">
-                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).map(s => (
+                <div className="p-3 space-y-2">
+                  {filteredAsignadas.map(s => (
                     <TicketCard
                       key={s.id}
                       s={s}
@@ -421,7 +442,7 @@ export default function AdministrarSolicitudes() {
                       pedirDevolucion={pedirDevolucion}
                     />
                   ))}
-                  {asignadas.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length === 0 && (
+                  {filteredAsignadas.length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay reservas
                     </div>
@@ -434,18 +455,18 @@ export default function AdministrarSolicitudes() {
                 <div className="p-2 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-gray-50 rounded-t-2xl z-10">
                   <h3 className="font-bold text-gray-700 text-xs flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                    EN USO
+                     EN USO
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
-                    {enUso.filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length}
+                    {filteredEnUso.length}
                   </span>
                 </div>
 
                 <div className="p-3 space-y-4">
-                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).map(s => {
-                    const now = new Date();
+                  {filteredEnUso.map(s => {
+                    const nowCard = new Date();
                     const fin = new Date(s.usoFin.slice(0, 16));
-                    const isVencido = now > fin;
+                    const isVencido = nowCard > fin;
                     return (
                       <TicketCard
                         key={s.id}
@@ -456,7 +477,7 @@ export default function AdministrarSolicitudes() {
                       />
                     );
                   })}
-                  {enUso.filter(filtro).filter(s => new Date() <= new Date(s.usoFin.slice(0, 16))).length === 0 && (
+                  {filteredEnUso.length === 0 && (
                     <div className="text-center py-6 text-gray-400 text-xs italic">
                       No hay unidades en uso
                     </div>
@@ -611,8 +632,24 @@ export default function AdministrarSolicitudes() {
         onClose={() => setConfirm({ open: false, kind: null })}
       >
         <p className="text-sm text-slate-600">
-          ¿Confirmas registrar la devolución de la unidad? Se cerrará el ticket asociado.
+          {confirm.kind === "rechazar" 
+            ? "¿Confirmas rechazar esta solicitud? Esta acción no se puede deshacer."
+            : "¿Confirmas registrar la devolución de la unidad? Se cerrará el ticket asociado."}
         </p>
+
+        {confirm.kind === "devolucion" && (
+          <div className="mt-4 p-3 bg-slate-50 border border-slate-200 rounded-xl">
+            <label className="block text-[11px] font-bold text-slate-500 uppercase mb-1">
+              Fecha y Hora de Devolución
+            </label>
+            <input
+              type="datetime-local"
+              value={fechaDevolucion}
+              onChange={(e) => setFechaDevolucion(e.target.value)}
+              className="w-full bg-white border border-slate-200 rounded-lg p-2 text-sm focus:ring-2 focus:ring-slate-500 outline-none"
+            />
+          </div>
+        )}
         <div className="mt-4 flex justify-end gap-2">
           <button
             type="button"

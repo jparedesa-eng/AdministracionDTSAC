@@ -590,8 +590,8 @@ export const camionetasStore = {
    * Registra fecha/hora real de término.
    * IMPORTANTE: Libera el horario en reservas_vehiculo estableciendo uso_fin = NOW()
    */
-  async terminarUsoGarita(id: string): Promise<void> {
-    const ahoraISO = new Date().toISOString();
+  async terminarUsoGarita(id: string, fechaISO?: string): Promise<void> {
+    const ahoraISO = fechaISO || new Date().toISOString();
 
     // 1. Actualizar solicitud
     const { data: sUpd, error: e1 } = await supabase
@@ -631,7 +631,7 @@ export const camionetasStore = {
   },
 
   /** Devolución: cierra la solicitud más reciente para la placa. No toca vehiculos.estado */
-  async registrarDevolucion(placa: string): Promise<void> {
+  async registrarDevolucion(placa: string, fechaISO?: string): Promise<void> {
     const { data: sRows, error: e1 } = await supabase
       .from("solicitudes")
       .select("*")
@@ -644,7 +644,7 @@ export const camionetasStore = {
     const target = (sRows as SolicitudRow[] | null)?.[0];
     if (target) {
       // Reutilizamos la lógica que libera disponibilidad
-      await this.terminarUsoGarita(target.id);
+      await this.terminarUsoGarita(target.id, fechaISO);
     }
     // No tocar vehiculos.estado
   },
