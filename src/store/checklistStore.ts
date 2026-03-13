@@ -21,6 +21,8 @@ export type SaveChecklistInput = {
   tipo: "entrega" | "regular"; // NUEVO CAMPO
   observaciones?: string | null; // NUEVO CAMPO
   fecha_ingreso?: string | null; // NUEVO: Fecha de ingreso de la unidad (antigüedad)
+  fotos_drive?: string | null; // NUEVO: Link a fotos en Drive
+  id_usuario?: string | null; // NUEVO: ID del usuario creador
 };
 
 export async function guardarChecklist(input: SaveChecklistInput) {
@@ -40,6 +42,8 @@ export async function guardarChecklist(input: SaveChecklistInput) {
     tipo: input.tipo, // Guardamos el tipo
     observaciones: input.observaciones, // Guardamos observaciones
     fecha_ingreso: input.fecha_ingreso, // Guardamos fecha de ingreso
+    fotos_drive: input.fotos_drive, // Guardamos link de fotos
+    id_usuario: input.id_usuario, // Guardamos ID de usuario
   };
 
   if (input.usuario_correo) {
@@ -73,6 +77,8 @@ export async function actualizarChecklist(id: string, input: SaveChecklistInput)
     tipo: input.tipo,
     observaciones: input.observaciones,
     fecha_ingreso: input.fecha_ingreso,
+    fotos_drive: input.fotos_drive,
+    id_usuario: input.id_usuario,
   };
 
   if (input.firma_base64) {

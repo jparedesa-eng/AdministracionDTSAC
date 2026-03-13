@@ -14,7 +14,7 @@ import Ayuda from "./pages/Ayuda";
 import HomeRedirect from "./pages/HomeRedirect";
 
 /* Camionetas */
-import Solicitar from "./pages/Camionetas/Solicitar";
+// import Solicitar from "./pages/Camionetas/Solicitar"; // Unrouted to be used as popup
 import AdministrarSolicitudes from "./pages/Camionetas/Administrar";
 import InventarioMantenedor from "./pages/Camionetas/Inventario";
 import RegistrosGastos from "./pages/Camionetas/RegistrosIncidentes";
@@ -180,14 +180,6 @@ export default function App() {
                     Inventario, Registros, Conductores).
                   </p>
                 </section>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/camionetas/solicitar"
-            element={
-              <ProtectedRoute path="/camionetas/solicitar">
-                <Solicitar />
               </ProtectedRoute>
             }
           />

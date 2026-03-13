@@ -9,7 +9,6 @@ import { LoadingScreen } from "../components/ui/LoadingScreen";
  */
 const PRIORITY_PATHS = [
     // Camionetas
-    "/camionetas/solicitar",
     "/camionetas/administrar",
     "/camionetas/inventario",
     "/camionetas/garita",

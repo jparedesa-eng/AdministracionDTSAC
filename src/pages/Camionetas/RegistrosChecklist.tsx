@@ -65,6 +65,8 @@ type ChecklistRow = {
   grupos?: any;
   tipo?: "entrega" | "regular";
   codigo?: string; // Editado a string
+  fotos_drive?: string | null; // NUEVO CAMPO
+  id_usuario?: string | null; // NUEVO CAMPO
 };
 
 type ChecklistItemRow = {
@@ -442,10 +444,12 @@ function buildPdfHtml(row: ChecklistRow, grupos: Grupo[]) {
     ${cell("Sede:", row.sede ?? "—")}
     ${cell("Kilometraje:", row.kilometraje ?? "—")}
     ${cell("Resp. Inspección:", row.responsable_inspeccion ?? "—")}
+    ${cell("ID Registrador:", row.id_usuario ?? "—")}
     ${cell("DNI Usuario:", getDni(row))}
     ${cell("Nombre Usuario:", getNombre(row))}
     ${cell("Correo Usuario:", getCorreo(row))}
     ${cell("Estado checklist:", row.aprobado ? "APROBADO" : "CON OBSERVACIONES")}
+    ${row.fotos_drive ? cell("Fotos Drive:", row.fotos_drive) : ""}
   </div>
 
   <!-- Firma -->
@@ -661,6 +665,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
   const [fechaIngreso, setFechaIngreso] = React.useState<string | null>(null); // NUEVO ESTADO
   const [grupos, setGrupos] = React.useState<CkGroup[]>(getInitialGroups());
   const [observaciones, setObservaciones] = React.useState(""); // Nuevo estado para observaciones
+  const [fotosDrive, setFotosDrive] = React.useState(""); // NUEVO ESTADO PARA DRIVE
   const [saving, setSaving] = React.useState(false);
 
   const [conductores, setConductores] = React.useState<Driver[]>([]);
@@ -722,6 +727,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
       setUNombre(getNombre(editingRow));
       setObservaciones(editingRow.observaciones ?? "");
       setFechaIngreso(editingRow.fecha_ingreso ?? null);
+      setFotosDrive(editingRow.fotos_drive ?? "");
 
       const inRow = normalizeGruposFromRow(editingRow);
       if (inRow && inRow.length > 0) {
@@ -928,6 +934,7 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
     setPlacaOpen(false);
     sig.clear();
     setKmError(null);
+    setFotosDrive("");
   };
 
   const handleUDniChange = (raw: string) => {
@@ -989,6 +996,8 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
         tipo,
         observaciones: observaciones.trim(), // Enviamos observaciones
         fecha_ingreso: fechaIngreso, // Enviamos fecha de ingreso
+        fotos_drive: fotosDrive.trim() || null, // Enviamos link de fotos
+        id_usuario: profile?.id, // ID del usuario que registra
       };
 
       if (editingRow) {
@@ -1188,6 +1197,22 @@ const ChecklistCreateModal: React.FC<ChecklistCreateModalProps> = ({
                 onChange={(e) => setResponsable(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
                 placeholder="Nombre del responsable"
+              />
+            </div>
+
+            {/* Link Fotos Drive - Solo habilitado al editar */}
+            <div className={`grid gap-1 ${!editingRow ? "opacity-50 pointer-events-none" : ""}`}>
+              <label className="text-sm font-medium flex items-center gap-2">
+                <FileSpreadsheet className="h-4 w-4 text-blue-500" />
+                Link Fotos Drive (Google Drive)
+                {!editingRow && <span className="text-[10px] text-gray-500 font-normal">(Disponible al editar)</span>}
+              </label>
+              <input
+                value={fotosDrive}
+                onChange={(e) => setFotosDrive(e.target.value)}
+                disabled={!editingRow}
+                className={`w-full rounded-xl border px-3 py-2.5 text-sm outline-none focus:ring-1 ${editingRow ? "border-blue-200 focus:ring-blue-200 focus:border-blue-400" : "border-gray-200 bg-gray-50"}`}
+                placeholder="https://drive.google.com/..."
               />
             </div>
 
@@ -1536,6 +1561,8 @@ export default function RegistrosChecklist() {
         Estado: r.aprobado ? "Aprobado" : "Observaciones",
         Observaciones: r.observaciones ?? "",
         "Antigüedad Unidad": calculateSeniority(r.fecha_ingreso),
+        "Link Fotos Drive": r.fotos_drive ?? "",
+        "ID Registrador": r.id_usuario ?? "",
       }));
 
       const sheetResumen = XLSX.utils.json_to_sheet(exportData);
@@ -1813,10 +1840,10 @@ export default function RegistrosChecklist() {
                       </button>
                       <button
                         type="button"
-                        className={`p-1.5 rounded-lg transition-colors ${getNombre(c) === profile?.nombre ? "bg-amber-50 text-amber-600 hover:bg-amber-100" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
-                        onClick={() => getNombre(c) === profile?.nombre && openEditModal(c)}
-                        title={getNombre(c) === profile?.nombre ? "Editar checklist" : "Solo el creador puede editar"}
-                        disabled={getNombre(c) !== profile?.nombre}
+                        className={`p-1.5 rounded-lg transition-colors ${(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) ? "bg-amber-50 text-amber-600 hover:bg-amber-100" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                        onClick={() => (c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) && openEditModal(c)}
+                        title={(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) ? "Editar checklist" : "Solo el creador puede editar"}
+                        disabled={!(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre))}
                       >
                         <PenLine className="h-4 w-4" />
                       </button>
@@ -1938,6 +1965,7 @@ export default function RegistrosChecklist() {
                     ["Correo Usuario", getCorreo(viewRow)],
                     ["Tipo", viewRow.tipo ? viewRow.tipo.toUpperCase() : "REGULAR"], // Mostrar tipo
                     ["Tiempo de antigüedad", calculateSeniority(viewRow.fecha_ingreso)],
+                    ["ID Registrador", viewRow.id_usuario ?? "—"],
                   ].map(([label, val]) => (
                     <div
                       key={label as string}
@@ -1976,6 +2004,17 @@ export default function RegistrosChecklist() {
                 {/* Estado y observaciones */}
                 <div className="mt-3 flex flex-wrap items-center gap-3">
                   {estadoPill(!!viewRow.aprobado)}
+                  {viewRow.fotos_drive && (
+                    <a
+                      href={viewRow.fotos_drive}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors border border-blue-100 text-sm font-medium"
+                    >
+                      <FileSpreadsheet className="h-4 w-4" />
+                      Ver fotos en Drive
+                    </a>
+                  )}
                   <span className="text-sm text-gray-600">
                     <span className="font-medium">Observaciones: </span>
                     {viewRow.observaciones?.trim() || "—"}
