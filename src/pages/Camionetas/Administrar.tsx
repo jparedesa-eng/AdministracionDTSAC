@@ -12,9 +12,11 @@ import {
   TriangleAlert,
   Plus,
   User,
+  QrCode,
 } from "lucide-react";
 import { useAuth } from "../../auth/AuthContext";
 import Solicitar from "./Solicitar";
+import QRCode from "react-qr-code";
 
 // UI propios
 import { Modal } from "../../components/ui/Modal";
@@ -54,6 +56,18 @@ export default function AdministrarSolicitudes() {
 
   // auth context
   const { user } = useAuth();
+
+  // Popup de QR
+  const [qrTicket, setQrTicket] = React.useState<{
+    id: string;
+    vehiculo?: string | null;
+  } | null>(null);
+
+  const handleOpenQr = (ticket: any) => {
+    setQrTicket({ id: ticket.id, vehiculo: ticket.vehiculo });
+  };
+
+  const handleCloseQr = () => setQrTicket(null);
 
   // Carga inicial desde Supabase
   React.useEffect(() => {
@@ -105,7 +119,7 @@ export default function AdministrarSolicitudes() {
   };
 
   const now = new Date();
-  
+
   // Regla: Reservadas se ocultan si ya pasaron su horario de fin
   const filteredAsignadas = asignadas.filter(s => {
     const fin = new Date(s.usoFin.slice(0, 16));
@@ -164,11 +178,13 @@ export default function AdministrarSolicitudes() {
     isVencido,
     pedirRechazo,
     pedirDevolucion,
+    onOpenQr,
   }: {
     s: Solicitud;
     isVencido: boolean;
     pedirRechazo: (id: string) => void;
     pedirDevolucion: (placa: string) => void;
+    onOpenQr: (ticket: any) => void;
   }) => {
     const estadoLower = (s.estado ?? "").toString().toLowerCase();
     const inicio = new Date(s.usoInicio.slice(0, 16));
@@ -217,13 +233,12 @@ export default function AdministrarSolicitudes() {
             </h4>
           </div>
           <div className="flex flex-col items-end gap-1">
-            <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${
-              isVencido 
-                ? "bg-red-50 text-[#ff0000] border border-red-100" 
-                : estadoLower === "en uso" 
-                  ? "bg-sky-50 text-sky-700 border border-sky-100" 
-                  : "bg-emerald-50 text-emerald-700 border border-emerald-100"
-            }`}>
+            <span className={`px-1.5 py-0.5 rounded-full text-[8px] font-bold ${isVencido
+              ? "bg-red-50 text-[#ff0000] border border-red-100"
+              : estadoLower === "en uso"
+                ? "bg-sky-50 text-sky-700 border border-sky-100"
+                : "bg-emerald-50 text-emerald-700 border border-emerald-100"
+              }`}>
               {s.estado}
             </span>
           </div>
@@ -274,8 +289,8 @@ export default function AdministrarSolicitudes() {
               onClick={() => esCreador && pedirRechazo(s.id)}
               disabled={!esCreador}
               className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${esCreador
-                  ? "text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-100"
-                  : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+                ? "text-rose-600 bg-rose-50 border-rose-100 hover:bg-rose-100"
+                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
                 }`}
             >
               Rechazar
@@ -286,8 +301,8 @@ export default function AdministrarSolicitudes() {
               onClick={() => esCreador && pedirDevolucion(s.vehiculo!)}
               disabled={!esCreador}
               className={`w-full py-1 rounded-lg text-[10px] font-bold transition-colors border ${esCreador
-                  ? "text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100"
-                  : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
+                ? "text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100"
+                : "text-gray-300 bg-gray-50 border-gray-100 cursor-not-allowed opacity-50"
                 }`}
             >
               Registrar Devolución
@@ -297,6 +312,15 @@ export default function AdministrarSolicitudes() {
             <div className="w-full text-center py-0.5 border border-dashed border-red-200 bg-red-50/30 rounded-lg">
               <span className="text-[8px] text-[#ff0000] font-bold italic">Vencido</span>
             </div>
+          )}
+          {((estadoLower.startsWith("reserv") || estadoLower === "en uso") && !isVencido) && (
+            <button
+              onClick={() => onOpenQr(s)}
+              className="w-full py-1 rounded-lg text-[10px] font-bold transition-colors border text-sky-600 bg-sky-50 border-sky-100 hover:bg-sky-100 flex items-center justify-center gap-1"
+            >
+              <QrCode className="h-3 w-3" />
+              Ver QR
+            </button>
           )}
         </div>
       </div>
@@ -425,7 +449,7 @@ export default function AdministrarSolicitudes() {
                 <div className="p-2 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-gray-50 rounded-t-2xl z-10">
                   <h3 className="font-bold text-gray-700 text-xs flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-emerald-500"></span>
-                     RESERVADAS
+                    RESERVADAS
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
                     {filteredAsignadas.length}
@@ -440,6 +464,7 @@ export default function AdministrarSolicitudes() {
                       isVencido={false}
                       pedirRechazo={pedirRechazo}
                       pedirDevolucion={pedirDevolucion}
+                      onOpenQr={handleOpenQr}
                     />
                   ))}
                   {filteredAsignadas.length === 0 && (
@@ -455,7 +480,7 @@ export default function AdministrarSolicitudes() {
                 <div className="p-2 border-b border-gray-200 flex items-center justify-between sticky top-0 bg-gray-50 rounded-t-2xl z-10">
                   <h3 className="font-bold text-gray-700 text-xs flex items-center gap-2">
                     <span className="w-2 h-2 rounded-full bg-sky-500"></span>
-                     EN USO
+                    EN USO
                   </h3>
                   <span className="bg-white px-2 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-600">
                     {filteredEnUso.length}
@@ -474,6 +499,7 @@ export default function AdministrarSolicitudes() {
                         isVencido={isVencido}
                         pedirRechazo={pedirRechazo}
                         pedirDevolucion={pedirDevolucion}
+                        onOpenQr={handleOpenQr}
                       />
                     );
                   })}
@@ -632,7 +658,7 @@ export default function AdministrarSolicitudes() {
         onClose={() => setConfirm({ open: false, kind: null })}
       >
         <p className="text-sm text-slate-600">
-          {confirm.kind === "rechazar" 
+          {confirm.kind === "rechazar"
             ? "¿Confirmas rechazar esta solicitud? Esta acción no se puede deshacer."
             : "¿Confirmas registrar la devolución de la unidad? Se cerrará el ticket asociado."}
         </p>
@@ -671,6 +697,7 @@ export default function AdministrarSolicitudes() {
         </div>
       </Modal>
 
+      {/* Modal de Solicitar */}
       <Modal
         open={isSolicitarModalOpen}
         title="Asignar Volante (Nueva Solicitud)"
@@ -682,6 +709,45 @@ export default function AdministrarSolicitudes() {
       >
         <Solicitar isPopup={true} />
       </Modal>
+
+      {/* Popup de QR a pantalla completa (Igual que en Solicitar.tsx) */}
+      {qrTicket && (
+        <div className="fixed inset-0 z-50 flex flex-col bg-black/70 animate-in fade-in duration-200">
+          <div className="flex items-center justify-between px-4 pt-4 pb-2">
+            <button
+              onClick={handleCloseQr}
+              className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white backdrop-blur-sm hover:bg-white/20 transition-colors"
+            >
+              Cerrar
+            </button>
+            <span className="text-xs font-semibold uppercase tracking-wide text-white/80">
+              Ticket {qrTicket.vehiculo ?? ""}
+            </span>
+            <div className="w-[60px]" />
+          </div>
+
+          <div className="flex flex-1 items-center justify-center px-6 pb-10">
+            <div className="w-full max-w-xs rounded-3xl bg-white p-5 shadow-2xl transform animate-in zoom-in duration-300">
+              <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">
+                Escanear QR del ticket:
+              </p>
+              <p className="mb-3 text-center text-xs font-semibold uppercase tracking-wide text-gray-500">
+                {qrTicket.vehiculo ?? ""}
+              </p>
+              <div className="flex items-center justify-center rounded-2xl bg-gray-50 p-4">
+                <QRCode
+                  value={String(qrTicket.id)}
+                  size={260}
+                  style={{ height: "260px", width: "260px" }}
+                />
+              </div>
+              <p className="mt-4 text-center text-[11px] text-gray-500 italic">
+                Muestra este código al agente de seguridad que verificará tu ticket.
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Toast global */}
       <Toast toast={toast} onClose={() => setToast(null)} />
