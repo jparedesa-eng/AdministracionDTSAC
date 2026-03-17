@@ -189,8 +189,8 @@ export default function AdministrarSolicitudes() {
     const estadoLower = (s.estado ?? "").toString().toLowerCase();
     const inicio = new Date(s.usoInicio.slice(0, 16));
     const fin = new Date(s.usoFin.slice(0, 16));
-    const entrega = s.entregaGaritaAt ? new Date(s.entregaGaritaAt) : null;
-    const termino = s.terminoUsoGaritaAt ? new Date(s.terminoUsoGaritaAt) : null;
+    const entrega = s.entregaGaritaAt ? new Date(s.entregaGaritaAt.slice(0, 16)) : null;
+    const termino = s.terminoUsoGaritaAt ? new Date(s.terminoUsoGaritaAt.slice(0, 16)) : null;
 
     // Card Colors and styling based on state
     let borderClass = "border-gray-200 hover:border-gray-300";
