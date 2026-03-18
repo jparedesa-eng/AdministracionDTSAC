@@ -857,6 +857,63 @@ export const camionetasStore = {
     }
   },
 
+  async liberarResponsable(payload: {
+    vehiculoId: string;
+    fechaFin: string;
+    observacion?: string;
+  }): Promise<void> {
+    // 1. Obtener el historial más reciente para actualizar su fecha de fin
+    const { data: latestHist, error: errHist } = await supabase
+      .from("vehiculos_historial_responsables")
+      .select("id, observacion")
+      .eq("vehiculo_id", payload.vehiculoId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (errHist) throw errHist;
+
+    if (latestHist) {
+      let nuevaObs = latestHist.observacion || "";
+      if (payload.observacion) {
+        nuevaObs = nuevaObs ? `${nuevaObs} | Liberado: ${payload.observacion}` : `Liberado: ${payload.observacion}`;
+      }
+      
+      const { error: updHistErr } = await supabase
+        .from("vehiculos_historial_responsables")
+        .update({
+          fecha_fin: payload.fechaFin,
+          observacion: nuevaObs || null
+        })
+        .eq("id", latestHist.id);
+      
+      if (updHistErr) throw updHistErr;
+    }
+
+    // 2. Limpiar el responsable actual del vehículo
+    const { error: updError } = await supabase
+      .from("vehiculos")
+      .update({
+        responsable: null,
+        dni_responsable: null,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", payload.vehiculoId);
+
+    if (updError) throw updError;
+
+    // 3. Actualizar estado local
+    const idx = this.inventario.findIndex((v) => v.id === payload.vehiculoId);
+    if (idx >= 0) {
+      this.inventario[idx] = {
+        ...this.inventario[idx],
+        responsable: null,
+        dniResponsable: null,
+        updatedAt: new Date().toISOString()
+      };
+    }
+  },
+
   /* =========================================================
    * Historial de Categorías
    * ======================================================= */

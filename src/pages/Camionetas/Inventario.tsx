@@ -15,6 +15,7 @@ import {
   XCircle,
   AlertCircle,
   UserPlus,
+  UserMinus,
   History,
   Info,
   ChevronsLeft,
@@ -457,6 +458,15 @@ export default function Inventario() {
     isLocked: false, // New state for locking name
   });
 
+  // Estado para Liberar Responsable
+  const [releaseOpen, setReleaseOpen] = React.useState(false);
+  const [releaseLoading, setReleaseLoading] = React.useState(false);
+  const [releaseVeh, setReleaseVeh] = React.useState<Vehiculo | null>(null);
+  const [releaseDraft, setReleaseDraft] = React.useState({
+    fechaFin: new Date().toISOString().slice(0, 10),
+    observacion: "",
+  });
+
   // Estado para Historial
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [historyLoading, setHistoryLoading] = React.useState(false);
@@ -851,6 +861,37 @@ export default function Inventario() {
     }
   };
 
+  const openRelease = (v: Vehiculo) => {
+    setReleaseVeh(v);
+    setReleaseDraft({
+      fechaFin: new Date().toISOString().slice(0, 10),
+      observacion: "",
+    });
+    setReleaseOpen(true);
+  };
+
+  const handleReleaseSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!releaseVeh) return;
+    setReleaseLoading(true);
+    try {
+      await camionetasStore.liberarResponsable({
+        vehiculoId: releaseVeh.id,
+        fechaFin: new Date(releaseDraft.fechaFin).toISOString(),
+        observacion: releaseDraft.observacion,
+      });
+
+      setToast({ type: "success", message: "Responsable liberado correctamente." });
+      setReleaseOpen(false);
+      load(); // Reload table
+      loadStats();
+    } catch (error: any) {
+      setToast({ type: "error", message: error.message || "Error al liberar responsable." });
+    } finally {
+      setReleaseLoading(false);
+    }
+  };
+
   const openHistory = async (v: Vehiculo) => {
     setHistoryVehiculo(v);
     setHistoryOpen(true);
@@ -1197,6 +1238,19 @@ export default function Inventario() {
                           >
                             <UserPlus className="h-4 w-4" />
                           </button>
+                          {v.responsable && (
+                            <>
+                              <div className="h-4 w-px bg-gray-200" />
+                              <button
+                                type="button"
+                                onClick={() => openRelease(v)}
+                                className="rounded p-1.5 text-rose-600 hover:bg-white hover:shadow-sm transition-all"
+                                title="Liberar Responsable"
+                              >
+                                <UserMinus className="h-4 w-4" />
+                              </button>
+                            </>
+                          )}
                           <div className="h-4 w-px bg-gray-200" />
                           <button
                             type="button"
@@ -2188,6 +2242,72 @@ export default function Inventario() {
             </button>
           </div>
         </form>
+      </Modal>
+
+      {/* Modal Liberar Responsable */}
+      <Modal
+        open={releaseOpen && !!releaseVeh}
+        title="Liberar Responsable"
+        size="sm"
+        onClose={() => setReleaseOpen(false)}
+      >
+        {releaseVeh && (
+          <form onSubmit={handleReleaseSubmit} className="space-y-4">
+            <div className="rounded-lg bg-orange-50 border border-orange-100 p-3 text-sm text-orange-800">
+              Se liberará la placa <span className="font-bold">{releaseVeh.placa}</span> del responsable actual <span className="font-bold">{releaseVeh.responsable}</span>.
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Fecha de fin (Entregó)</label>
+              <input
+                type="date"
+                value={releaseDraft.fechaFin}
+                onChange={(e) =>
+                  setReleaseDraft({ ...releaseDraft, fechaFin: e.target.value })
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                required
+              />
+            </div>
+
+            <div>
+              <label className="text-sm font-medium text-gray-700">Observación (Opcional)</label>
+              <textarea
+                value={releaseDraft.observacion}
+                onChange={(e) =>
+                  setReleaseDraft({ ...releaseDraft, observacion: e.target.value })
+                }
+                className="mt-1 w-full rounded-xl border border-gray-200 px-3 py-2 text-sm shadow-sm outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                rows={2}
+                placeholder="Detalles sobre la entrega o estado del vehículo..."
+              />
+            </div>
+
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setReleaseOpen(false)}
+                className="rounded-xl border border-gray-200 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={releaseLoading}
+                className="inline-flex items-center gap-2 rounded-xl bg-rose-600 px-4 py-2 text-sm font-medium text-white hover:bg-rose-700 disabled:opacity-60"
+              >
+                {releaseLoading ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Liberando...
+                  </>
+                ) : (
+                  "Liberar Responsable"
+                )}
+              </button>
+            </div>
+          </form>
+        )}
       </Modal>
 
       {/* Modal Historial Responsables */}
