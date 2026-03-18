@@ -49,6 +49,11 @@ export default function ProtectedRoute({
     return <Navigate to="/home" replace />;
   }
 
+  // Cambio de clave obligatorio
+  if (profile?.requiere_cambio_clave) {
+    return <Navigate to="/cambiar-clave" replace />;
+  }
+
   // Permiso OK → render
   if (typeof canView === "function" && canView(path)) {
     return children;

@@ -11,6 +11,7 @@ export type Profile = {
   rol: "admin" | "jefe" | "operador" | "visitante";
   allowed_views: string[];
   gestion?: string | null;
+  requiere_cambio_clave?: boolean;
 };
 
 type AuthCtx = {

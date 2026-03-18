@@ -8,6 +8,7 @@ import Header from "./components/Header";
 import RequireAuth from "./auth/RequireAuth";
 import ProtectedRoute from "./auth/ProtectedRoute";
 import Login from "./pages/Auth/Login";
+import CambiarClave from "./pages/Auth/CambiarClave";
 
 /* Páginas base */
 import Ayuda from "./pages/Ayuda";
@@ -149,6 +150,7 @@ export default function App() {
       {/* RUTAS PÚBLICAS: login en / y /login */}
       <Route path="/" element={<Login />} />
       <Route path="/login" element={<Login />} />
+      <Route path="/cambiar-clave" element={<CambiarClave />} />
 
       {/* RUTAS PROTEGIDAS */}
       <Route element={<RequireAuth />}>
