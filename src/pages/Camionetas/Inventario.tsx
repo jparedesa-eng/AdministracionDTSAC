@@ -531,9 +531,13 @@ export default function Inventario() {
   }, [load, loadStats]);
 
   // Trigger Notification: Expired Docs
-  const { user } = useAuth() as any; // Cast simple para evitar líos de tipos si AuthContext no exporta exacto
+  const { user, profile } = useAuth() as any; 
   React.useEffect(() => {
-    if (kpiStats.docVencida > 0 && user?.id) {
+    // Solo enviar notificación si el usuario tiene permiso explícito a esta ruta
+    // Ignoramos el comodín "/camionetas/*" para no notificar a operadores regulares
+    const hasExplicitInventarioAuth = (profile?.allowed_views || []).includes("/camionetas/inventario");
+
+    if (kpiStats.docVencida > 0 && user?.id && hasExplicitInventarioAuth) {
       // Throttle: Notify once per day per user using localStorage
       const today = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
       const key = `notified_expired_${user.id}_${today}`;
@@ -548,7 +552,7 @@ export default function Inventario() {
         localStorage.setItem(key, "true");
       }
     }
-  }, [kpiStats.docVencida, user]);
+  }, [kpiStats.docVencida, user, profile]);
 
   /* Acciones */
   const openEdit = (v: Vehiculo) => {
