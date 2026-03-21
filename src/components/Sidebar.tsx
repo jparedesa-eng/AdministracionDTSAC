@@ -32,6 +32,7 @@ import {
   Layers,
   TabletSmartphone,
   Car,
+  Key,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -104,6 +105,8 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeCam_Garita = hasAccess("/camionetas/garita");
   const canSeeCam_MiCamioneta = hasAccess("/camionetas/mi-camioneta");
   const canSeeCam_AsignarTercero = hasAccess("/camionetas/asignar-tercero");
+  const canSeeCam_BitacoraLlaves = hasAccess("/camionetas/bitacora-llaves");
+  const canSeeCam_Historial = hasAccess("/camionetas/historial");
 
   // Pasajes & Hospedaje
   const canSeePas_Solicitar = hasAccess("/pasajes/solicitar");
@@ -163,8 +166,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
     const camionetasSubItems: NavItem[] = [];
     // if (canSeeCam_Solicitar) camionetasSubItems.push({ id: 'cam-solicitar', label: 'Solicitar', path: '/camionetas/solicitar', icon: FilePlus2 });
     if (canSeeCam_Admin) camionetasSubItems.push({ id: 'cam-admin', label: 'Administrar', path: '/camionetas/administrar', icon: Layers });
-    if (hasAccess("/camionetas/historial")) camionetasSubItems.push({ id: 'cam-hist', label: 'Historial', path: '/camionetas/historial', icon: Database });
+    if (canSeeCam_Historial) camionetasSubItems.push({ id: 'cam-hist', label: 'Historial', path: '/camionetas/historial', icon: Database });
     if (canSeeCam_Garita) camionetasSubItems.push({ id: 'cam-garita', label: 'Garita', path: '/camionetas/garita', icon: ClipboardList });
+    if (canSeeCam_BitacoraLlaves) camionetasSubItems.push({ id: 'cam-bitacora-llaves', label: 'Bitácora de Llaves', path: '/camionetas/bitacora-llaves', icon: Key });
     if (canSeeCam_AsignarTercero) camionetasSubItems.push({ id: 'cam-asig-terc', label: 'Asignar Tercero', path: '/camionetas/asignar-tercero', icon: User });
     if (canSeeCam_MiCamioneta) camionetasSubItems.push({ id: 'cam-mim', label: 'Mi Camioneta', path: '/camionetas/mi-camioneta', icon: Car });
     if (canSeeCam_Inventario) camionetasSubItems.push({ id: 'cam-inv', label: 'Inventario', path: '/camionetas/inventario', icon: Car });

@@ -26,6 +26,7 @@ import MiCamioneta from "./pages/Camionetas/MiCamioneta";
 import ProgramacionMantenimiento from "./pages/Camionetas/ProgramacionMantenimiento";
 import HistorialSolicitudesCamionetas from "./pages/Camionetas/HistorialSolicitudes";
 import AsignarTercero from "./pages/Camionetas/AsignarTercero";
+import BitacoraLlaves from "./pages/Camionetas/BitacoraLlaves";
 
 /* Pasajes & Hospedaje */
 import SolicitarPasaje from "./pages/pasajes/SolicitarView";
@@ -214,6 +215,14 @@ export default function App() {
             element={
               <ProtectedRoute path="/camionetas/garita">
                 <Garita />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camionetas/bitacora-llaves"
+            element={
+              <ProtectedRoute path="/camionetas/bitacora-llaves">
+                <BitacoraLlaves />
               </ProtectedRoute>
             }
           />
