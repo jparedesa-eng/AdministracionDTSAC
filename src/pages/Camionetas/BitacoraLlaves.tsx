@@ -1,30 +1,27 @@
-import { useEffect, useState } from "react";
-import { 
-  Key, 
-  Search, 
-  MapPin, 
-  User, 
-  Clock, 
-  ChevronRight, 
-  AlertCircle,
-  ArrowRightLeft,
-  Car,
+import { useEffect, useState, useCallback } from "react";
+import {
+  Key,
+  Search,
+  User,
   LayoutGrid,
-  Info
+  Download
 } from "lucide-react";
 import { supabase } from "../../supabase/supabaseClient";
-import { Modal } from "../../components/ui/Modal";
+import * as XLSX from "xlsx";
+import { Toast } from "../../components/ui/Toast";
+import type { ToastState } from "../../components/ui/Toast";
 
-interface Solicitud {
+interface BitacoraRegistro {
   id: string;
-  nombre: string;
-  dni: string;
-  origen: string;
-  destino: string;
-  estado: string;
-  vehiculo: string;
-  entrega_garita_at: string | null;
-  termino_uso_garita_at: string | null;
+  vehiculo_id: string;
+  conductor_id: string | null;
+  tipo_evento: "ENTRADA" | "SALIDA";
+  fecha_hora: string;
+  conductor_nombre: string | null;
+  conductor_dni: string | null;
+  usuario_nombre: string | null;
+  vehiculo_placa: string;
+  observacion: string | null;
   created_at: string;
 }
 
@@ -37,262 +34,380 @@ interface Vehiculo {
 }
 
 interface KeyStatus {
+  id: string; // ID del vehículo
   placa: string;
   vehiculoInfo?: Vehiculo;
-  lastRecord?: Solicitud;
+  lastRecord?: BitacoraRegistro;
   inUse: boolean;
 }
 
 export default function BitacoraLlaves() {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<KeyStatus[]>([]);
-  const [searchTerm, setSearchTerm] = useState("");
   const [selectedKey, setSelectedKey] = useState<KeyStatus | null>(null);
+
+  // Historial State
+  const [historyRows, setHistoryRows] = useState<BitacoraRegistro[]>([]);
+  const [hLoading, setHLoading] = useState(false);
+  const [hFechaInicio, setHFechaInicio] = useState("");
+  const [hFechaFin, setHFechaFin] = useState("");
+  const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
     fetchData();
+    const today = new Date().toISOString().split('T')[0];
+    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    setHFechaInicio(lastWeek);
+    setHFechaFin(today);
   }, []);
 
-  async function fetchData() {
+  const fetchData = async () => {
     setLoading(true);
     try {
-      const { data: vehiculos, error: vError } = await supabase
-        .from("vehiculos")
+      // 1. Obtener los últimos eventos de la bitácora (últimos 3000 registros para cubrir toda la flota activa)
+      const { data: bitacora, error: bError } = await supabase
+        .from("bitacora_llaves")
         .select("*")
-        .neq("estado", "Inactivo");
+        .order("fecha_hora", { ascending: false })
+        .limit(3000);
 
-      if (vError) throw vError;
+      if (bError) throw bError;
 
-      const { data: solicitudes, error: sError } = await supabase
-        .from("solicitudes")
-        .select("*")
-        .in("estado", ["En uso", "Cerrada"])
-        .order("created_at", { ascending: false });
-
-      if (sError) throw sError;
-
-      const latestMoves = new Map<string, Solicitud>();
-      solicitudes?.forEach((s: Solicitud) => {
-        if (!latestMoves.has(s.vehiculo)) {
-          latestMoves.set(s.vehiculo, s);
+      // 2. Mapear el último registro por ID de vehículo
+      const latestMovesMap = new Map<string, BitacoraRegistro>();
+      bitacora?.forEach((b: BitacoraRegistro) => {
+        if (b.vehiculo_id && !latestMovesMap.has(b.vehiculo_id)) {
+          latestMovesMap.set(b.vehiculo_id, b);
         }
       });
 
-      const processed: KeyStatus[] = (vehiculos || []).map((v: Vehiculo) => {
-        const lastMove = latestMoves.get(v.placa);
+      // 3. Obtener información de vehículos para enriquecer (solo los que están en la bitácora)
+      const vehicleIds = Array.from(latestMovesMap.keys());
+      if (vehicleIds.length === 0) {
+        setData([]);
+        setLoading(false);
+        return;
+      }
+
+      const { data: vehiculos, error: vError } = await supabase
+        .from("vehiculos")
+        .select("*")
+        .in("id", vehicleIds);
+
+      if (vError) throw vError;
+
+      const vehiclesMap = new Map<string, Vehiculo>();
+      vehiculos?.forEach((v: Vehiculo) => {
+        vehiclesMap.set(v.id, v);
+      });
+
+      // 4. Procesar datos finales basándonos ÚNICAMENTE en lo que hay en la bitácora
+      const processed: KeyStatus[] = Array.from(latestMovesMap.values()).map((lastMove) => {
+        const vInfo = vehiclesMap.get(lastMove.vehiculo_id);
         return {
-          placa: v.placa,
-          vehiculoInfo: v,
+          id: lastMove.vehiculo_id,
+          placa: lastMove.vehiculo_placa || vInfo?.placa || "S/N",
+          vehiculoInfo: vInfo,
           lastRecord: lastMove,
-          inUse: lastMove?.estado === "En uso"
+          inUse: lastMove.tipo_evento === "SALIDA"
         };
       });
 
       processed.sort((a, b) => a.placa.localeCompare(b.placa));
       setData(processed);
+
+      if (processed.length > 0 && !selectedKey) {
+        setSelectedKey(processed[0]);
+      }
     } catch (error) {
       console.error("Error fetching bitácora data:", error);
     } finally {
       setLoading(false);
     }
-  }
+  };
 
-  const filteredData = data.filter(item => 
-    item.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    item.lastRecord?.nombre.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const loadHistory = useCallback(async () => {
+    if (!selectedKey || !hFechaInicio || !hFechaFin) return;
+    setHLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from("bitacora_llaves")
+        .select("*")
+        .eq("vehiculo_id", selectedKey.id)
+        .gte("fecha_hora", `${hFechaInicio} 00:00:00`)
+        .lte("fecha_hora", `${hFechaFin} 23:59:59`)
+        .order("fecha_hora", { ascending: false });
 
-  const inUse = filteredData.filter(i => i.inUse);
-  const available = filteredData.filter(i => !i.inUse);
+      if (error) throw error;
+      setHistoryRows(data as BitacoraRegistro[]);
+    } catch (e: any) {
+      setToast({ type: "error", message: e.message });
+    } finally {
+      setHLoading(false);
+    }
+  }, [selectedKey?.id, hFechaInicio, hFechaFin]);
+
+  // Al cambiar la llave seleccionada, limpiamos el historial anterior para que empiece vacío
+  useEffect(() => {
+    setHistoryRows([]);
+  }, [selectedKey?.id]);
+
+  const handleExport = () => {
+    if (historyRows.length === 0 || !selectedKey) return;
+
+    const excelData = historyRows.map(r => ({
+      "FECHA": r.fecha_hora?.split(' ')[0],
+      "HORA": r.fecha_hora?.split(' ')[1],
+      "EVENTO": r.tipo_evento,
+      "CONDUCTOR": r.conductor_nombre,
+      "DNI": r.conductor_dni,
+      "USUARIO": r.usuario_nombre,
+      "OBSERVACION": r.observacion
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(excelData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Historial");
+    XLSX.writeFile(wb, `Historial_${selectedKey.placa}.xlsx`);
+    setToast({ type: "success", message: "Excel descargado" });
+  };
+
+  const inUse = data.filter(i => i.inUse);
+  const available = data.filter(i => !i.inUse);
 
   return (
-    <div className="min-h-screen bg-slate-50/50 pb-12">
-      {/* Header Compacto */}
-      <div className="bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="flex items-center gap-3">
-              <div className="p-2 bg-red-600 rounded-lg text-white">
-                <Key className="w-5 h-5" />
-              </div>
-              <h1 className="text-xl font-bold text-slate-900">Bitácora de Llaves</h1>
+    <div className="flex h-[calc(100vh-130px)] bg-slate-50 -m-8 overflow-hidden font-sans">
+      {/* AREA PRINCIPAL (IZQUIERDA): Grilla de Unidades */}
+      <div className="flex-1 flex flex-col h-full border-r border-slate-200 bg-white">
+        <header className="border-b border-slate-200 p-8">
+          <div className="px-1 flex items-center gap-4">
+            <div className="p-3 bg-red-600 rounded-xl text-white shadow-lg shadow-red-100">
+              <Key className="w-6 h-6" />
             </div>
-
-            <div className="flex items-center gap-3">
-              <div className="relative group flex-1 md:w-80">
-                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
-                <input 
-                  type="text" 
-                  placeholder="Buscar placa o conductor..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full pl-9 pr-4 py-2 bg-slate-100 border-none rounded-xl text-sm outline-none focus:ring-2 focus:ring-red-500/20 focus:bg-white transition-all"
-                />
-              </div>
-              <button 
-                onClick={fetchData}
-                className="p-2 hover:bg-slate-100 rounded-xl transition-colors text-slate-500"
-              >
-                <ArrowRightLeft className="w-5 h-5" />
-              </button>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900 line-clamp-1">Bitácora de Llaves</h1>
+              <p className="mt-1 text-sm text-slate-500 line-clamp-1">Control de salida e ingreso de unidades en garita.</p>
             </div>
           </div>
-        </div>
+        </header>
+
+        <main className="flex-1 overflow-y-auto p-8 space-y-12 bg-slate-50/20">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <div className="w-8 h-8 border-4 border-slate-100 border-t-red-600 rounded-full animate-spin" />
+            </div>
+          ) : (
+            <>
+              {/* Sección En Uso */}
+              <section>
+                <div className="flex items-center gap-2 mb-6 px-1">
+                  <div className="w-1.5 h-6 rounded-full" style={{ backgroundColor: '#ff0000' }} />
+                  <h2 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">En Uso ({inUse.length})</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {inUse.map(item => (
+                    <button
+                      key={item.placa}
+                      onClick={() => setSelectedKey(item)}
+                      className={`p-5 rounded-2xl text-left transition-all border flex flex-col gap-4 relative overflow-hidden group ${selectedKey?.placa === item.placa
+                        ? "border-transparent text-white shadow-xl"
+                        : "bg-white border-slate-300 text-slate-700 hover:border-red-400 hover:shadow-md"
+                        }`}
+                      style={selectedKey?.placa === item.placa ? { backgroundColor: '#ff0000' } : {}}
+                    >
+                      <div className="flex items-center justify-between w-full relative z-10">
+                        <div className="flex items-center gap-3">
+                          <Key className={`w-5 h-5 ${selectedKey?.placa === item.placa ? "text-white" : "text-red-500"}`} />
+                          <div>
+                            <p className={`text-2xl font-black tracking-tight leading-none ${selectedKey?.placa === item.placa ? "text-white" : "text-slate-900"}`}>{item.placa}</p>
+                            <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-wider ${selectedKey?.placa === item.placa ? "text-white/80" : "text-slate-500"}`}>
+                              {(() => {
+                                if (!item.lastRecord?.fecha_hora) return "";
+                                const d = new Date(item.lastRecord.fecha_hora);
+                                const day = d.getDate().toString().padStart(2, '0');
+                                const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                                const hours = d.getHours() % 12 || 12;
+                                const minutes = d.getMinutes().toString().padStart(2, '0');
+                                const ampm = d.getHours() >= 12 ? 'pm' : 'am';
+                                return `${day}/${month} • ${hours}:${minutes} ${ampm}`;
+                              })()}
+                            </p>
+                          </div>
+                        </div>
+                        <User className={`w-4 h-4 ${selectedKey?.placa === item.placa ? "text-white/60" : "text-slate-300"}`} />
+                      </div>
+                      <div className="mt-auto relative z-10">
+                        <p className={`text-xs font-bold uppercase truncate tracking-wide ${selectedKey?.placa === item.placa ? "text-white" : "text-slate-800"}`}>
+                          {item.lastRecord?.conductor_nombre || "Sin Conductor"}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                  {inUse.length === 0 && <p className="col-span-full text-xs text-slate-400 italic py-4">No hay unidades en uso.</p>}
+                </div>
+              </section>
+
+              {/* Sección Disponibles */}
+              <section>
+                <div className="flex items-center gap-2 mb-6 px-1">
+                  <div className="w-1.5 h-6 bg-emerald-500 rounded-full" />
+                  <h2 className="text-sm font-bold text-slate-500 uppercase tracking-[0.2em]">Disponibles ({available.length})</h2>
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {available.map(item => (
+                    <button
+                      key={item.placa}
+                      onClick={() => setSelectedKey(item)}
+                      className={`p-5 rounded-2xl text-left transition-all border flex flex-col gap-4 relative overflow-hidden group ${selectedKey?.placa === item.placa
+                        ? "bg-slate-900 border-transparent text-white shadow-xl"
+                        : "bg-white border-slate-300 text-slate-700 hover:border-emerald-500 hover:shadow-md"
+                        }`}
+                    >
+                      <div className="flex items-center justify-between w-full relative z-10">
+                        <div className="flex items-center gap-3">
+                          <Key className={`w-5 h-5 ${selectedKey?.placa === item.placa ? "text-white" : "text-emerald-500"}`} />
+                          <div>
+                            <p className={`text-2xl font-black tracking-tight leading-none ${selectedKey?.placa === item.placa ? "text-white" : "text-slate-900"}`}>{item.placa}</p>
+                            <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-wider ${selectedKey?.placa === item.placa ? "text-white/60" : "text-slate-500"}`}>
+                              En Garita
+                            </p>
+                          </div>
+                        </div>
+                        <div className={`w-2 h-2 rounded-full ${selectedKey?.placa === item.placa ? "bg-emerald-400 scale-125" : "bg-emerald-500 group-hover:scale-110"}`} />
+                      </div>
+                    </button>
+                  ))}
+                  {available.length === 0 && <p className="col-span-full text-xs text-slate-400 italic py-4">No hay unidades disponibles.</p>}
+                </div>
+              </section>
+            </>
+          )}
+        </main>
       </div>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 mt-6">
-        {loading ? (
-          <div className="flex flex-col items-center justify-center py-24">
-            <div className="w-10 h-10 border-4 border-red-500/20 border-t-red-600 rounded-full animate-spin mb-4" />
-            <p className="text-slate-500 text-sm font-medium">Actualizando...</p>
+      {/* SIDEBAR DERECHO: Detalle e Historial (Flat Style) */}
+      <aside className="w-full lg:w-[400px] border-l border-slate-200 bg-white flex flex-col h-full">
+        {!selectedKey ? (
+          <div className="flex-1 flex flex-col items-center justify-center p-12 text-center opacity-30">
+            <LayoutGrid className="w-12 h-12 mb-4" />
+            <p className="text-xs font-bold uppercase tracking-[0.2em]">Selecciona Unidad</p>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* Sección: En Uso */}
-            <section>
-              <div className="flex items-center justify-between mb-4 px-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-amber-500 shadow-[0_0_8px_rgba(245,158,11,0.5)]" />
-                  <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">En Uso ({inUse.length})</h2>
+          <div className="flex flex-col h-full overflow-y-auto">
+            {/* Header Detalle */}
+            <div className="p-8 border-b border-slate-100 bg-slate-50/50">
+              <div className="flex items-start justify-between mb-6">
+                <div>
+                  <h2 className="text-4xl font-black text-slate-900 tracking-tighter">{selectedKey.placa}</h2>
+                  <p className="text-sm font-bold text-slate-400 mt-1 capitalize">{selectedKey.vehiculoInfo?.marca} {selectedKey.vehiculoInfo?.modelo}</p>
+                  <p className="text-[9px] font-black text-slate-300 mt-1 uppercase tracking-widest bg-slate-100/50 px-2 py-0.5 rounded-full inline-block">
+                    {(() => {
+                      if (!selectedKey.lastRecord?.fecha_hora) return "";
+                      const d = new Date(selectedKey.lastRecord.fecha_hora);
+                      const day = d.getDate().toString().padStart(2, '0');
+                      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                      const year = d.getFullYear();
+                      const hours = d.getHours() % 12 || 12;
+                      const minutes = d.getMinutes().toString().padStart(2, '0');
+                      const ampm = d.getHours() >= 12 ? 'pm' : 'am';
+                      return `${day}-${month}-${year} | ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+                    })()}
+                  </p>
+                </div>
+                <div
+                  className={`px-3 py-1 rounded text-[9px] font-black uppercase tracking-widest border ${selectedKey.inUse ? "text-white border-transparent ring-2 ring-red-500/20" : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                    }`}
+                  style={selectedKey.inUse ? { backgroundColor: '#ff0000' } : {}}
+                >
+                  {selectedKey.inUse ? "EN USO" : "GARITA"}
                 </div>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {inUse.map(item => (
-                   <button
-                    key={item.placa}
-                    onClick={() => setSelectedKey(item)}
-                    className="group bg-white border border-amber-200 hover:border-amber-400 hover:shadow-md p-3 rounded-2xl transition-all flex flex-col items-center text-center relative overflow-hidden active:scale-95"
-                  >
-                    <div className="absolute top-0 left-0 right-0 h-1 bg-amber-500 opacity-50" />
-                    <span className="text-sm font-black text-slate-800 tracking-tight">{item.placa}</span>
-                    <span className="text-[10px] font-bold text-amber-600 mt-0.5 truncate w-full">{item.lastRecord?.nombre.split(' ')[0]}</span>
-                  </button>
-                ))}
-                {inUse.length === 0 && (
-                  <p className="col-span-full text-xs text-slate-400 font-medium py-4 text-center border-2 border-dashed border-slate-200 rounded-2xl">No hay unidades en uso actualmente.</p>
-                )}
-              </div>
-            </section>
 
-            {/* Sección: Disponibles */}
-            <section>
-              <div className="flex items-center justify-between mb-4 px-1">
-                <div className="flex items-center gap-2">
-                  <div className="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
-                  <h2 className="text-sm font-bold text-slate-700 uppercase tracking-wider">En Garita ({available.length})</h2>
+              {selectedKey.lastRecord && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-3">
+                    <User className="w-4 h-4 text-slate-400" />
+                    <p className="text-sm font-bold text-slate-700">{selectedKey.lastRecord.conductor_nombre}</p>
+                  </div>
+                  <div className="text-xs font-bold text-slate-600 italic px-1 translate-y-[-4px]">
+                    {selectedKey.lastRecord.observacion || "Sin observación hoy"}
+                  </div>
                 </div>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                {available.map(item => (
-                   <button
-                    key={item.placa}
-                    onClick={() => setSelectedKey(item)}
-                    className="group bg-white border border-slate-200 hover:border-emerald-400 hover:shadow-md p-3 rounded-2xl transition-all flex flex-col items-center justify-center active:scale-95"
-                  >
-                    <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors uppercase">{item.placa}</span>
-                  </button>
-                ))}
-              </div>
-            </section>
-          </div>
-        )}
-      </div>
-
-      {/* Modal de Detalle */}
-      <Modal
-        open={!!selectedKey}
-        onClose={() => setSelectedKey(null)}
-        title={`Detalles de Unidad: ${selectedKey?.placa}`}
-        size="sm"
-      >
-        {selectedKey && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between bg-slate-50 p-4 rounded-2xl border border-slate-100">
-               <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-xl bg-white shadow-sm ${selectedKey.inUse ? 'text-amber-600' : 'text-emerald-600'}`}>
-                    <Car className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Estado</p>
-                    <p className={`text-sm font-black ${selectedKey.inUse ? 'text-amber-700' : 'text-emerald-700'}`}>
-                      {selectedKey.inUse ? 'En Uso' : 'En Garita (Disponible)'}
-                    </p>
-                  </div>
-               </div>
-               <div className="text-right">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest leading-none mb-1">Vehículo</p>
-                  <p className="text-sm font-bold text-slate-700">{selectedKey.vehiculoInfo?.marca} {selectedKey.vehiculoInfo?.modelo}</p>
-               </div>
+              )}
             </div>
 
-            {selectedKey.lastRecord ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 mt-1">
-                      <User className="w-4 h-4 text-slate-400" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Responsable</p>
-                      <p className="text-base font-bold text-slate-800">{selectedKey.lastRecord.nombre}</p>
-                      <p className="text-xs text-slate-500 font-medium">DNI: {selectedKey.lastRecord.dni}</p>
-                    </div>
-                  </div>
+            {/* Historial (Card Row Style) */}
+            <div className="p-8 space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-bold text-slate-900 uppercase tracking-widest">Historial de Unidad</h3>
+                <button
+                  onClick={handleExport}
+                  style={{ backgroundColor: '#ff0000' }}
+                  className="p-2 text-white rounded-lg shadow-lg shadow-red-100 hover:brightness-110 transition-all active:scale-95"
+                >
+                  <Download className="w-4 h-4" />
+                </button>
+              </div>
 
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-xl bg-slate-50 flex items-center justify-center shrink-0 mt-1">
-                      <MapPin className="w-4 h-4 text-slate-400" />
-                    </div>
-                    <div>
-                      <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Movimiento</p>
-                      <div className="flex items-center gap-2 mt-0.5">
-                        <span className="text-sm font-bold text-slate-700">{selectedKey.lastRecord.origen}</span>
-                        <ChevronRight className="w-3 h-3 text-slate-300" />
-                        <span className="text-sm font-bold text-slate-700">{selectedKey.lastRecord.destino}</span>
-                      </div>
-                    </div>
+              <div className="flex items-end gap-2">
+                <div className="flex-1 grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1">Desde</label>
+                    <input type="date" value={hFechaInicio} onChange={(e) => setHFechaInicio(e.target.value)} className="w-full text-[11px] font-bold bg-slate-50 border border-slate-200 p-2 rounded-lg outline-none" />
                   </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Clock className="w-3.5 h-3.5 text-slate-400" />
-                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Registro:</span>
-                      </div>
-                      <span className="text-xs font-black text-slate-700">
-                        {new Date(selectedKey.inUse ? selectedKey.lastRecord.entrega_garita_at! : selectedKey.lastRecord.termino_uso_garita_at!).toLocaleString()}
-                      </span>
-                    </div>
-                    {!selectedKey.inUse && selectedKey.lastRecord.entrega_garita_at && (
-                       <div className="flex items-center justify-between opacity-60">
-                        <div className="flex items-center gap-2">
-                          <Info className="w-3.5 h-3.5 text-slate-400" />
-                          <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Handover:</span>
-                        </div>
-                        <span className="text-xs font-bold text-slate-700">
-                          {new Date(selectedKey.lastRecord.entrega_garita_at).toLocaleString()}
-                        </span>
-                      </div>
-                    )}
+                  <div className="space-y-1">
+                    <label className="text-[8px] font-bold text-slate-400 uppercase ml-1">Hasta</label>
+                    <input type="date" value={hFechaFin} onChange={(e) => setHFechaFin(e.target.value)} className="w-full text-[11px] font-bold bg-slate-50 border border-slate-200 p-2 rounded-lg outline-none" />
                   </div>
                 </div>
+                <button
+                  onClick={loadHistory}
+                  style={{ backgroundColor: '#ff0000' }}
+                  className="p-2.5 text-white rounded-lg shadow-lg shadow-red-100 hover:brightness-110 transition-all active:scale-95"
+                >
+                  <Search className="w-4 h-4" />
+                </button>
               </div>
-            ) : (
-              <div className="flex flex-col items-center justify-center py-8 bg-slate-50 rounded-2xl border border-dashed border-slate-200">
-                <AlertCircle className="w-6 h-6 text-slate-300 mb-2" />
-                <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Sin registros de movimiento</p>
-              </div>
-            )}
 
-            <button
-               onClick={() => setSelectedKey(null)}
-               className="w-full py-3 bg-white border border-slate-200 rounded-xl text-sm font-bold text-slate-700 hover:bg-slate-50 active:scale-95 transition-all mt-4"
-            >
-              Cerrar
-            </button>
+              <div className="space-y-2">
+                {hLoading ? (
+                  <div className="py-10 flex justify-center"><div className="w-4 h-4 border-2 border-slate-100 border-t-slate-900 rounded-full animate-spin" /></div>
+                ) : historyRows.length === 0 ? (
+                  <p className="text-[10px] text-center text-slate-400 font-bold uppercase py-10">Sin registros</p>
+                ) : historyRows.map(row => (
+                  <div key={row.id} className="p-4 border border-slate-100 rounded-xl space-y-2 hover:border-slate-300 transition-colors text-slate-900">
+                    <div className="flex items-center justify-between border-b border-slate-50 pb-2">
+                      <span className="text-[10px] font-bold text-slate-400">
+                        {(() => {
+                          if (!row.fecha_hora) return "";
+                          const d = new Date(row.fecha_hora);
+                          const day = d.getDate().toString().padStart(2, '0');
+                          const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                          const year = d.getFullYear();
+                          let hours = d.getHours();
+                          const minutes = d.getMinutes().toString().padStart(2, '0');
+                          const ampm = hours >= 12 ? 'pm' : 'am';
+                          hours = hours % 12 || 12;
+                          return `${day}-${month}-${year} | ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+                        })()}
+                      </span>
+                      <span className={`text-[8px] font-black uppercase ${row.tipo_evento === "SALIDA" ? "text-amber-600" : "text-emerald-500"}`}>{row.tipo_evento}</span>
+                    </div>
+                    <p className="text-[11px] font-bold text-slate-700 truncate">{row.conductor_nombre || 'Sin Conductor'}</p>
+                    <p className="text-[9px] font-bold text-slate-400 italic leading-snug line-clamp-2">
+                      {row.observacion}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+
           </div>
         )}
-      </Modal>
+      </aside>
+
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
