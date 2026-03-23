@@ -8,7 +8,7 @@ export type Profile = {
   nombre: string;
   area: string;
   correo: string | null;
-  rol: "admin" | "jefe" | "operador" | "visitante";
+  rol: "admin" | "jefe" | "operador" | "visitante" | "Supervisor" | "Usuario";
   allowed_views: string[];
   gestion?: string | null;
   requiere_cambio_clave?: boolean;

@@ -12,6 +12,10 @@ export type EventoMayor = {
     descripcion?: string;
     impacto?: string;
     estado: string;
+    solucion?: string;
+    fecha_ejecucion?: string | null;
+    usuario_ejecucion?: string;
+    requiere_atencion?: boolean;
     created_at?: string;
 };
 
@@ -20,6 +24,7 @@ interface EventosState {
     loaded: boolean;
     loading: boolean;
     error: string | null;
+    lastFilters: { startDate?: string; endDate?: string };
 }
 
 let state: EventosState = {
@@ -27,6 +32,7 @@ let state: EventosState = {
     loaded: false,
     loading: false,
     error: null,
+    lastFilters: {},
 };
 
 const listeners = new Set<() => void>();
@@ -49,11 +55,20 @@ export function subscribeEventos(listener: () => void) {
 }
 
 export async function fetchEventos(startDate?: string, endDate?: string) {
-    state = { ...state, loading: true, error: null };
+    // If called without args, try to use last filters
+    const sDate = startDate !== undefined ? startDate : state.lastFilters.startDate;
+    const eDate = endDate !== undefined ? endDate : state.lastFilters.endDate;
+
+    state = { 
+        ...state, 
+        loading: true, 
+        error: null,
+        lastFilters: { startDate: sDate, endDate: eDate }
+    };
     notify();
 
     // If no dates, clear events (default state)
-    if (!startDate || !endDate) {
+    if (!sDate || !eDate) {
         state = { ...state, loading: false, loaded: true, eventos: [] };
         notify();
         return;
@@ -65,8 +80,8 @@ export async function fetchEventos(startDate?: string, endDate?: string) {
         .order("fecha_evento", { ascending: false });
 
     // Apply strict date range
-    if (startDate) query = query.gte("fecha_evento", startDate);
-    if (endDate) query = query.lte("fecha_evento", endDate);
+    if (sDate) query = query.gte("fecha_evento", sDate);
+    if (eDate) query = query.lte("fecha_evento", eDate);
 
     const { data, error } = await query;
 
@@ -92,6 +107,8 @@ export async function upsertEvento(evento: Partial<EventoMayor>) {
         .single();
 
     if (error) throw error;
+    
+    // Refresh using last filters
     await fetchEventos();
 }
 
