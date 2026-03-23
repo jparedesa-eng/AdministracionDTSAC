@@ -55,8 +55,11 @@ export default function BitacoraLlaves() {
 
   useEffect(() => {
     fetchData();
-    const today = new Date().toISOString().split('T')[0];
-    const lastWeek = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const now = new Date();
+    const today = now.toLocaleDateString('en-CA'); // YYYY-MM-DD local
+    const lastWeekDate = new Date();
+    lastWeekDate.setDate(now.getDate() - 7);
+    const lastWeek = lastWeekDate.toLocaleDateString('en-CA');
     setHFechaInicio(lastWeek);
     setHFechaFin(today);
   }, []);
@@ -155,15 +158,20 @@ export default function BitacoraLlaves() {
   const handleExport = () => {
     if (historyRows.length === 0 || !selectedKey) return;
 
-    const excelData = historyRows.map(r => ({
-      "FECHA": r.fecha_hora?.split(' ')[0],
-      "HORA": r.fecha_hora?.split(' ')[1],
-      "EVENTO": r.tipo_evento,
-      "CONDUCTOR": r.conductor_nombre,
-      "DNI": r.conductor_dni,
-      "USUARIO": r.usuario_nombre,
-      "OBSERVACION": r.observacion
-    }));
+    const excelData = historyRows.map(r => {
+      const parts = r.fecha_hora?.split(/[T ]/);
+      const date = parts?.[0];
+      const time = parts?.[1]?.split(/[+-]/)[0];
+      return {
+        "FECHA": date,
+        "HORA": time,
+        "EVENTO": r.tipo_evento,
+        "CONDUCTOR": r.conductor_nombre,
+        "DNI": r.conductor_dni,
+        "USUARIO": r.usuario_nombre,
+        "OBSERVACION": r.observacion
+      };
+    });
 
     const ws = XLSX.utils.json_to_sheet(excelData);
     const wb = XLSX.utils.book_new();
@@ -223,13 +231,17 @@ export default function BitacoraLlaves() {
                             <p className={`text-[10px] font-bold mt-1.5 uppercase tracking-wider ${selectedKey?.placa === item.placa ? "text-white/80" : "text-slate-500"}`}>
                               {(() => {
                                 if (!item.lastRecord?.fecha_hora) return "";
-                                const d = new Date(item.lastRecord.fecha_hora);
-                                const day = d.getDate().toString().padStart(2, '0');
-                                const month = (d.getMonth() + 1).toString().padStart(2, '0');
-                                const hours = d.getHours() % 12 || 12;
-                                const minutes = d.getMinutes().toString().padStart(2, '0');
-                                const ampm = d.getHours() >= 12 ? 'pm' : 'am';
-                                return `${day}/${month} • ${hours}:${minutes} ${ampm}`;
+                                // Supabase format: "YYYY-MM-DDTHH:MM:SS+00:00" or "YYYY-MM-DD HH:MM:SS"
+                                const parts = item.lastRecord.fecha_hora.split(/[T ]/);
+                                const datePart = parts[0];
+                                const timePart = parts[1]?.split(/[+-]/)[0];
+                                if (!datePart || !timePart) return item.lastRecord.fecha_hora;
+                                const [year, month, day] = datePart.split('-');
+                                const [h, m] = timePart.split(':');
+                                let hours = parseInt(h);
+                                const ampm = hours >= 12 ? 'PM' : 'AM';
+                                hours = hours % 12 || 12;
+                                return `${day}/${month}/${year} | ${hours}:${m} ${ampm}`;
                               })()}
                             </p>
                           </div>
@@ -303,14 +315,16 @@ export default function BitacoraLlaves() {
                   <p className="text-[9px] font-black text-slate-300 mt-1 uppercase tracking-widest bg-slate-100/50 px-2 py-0.5 rounded-full inline-block">
                     {(() => {
                       if (!selectedKey.lastRecord?.fecha_hora) return "";
-                      const d = new Date(selectedKey.lastRecord.fecha_hora);
-                      const day = d.getDate().toString().padStart(2, '0');
-                      const month = (d.getMonth() + 1).toString().padStart(2, '0');
-                      const year = d.getFullYear();
-                      const hours = d.getHours() % 12 || 12;
-                      const minutes = d.getMinutes().toString().padStart(2, '0');
-                      const ampm = d.getHours() >= 12 ? 'pm' : 'am';
-                      return `${day}-${month}-${year} | ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+                      const parts = selectedKey.lastRecord.fecha_hora.split(/[T ]/);
+                      const datePart = parts[0];
+                      const timePart = parts[1]?.split(/[+-]/)[0];
+                      if (!datePart || !timePart) return selectedKey.lastRecord.fecha_hora;
+                      const [year, month, day] = datePart.split('-');
+                      const [h, m] = timePart.split(':');
+                      let hours = parseInt(h);
+                      const ampm = hours >= 12 ? 'PM' : 'AM';
+                      hours = hours % 12 || 12;
+                      return `${day}/${month}/${year} | ${hours}:${m} ${ampm}`;
                     })()}
                   </p>
                 </div>
@@ -380,15 +394,16 @@ export default function BitacoraLlaves() {
                       <span className="text-[10px] font-bold text-slate-400">
                         {(() => {
                           if (!row.fecha_hora) return "";
-                          const d = new Date(row.fecha_hora);
-                          const day = d.getDate().toString().padStart(2, '0');
-                          const month = (d.getMonth() + 1).toString().padStart(2, '0');
-                          const year = d.getFullYear();
-                          let hours = d.getHours();
-                          const minutes = d.getMinutes().toString().padStart(2, '0');
-                          const ampm = hours >= 12 ? 'pm' : 'am';
+                          const parts = row.fecha_hora.split(/[T ]/);
+                          const datePart = parts[0];
+                          const timePart = parts[1]?.split(/[+-]/)[0];
+                          if (!datePart || !timePart) return row.fecha_hora;
+                          const [year, month, day] = datePart.split('-');
+                          const [h, m] = timePart.split(':');
+                          let hours = parseInt(h);
+                          const ampm = hours >= 12 ? 'PM' : 'AM';
                           hours = hours % 12 || 12;
-                          return `${day}-${month}-${year} | ${hours.toString().padStart(2, '0')}:${minutes} ${ampm}`;
+                          return `${day}/${month}/${year} | ${hours}:${m} ${ampm}`;
                         })()}
                       </span>
                       <span className={`text-[8px] font-black uppercase ${row.tipo_evento === "SALIDA" ? "text-amber-600" : "text-emerald-500"}`}>{row.tipo_evento}</span>
