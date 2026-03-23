@@ -30,6 +30,9 @@ const state: ProgramacionState = {
     error: null,
 };
 
+let lastYear: number | undefined;
+let lastMonth: number | undefined;
+
 const listeners = new Set<() => void>();
 
 function notify() {
@@ -57,16 +60,22 @@ export async function refreshProgramacion(
     year?: number,
     month?: number
 ): Promise<void> {
+    if (year !== undefined) lastYear = year;
+    if (month !== undefined) lastMonth = month;
+
     state.loading = true;
     state.error = null;
     notify();
 
     let query = supabase.from("programacion_turnos").select("*");
 
-    // Si se especifica año y mes, filtrar
-    if (year !== undefined && month !== undefined) {
-        const startDate = new Date(year, month, 1);
-        const endDate = new Date(year, month + 1, 0);
+    // Si se especifican o existen filtros previos, filtrar
+    const y = year !== undefined ? year : lastYear;
+    const m = month !== undefined ? month : lastMonth;
+
+    if (y !== undefined && m !== undefined) {
+        const startDate = new Date(y, m, 1);
+        const endDate = new Date(y, m + 1, 0);
 
         query = query
             .gte("fecha", startDate.toISOString().split("T")[0])

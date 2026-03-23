@@ -707,17 +707,19 @@ export default function ProgramacionPuestos() {
                 activeCell.turno
             );
 
-            // Luego insertar las nuevas asignaciones
-            for (const assignment of editAssignments) {
-                await upsertProgramacion({
-                    fecha: activeCell.dateStr,
-                    puesto_id: activeCell.puestoId,
-                    turno: activeCell.turno,
-                    agente_id: assignment.agenteId,
-                    status: assignment.status,
-                    absence_type: assignment.absenceType || null,
-                    absence_reason: assignment.absenceReason || null,
-                });
+            // Luego insertar las nuevas asignaciones usando bulkUpsert para eficiencia
+            const upsertPayload = editAssignments.map(assignment => ({
+                fecha: activeCell.dateStr,
+                puesto_id: activeCell.puestoId,
+                turno: activeCell.turno,
+                agente_id: assignment.agenteId,
+                status: assignment.status,
+                absence_type: assignment.absenceType || null,
+                absence_reason: assignment.absenceReason || null,
+            }));
+
+            if (upsertPayload.length > 0) {
+                await bulkUpsertProgramacion(upsertPayload);
             }
 
             setModalOpen(false);
