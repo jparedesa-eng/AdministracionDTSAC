@@ -264,3 +264,55 @@ export async function deleteAssignmentsByCell(
 
     await refreshProgramacion();
 }
+
+/**
+ * Fetches data for Excel export with joins.
+ * Filters by date range (fecha), and optional supervisor name or sede id.
+ */
+export async function getProgramacionExportData(filters: {
+    startDate: string;
+    endDate: string;
+    supervisor?: string;
+    sedeId?: string;
+}) {
+    let query = supabase
+        .from("programacion_turnos")
+        .select(`
+            id,
+            fecha,
+            turno,
+            status,
+            absence_type,
+            absence_reason,
+            agentes_seguridad!inner (
+                nombre,
+                dni,
+                supervisor
+            ),
+            puestos_seguridad!inner (
+                nombre,
+                sedes!inner (
+                    id,
+                    nombre
+                )
+            )
+        `)
+        .gte("fecha", filters.startDate)
+        .lte("fecha", filters.endDate);
+
+    if (filters.supervisor && filters.supervisor !== "Todos") {
+        query = query.eq("agentes_seguridad.supervisor", filters.supervisor);
+    }
+
+    if (filters.sedeId && filters.sedeId !== "all") {
+        query = query.eq("puestos_seguridad.sedes.id", filters.sedeId);
+    }
+
+    const { data, error } = await query.order("fecha", { ascending: true });
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return data;
+}

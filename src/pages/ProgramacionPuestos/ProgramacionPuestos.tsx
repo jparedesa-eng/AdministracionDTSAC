@@ -13,8 +13,10 @@ import {
     Users,
     Sun,
     Moon,
-    Camera
+    Camera,
+    FileSpreadsheet
 } from "lucide-react";
+import * as XLSX from "xlsx";
 import { toPng } from "html-to-image";
 import { Modal } from "../../components/ui/Modal";
 import { Toast } from "../../components/ui/Toast";
@@ -25,7 +27,8 @@ import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getAgentesState, subscribeAgentes } from "../../store/agentesStore";
 import {
     getSupervisoresState,
-    subscribeSupervisores
+    subscribeSupervisores,
+    type Supervisor
 } from "../../store/supervisoresStore";
 import { getPuestosState, subscribePuestos } from "../../store/puestosStore";
 import {
@@ -36,7 +39,8 @@ import {
     deleteProgramacion,
     updateAssignmentStatus,
     bulkUpsertProgramacion,
-    upsertProgramacion
+    upsertProgramacion,
+    getProgramacionExportData
 } from "../../store/programacionStore";
 import { upsertAgente } from "../../store/agentesStore";
 
@@ -251,6 +255,7 @@ export default function ProgramacionPuestos() {
     const [modalOpen, setModalOpen] = useState(false);
     const [bulkModalOpen, setBulkModalOpen] = useState(false); // Modal "Grupales"
     const [agentViewOpen, setAgentViewOpen] = useState(false); // Modal "Por Agente"
+    const [exportModalOpen, setExportModalOpen] = useState(false); // Modal "Exportar Excel"
 
     const [activeCell, setActiveCell] = useState<{
         dateStr: string;
@@ -840,6 +845,46 @@ export default function ProgramacionPuestos() {
         }
     };
 
+    const handleExportExcel = async (filters: { startDate: string; endDate: string; supervisor: string; sedeId: string }) => {
+        try {
+            setToast({ type: "info", message: "Generando archivo Excel..." });
+            const data = await getProgramacionExportData(filters);
+
+            if (!data || data.length === 0) {
+                setToast({ type: "warning", message: "No se encontraron datos para los filtros seleccionados." });
+                return;
+            }
+
+            // Transform data for Excel
+            const worksheetData = data.map((row: any) => ({
+                "Fecha": row.fecha,
+                "Sede/Fundo": row.puestos_seguridad?.sedes?.nombre || "N/A",
+                "Puesto": row.puestos_seguridad?.nombre || "N/A",
+                "Turno": row.turno,
+                "Agente": row.agentes_seguridad?.nombre || "N/A",
+                "DNI": row.agentes_seguridad?.dni || "N/A",
+                "Supervisor": row.agentes_seguridad?.supervisor || "N/A",
+                "Estado": row.status,
+                "Tipo Inasistencia": row.absence_type || "",
+                "Motivo": row.absence_reason || ""
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(worksheetData);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Programación");
+
+            // Generate filename
+            const filename = `Programacion_${filters.startDate}_a_${filters.endDate}.xlsx`;
+
+            XLSX.writeFile(workbook, filename);
+            setToast({ type: "success", message: "Archivo Excel generado correctamente." });
+            setExportModalOpen(false);
+        } catch (error: any) {
+            console.error("Excel export error:", error);
+            setToast({ type: "error", message: error.message || "Error al exportar a Excel." });
+        }
+    };
+
 
     return (
         <div className="flex flex-col h-full gap-4 text-slate-800">
@@ -954,6 +999,15 @@ export default function ProgramacionPuestos() {
                         >
                             <Camera className="h-4 w-4" />
                             <span className="hidden xl:inline">Capturar</span>
+                        </button>
+
+                        <button
+                            onClick={() => setExportModalOpen(true)}
+                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-green-600 transition-colors shadow-sm"
+                            title="Exportar a Excel"
+                        >
+                            <FileSpreadsheet className="h-4 w-4" />
+                            <span className="hidden xl:inline">Excel</span>
                         </button>
 
                         <button
@@ -1600,7 +1654,15 @@ export default function ProgramacionPuestos() {
                     </div>
                 </Modal>
 
-
+                <ExportExcelModal
+                    open={exportModalOpen}
+                    onClose={() => setExportModalOpen(false)}
+                    supervisors={supervisores.filter(s => s.activo)}
+                    sedes={sedes}
+                    onExport={handleExportExcel}
+                    initialSedeId={selectedSedeId}
+                    initialSupervisor={selectedSupervisor}
+                />
 
                 {/* Modal "Asignar Puesto" (Vista por Agente) */}
                 <Modal
@@ -1919,6 +1981,155 @@ export default function ProgramacionPuestos() {
                 </Modal>
             </div>
         </div>
+    );
+}
+
+// --- Export Excel Modal Component ---
+function ExportExcelModal({
+    open,
+    onClose,
+    supervisors,
+    sedes,
+    onExport,
+    initialSedeId,
+    initialSupervisor
+}: {
+    open: boolean;
+    onClose: () => void;
+    supervisors: Supervisor[];
+    sedes: { id: string; nombre: string }[];
+    onExport: (filters: { startDate: string; endDate: string; supervisor: string; sedeId: string }) => void;
+    initialSedeId?: string;
+    initialSupervisor?: string;
+}) {
+    const [startDate, setStartDate] = useState("");
+    const [endDate, setEndDate] = useState("");
+    const [selectedSupervisor, setSelectedSupervisor] = useState(initialSupervisor || "Todos");
+    const [selectedSedeId, setSelectedSedeId] = useState(initialSedeId || "all");
+
+    // Sync with initial values when modal opens
+    useEffect(() => {
+        if (open) {
+            setSelectedSupervisor(initialSupervisor || "Todos");
+            setSelectedSedeId(initialSedeId || "all");
+            // Set default dates to current month range
+            const now = new Date();
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+            const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+            setStartDate(firstDay);
+            setEndDate(lastDay);
+        }
+    }, [open, initialSupervisor, initialSedeId]);
+
+    // FILTERED SEDES BASED ON SUPERVISOR
+    const filteredSedes = useMemo(() => {
+        if (!selectedSupervisor || selectedSupervisor === "Todos") return sedes;
+
+        const supervisorObj = supervisors.find(s => s.nombre === selectedSupervisor);
+        if (!supervisorObj) return sedes;
+
+        const assignedIds = supervisorObj.sedes_asignadas || [];
+        if (assignedIds.length === 0) return [];
+
+        return sedes.filter(s => assignedIds.includes(s.id));
+    }, [sedes, selectedSupervisor, supervisors]);
+
+    // Handle supervisor change: reset sede if it's no longer allowed
+    const handleSupervisorChange = (newSupervisor: string) => {
+        setSelectedSupervisor(newSupervisor);
+        if (newSupervisor === "Todos") return;
+
+        const supervisorObj = supervisors.find(s => s.nombre === newSupervisor);
+        if (supervisorObj && supervisorObj.sedes_asignadas) {
+            // If current selectedSedeId is not in the new supervisor's assigned sedes, reset it
+            if (selectedSedeId !== "all" && !supervisorObj.sedes_asignadas.includes(selectedSedeId)) {
+                setSelectedSedeId("all");
+            }
+        }
+    };
+
+    const handleExport = () => {
+        if (!startDate || !endDate) return;
+        onExport({
+            startDate,
+            endDate,
+            supervisor: selectedSupervisor,
+            sedeId: selectedSedeId
+        });
+    };
+
+    return (
+        <Modal open={open} onClose={onClose} title="Exportar a Excel" size="md">
+            <div className="mt-4 space-y-5">
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 flex gap-3 items-start">
+                    <FileSpreadsheet className="h-5 w-5 text-blue-600 mt-0.5" />
+                    <p className="text-xs text-blue-800">
+                        Seleccione el rango de fechas y los filtros opcionales para descargar la programación en formato Excel.
+                    </p>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Fecha Inicio</label>
+                        <input
+                            type="date"
+                            className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                            value={startDate}
+                            onChange={(e) => setStartDate(e.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-1.5">
+                        <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Fecha Fin</label>
+                        <input
+                            type="date"
+                            className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                            value={endDate}
+                            onChange={(e) => setEndDate(e.target.value)}
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Supervisor</label>
+                    <select
+                        className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        value={selectedSupervisor}
+                        onChange={(e) => handleSupervisorChange(e.target.value)}
+                    >
+                        <option value="Todos">Todos los supervisores</option>
+                        {supervisors.map(s => <option key={s.id} value={s.nombre}>{s.nombre}</option>)}
+                    </select>
+                </div>
+
+                <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-gray-500 uppercase tracking-wide">Sede / Fundo</label>
+                    <select
+                        className="w-full text-sm border-gray-300 rounded-lg shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2"
+                        value={selectedSedeId}
+                        onChange={(e) => setSelectedSedeId(e.target.value)}
+                    >
+                        <option value="all">Todas las sedes</option>
+                        {filteredSedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                    </select>
+                </div>
+
+                <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
+                    >
+                        Cancelar
+                    </button>
+                    <button
+                        onClick={handleExport}
+                        disabled={!startDate || !endDate}
+                        className="px-6 py-2 text-sm font-medium text-white bg-green-600 hover:bg-green-700 rounded-lg shadow-lg shadow-green-200 transition-colors disabled:opacity-50"
+                    >
+                        Descargar Excel
+                    </button>
+                </div>
+            </div>
+        </Modal>
     );
 }
 
