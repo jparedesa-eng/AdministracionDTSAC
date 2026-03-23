@@ -217,6 +217,8 @@ export default function ProgramacionPuestos() {
     // Nuevo Estado para Vista por Agente
     const [viewMode, setViewMode] = useState<'PUESTO' | 'AGENTE'>('PUESTO');
     const [selectedSupervisor, setSelectedSupervisor] = useState<string>("");
+    const [selectedWeekNum, setSelectedWeekNum] = useState<number | "ALL">("ALL");
+    const [agentSearch, setAgentSearch] = useState<string>("");
 
     // Refrescar programación cuando cambia el mes
     useEffect(() => {
@@ -273,7 +275,11 @@ export default function ProgramacionPuestos() {
     const [agentModalOpen, setAgentModalOpen] = useState(false);
 
     // --- Computados ---
-    const weeks = useMemo(() => getWeeksForMonth(currentDate.getFullYear(), currentDate.getMonth()), [currentDate]);
+    const allWeeks = useMemo(() => getWeeksForMonth(currentDate.getFullYear(), currentDate.getMonth()), [currentDate]);
+    const weeks = useMemo(() => {
+        if (selectedWeekNum === "ALL") return allWeeks;
+        return allWeeks.filter(w => w.weekNum === selectedWeekNum);
+    }, [allWeeks, selectedWeekNum]);
 
     // FILTERED SEDES (Moved up for dependency)
     const filteredModalSedes = useMemo(() => {
@@ -317,9 +323,19 @@ export default function ProgramacionPuestos() {
     }, [supervisores]);
 
     const filteredAgents = useMemo(() => {
-        if (!selectedSupervisor) return activeAgents;
-        return activeAgents.filter(a => a.supervisor === selectedSupervisor);
-    }, [activeAgents, selectedSupervisor]);
+        let result = activeAgents;
+        if (selectedSupervisor) {
+            result = result.filter(a => a.supervisor === selectedSupervisor);
+        }
+        if (agentSearch) {
+            const lowerSearch = agentSearch.toLowerCase();
+            result = result.filter(a => 
+                a.nombre.toLowerCase().includes(lowerSearch) || 
+                (a.dni && a.dni.toLowerCase().includes(lowerSearch))
+            );
+        }
+        return result;
+    }, [activeAgents, selectedSupervisor, agentSearch]);
 
     // Pivot Assignments for Agent View: AgentID -> DateString -> Assignment[]
     const assignmentsByAgent = useMemo(() => {
@@ -890,9 +906,40 @@ export default function ProgramacionPuestos() {
 
     return (
         <div className="flex flex-col h-full gap-4 text-slate-800">
-            <div className="px-1">
-                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Turnos</h1>
-                <p className="mt-1 text-sm text-gray-500">Programación mensual de agentes y puestos</p>
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center px-1 gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">Gestión de Turnos</h1>
+                    <p className="mt-1 text-sm text-gray-500">Programación mensual de agentes y puestos</p>
+                </div>
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 shrink-0">
+                    <button
+                        onClick={handleScreenshot}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-[#ff0000] border border-transparent rounded-lg hover:bg-red-700 transition-colors shadow-sm"
+                        title="Capturar Vista Actual"
+                    >
+                        <Camera className="h-4 w-4" />
+                        <span className="hidden lg:inline">Capturar</span>
+                    </button>
+
+                    <button
+                        onClick={() => setExportModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-green-600 transition-colors shadow-sm"
+                        title="Exportar a Excel"
+                    >
+                        <FileSpreadsheet className="h-4 w-4" />
+                        <span className="hidden lg:inline">Excel</span>
+                    </button>
+
+                    <button
+                        onClick={() => setBulkModalOpen(true)}
+                        className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
+                        title="Programación Masiva"
+                    >
+                        <Calendar className="h-4 w-4" />
+                        <span className="hidden lg:inline">Masivo</span>
+                    </button>
+                </div>
             </div>
 
             <div className="flex flex-col flex-1 bg-white rounded-xl border border-gray-200 overflow-hidden">
@@ -919,10 +966,10 @@ export default function ProgramacionPuestos() {
                 />
 
                 {/* Toolbar "Inside" Table Header */}
-                <div className="flex flex-col xl:flex-row items-center justify-between p-4 border-b border-gray-200 gap-4 bg-white">
+                <div className="flex flex-col 2xl:flex-row items-center justify-between p-4 border-b border-gray-200 gap-4 bg-white">
 
                     {/* Left: Date Controls */}
-                    <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg w-full xl:w-auto justify-center xl:justify-start">
+                    <div className="flex items-center gap-3 px-3 py-1.5 rounded-lg w-full 2xl:w-auto justify-center 2xl:justify-start shrink-0">
                         <button onClick={handlePrevMonth} className="hover:text-blue-600 transition-colors p-1 rounded-md text-gray-500 hover:bg-gray-100">
                             <ChevronLeft className="h-5 w-5" />
                         </button>
@@ -938,9 +985,9 @@ export default function ProgramacionPuestos() {
                     </div>
 
                     {/* Right: Actions */}
-                    <div className="flex flex-col sm:flex-row items-center gap-3 w-full xl:w-auto">
+                    <div className="flex flex-wrap items-center justify-center 2xl:justify-end gap-3 w-full">
                         {/* View Mode Toggle */}
-                        <div className="flex bg-gray-100 p-1 rounded-lg">
+                        <div className="flex bg-gray-100 p-1 rounded-lg shrink-0">
                             <button
                                 onClick={() => setViewMode('PUESTO')}
                                 className={`px-3 py-1.5 text-xs font-medium rounded-md transition-all ${viewMode === 'PUESTO' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}
@@ -955,83 +1002,85 @@ export default function ProgramacionPuestos() {
                             </button>
                         </div>
 
-                        <div className="h-6 w-px bg-gray-200 hidden sm:block"></div>
+                        <div className="h-6 w-px bg-gray-200 hidden md:block shrink-0"></div>
 
-                        {/* Conditional Filter: Sede (Puesto Mode) vs Supervisor (Agent Mode) */}
-                        {/* Unified Filters: Supervisor -> Sede */}
-                        <div className="flex flex-col sm:flex-row gap-3">
-                            {/* Supervisor Filter */}
-                            <div className="relative group w-full sm:w-48">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <User className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
-                                </div>
-                                <select
-                                    value={selectedSupervisor}
-                                    onChange={(e) => setSelectedSupervisor(e.target.value)}
-                                    className="block w-full pl-9 pr-8 py-2 text-xs border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none font-medium text-gray-700"
-                                >
-                                    <option value="">Todos los Supervisores</option>
-                                    {supervisorOptions.map(s => <option key={s} value={s}>{s}</option>)}
-                                </select>
+                        {/* Week Filter */}
+                        <div className="relative group w-full sm:w-auto sm:min-w-[140px] shrink-0">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <Calendar className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
                             </div>
-
-                            {/* Sede Filter (Filtered by Supervisor) */}
-                            <div className="relative group w-full sm:w-48">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <MapPin className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
-                                </div>
-                                <select
-                                    value={selectedSedeId}
-                                    onChange={(e) => setSelectedSedeId(e.target.value)}
-                                    className="block w-full pl-9 pr-8 py-2 text-xs border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none font-medium text-gray-700"
-                                >
-                                    <option value="">Todas las Sedes</option>
-                                    {filteredModalSedes.length === 0 && <option value="" disabled>Sin sedes asignadas</option>}
-                                    {filteredModalSedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
-                                </select>
-                            </div>
+                            <select
+                                value={selectedWeekNum}
+                                onChange={(e) => setSelectedWeekNum(e.target.value === "ALL" ? "ALL" : Number(e.target.value))}
+                                className="block w-full pl-9 pr-8 py-2 text-xs border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none font-medium text-gray-700"
+                            >
+                                <option value="ALL">Todas las Semanas</option>
+                                {allWeeks.map(w => (
+                                    <option key={w.weekNum} value={w.weekNum}>Semana {w.weekNum}</option>
+                                ))}
+                            </select>
                         </div>
 
-                        {/* Legacy View Button (Keeping just in case or remove if redundant? User asked for replacement, but maybe keep as "Print View") */}
-                        {/* Screenshot Button */}
-                        <button
-                            onClick={handleScreenshot}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-blue-600 transition-colors shadow-sm"
-                            title="Capturar Vista Actual"
-                        >
-                            <Camera className="h-4 w-4" />
-                            <span className="hidden xl:inline">Capturar</span>
-                        </button>
+                        {/* Supervisor Filter */}
+                        <div className="relative group w-full sm:w-auto sm:min-w-[180px] shrink-0">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <User className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                            </div>
+                            <select
+                                value={selectedSupervisor}
+                                onChange={(e) => setSelectedSupervisor(e.target.value)}
+                                className="block w-full pl-9 pr-8 py-2 text-xs border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none font-medium text-gray-700"
+                            >
+                                <option value="">Todos los Supervisores</option>
+                                {supervisorOptions.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                        </div>
 
-                        <button
-                            onClick={() => setExportModalOpen(true)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:text-green-600 transition-colors shadow-sm"
-                            title="Exportar a Excel"
-                        >
-                            <FileSpreadsheet className="h-4 w-4" />
-                            <span className="hidden xl:inline">Excel</span>
-                        </button>
+                        {/* Sede Filter (Filtered by Supervisor) */}
+                        <div className="relative group w-full sm:w-auto sm:min-w-[160px] shrink-0">
+                            <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                <MapPin className="h-4 w-4 text-gray-400 group-hover:text-blue-500 transition-colors" />
+                            </div>
+                            <select
+                                value={selectedSedeId}
+                                onChange={(e) => setSelectedSedeId(e.target.value)}
+                                className="block w-full pl-9 pr-8 py-2 text-xs border-gray-200 rounded-lg focus:ring-blue-500 focus:border-blue-500 bg-gray-50 hover:bg-white transition-colors cursor-pointer outline-none font-medium text-gray-700"
+                            >
+                                <option value="">Todas las Sedes</option>
+                                {filteredModalSedes.length === 0 && <option value="" disabled>Sin sedes asignadas</option>}
+                                {filteredModalSedes.map(s => <option key={s.id} value={s.id}>{s.nombre}</option>)}
+                            </select>
+                        </div>
 
-                        <button
-                            onClick={() => setBulkModalOpen(true)}
-                            className="flex items-center gap-2 px-3 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-lg hover:bg-blue-700 transition-colors shadow-sm"
-                            title="Programación Masiva"
-                        >
-                            <Calendar className="h-4 w-4" />
-                            <span className="hidden xl:inline">Masivo</span>
-                        </button>
+
                     </div>
                 </div>
 
                 {/* Table Container */}
-                <div id="programacion-table-container" className="flex-1 overflow-auto relative bg-slate-50">
+                <div id="programacion-table-container" className="flex-1 overflow-auto relative bg-slate-50" style={{ maxHeight: "calc(100vh - 240px)" }}>
                     <table className="w-full border-collapse text-xs">
                         <thead className="sticky top-0 z-20 bg-white shadow-sm ring-1 ring-gray-200">
                             {/* Row 1: Weeks */}
                             {/* Row 1: Weeks */}
                             <tr>
-                                <th rowSpan={2} className="sticky left-0 z-30 w-64 bg-gray-50 border-b border-r border-gray-200 p-2 text-left font-bold text-gray-700 text-xs align-middle">
-                                    {viewMode === 'PUESTO' ? 'Puesto / Turno' : 'Agente'}
+                                <th rowSpan={2} className="sticky left-0 z-30 w-64 bg-gray-50 border-b border-r border-gray-200 p-2 text-left font-bold text-gray-700 text-xs align-top">
+                                    <div className="flex flex-col h-full gap-2">
+                                        <span className="mt-0.5">{viewMode === 'PUESTO' ? 'Puesto / Turno' : 'Agente'}</span>
+                                        {viewMode === 'AGENTE' && (
+                                            <div className="relative w-full">
+                                                <div className="absolute inset-y-0 left-0 pl-2 flex items-center pointer-events-none">
+                                                    <Search className="h-3 w-3 text-gray-400" />
+                                                </div>
+                                                <input
+                                                    type="text"
+                                                    placeholder="Buscar agente..."
+                                                    value={agentSearch}
+                                                    onChange={(e) => setAgentSearch(e.target.value)}
+                                                    className="block w-full pl-7 pr-2 py-1.5 text-[10px] border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm hover:bg-gray-50 transition-colors outline-none font-medium text-gray-700"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
                                 </th>
                                 {weeks.map((week) => (
                                     <th
