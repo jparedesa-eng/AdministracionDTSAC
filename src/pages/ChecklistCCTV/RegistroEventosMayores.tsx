@@ -1,5 +1,5 @@
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Plus, Pencil, CheckCircle, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Search, Eye } from "lucide-react";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
@@ -26,6 +26,12 @@ export default function RegistroEventosMayores() {
     const { eventos } = getEventosState();
     const { centrales } = getCentralesState();
     const { sedes } = getSedesState();
+    const { profile } = useAuth();
+
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
     const [toast, setToast] = useState<ToastState>(null);
     const [modalOpen, setModalOpen] = useState(false);
     const [modalMode, setModalMode] = useState<'CREATE' | 'EDIT_GENERAL' | 'FINALIZE' | 'VIEW'>('CREATE');
@@ -62,7 +68,7 @@ export default function RegistroEventosMayores() {
 
     const [filters, setFilters] = useState({
         sede_id: "",
-        cctv_id: "",
+        cctv_id: allowedCentrales.length > 0 ? allowedCentrales[0].id : "",
         estado: "TODOS",
         fecha_inicio: startOfMonth,
         fecha_fin: localToday
@@ -178,7 +184,7 @@ export default function RegistroEventosMayores() {
         return isValid;
     };
 
-    const { profile } = useAuth();
+
 
     const handleSave = async () => {
         // Basic required fields check
@@ -325,7 +331,7 @@ export default function RegistroEventosMayores() {
                             onChange={e => setFilters({ ...filters, cctv_id: e.target.value, sede_id: "" })}
                         >
                             <option value="">Todas</option>
-                            {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                            {allowedCentrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                         </select>
                     </div>
                     <div className="min-w-[150px] flex-1">
@@ -545,7 +551,7 @@ export default function RegistroEventosMayores() {
                                         onChange={e => setFormData({ ...formData, cctv_id: e.target.value, sede_id: "" })}
                                     >
                                         <option value="">-- Seleccionar Central --</option>
-                                        {centrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
+                                        {allowedCentrales.map(c => <option key={c.id} value={c.id}>{c.nombre}</option>)}
                                     </select>
                                 </div>
                                 <div>

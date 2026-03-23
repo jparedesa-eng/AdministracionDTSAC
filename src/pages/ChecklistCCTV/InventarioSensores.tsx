@@ -12,6 +12,7 @@ import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
 import { getSensoresState, subscribeSensores, upsertSensor, type Sensor } from "../../store/sensoresStore";
+import { useAuth } from "../../auth/AuthContext";
 
 export default function InventarioSensores() {
     const [, setSedesVersion] = useState(0);
@@ -33,6 +34,12 @@ export default function InventarioSensores() {
     const { sedes } = getSedesState();
     const { centrales } = getCentralesState();
     const { sensores } = getSensoresState();
+    const { profile } = useAuth();
+
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
 
     const [toast, setToast] = useState<ToastState>(null);
 
@@ -42,7 +49,7 @@ export default function InventarioSensores() {
             <div className="min-h-[400px]">
                 <TabSensores
                     sedes={sedes}
-                    centrales={centrales}
+                    centrales={allowedCentrales}
                     sensores={sensores}
                     onAdd={async (data) => {
                         try {
@@ -82,7 +89,7 @@ function TabSensores({
     onUpdate: (id: string, data: Partial<Sensor>) => void;
 }) {
     const [search, setSearch] = useState("");
-    const [filterCentral, setFilterCentral] = useState("");
+    const [filterCentral, setFilterCentral] = useState(centrales.length > 0 ? centrales[0].id : "");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Sensor | null>(null);
     const [page, setPage] = useState(1);

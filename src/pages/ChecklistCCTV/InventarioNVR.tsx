@@ -11,6 +11,8 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
 import { getNVRState, subscribeNVR, upsertNVR, type NVR } from "../../store/nvrStore";
+import { useAuth } from "../../auth/AuthContext";
+import { useMemo } from "react";
 
 export default function InventarioNVR() {
     const [, setCentralesVersion] = useState(0);
@@ -27,6 +29,13 @@ export default function InventarioNVR() {
 
     const { centrales } = getCentralesState();
     const { nvrs } = getNVRState();
+    const { profile } = useAuth();
+
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
+
     const [toast, setToast] = useState<ToastState>(null);
 
     return (
@@ -34,7 +43,7 @@ export default function InventarioNVR() {
             <Toast toast={toast} onClose={() => setToast(null)} />
             <div className="min-h-[400px]">
                 <TabNVR
-                    centrales={centrales}
+                    centrales={allowedCentrales}
                     nvrs={nvrs}
                     onAdd={async (data) => {
                         try {
@@ -72,7 +81,7 @@ function TabNVR({
     onUpdate: (id: string, data: Partial<NVR>) => void;
 }) {
     const [search, setSearch] = useState("");
-    const [filterCentral, setFilterCentral] = useState("");
+    const [filterCentral, setFilterCentral] = useState(centrales.length > 0 ? centrales[0].id : "");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<NVR | null>(null);
 

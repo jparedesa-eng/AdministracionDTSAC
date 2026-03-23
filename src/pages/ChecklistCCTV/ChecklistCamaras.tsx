@@ -52,7 +52,7 @@ type QualityValue = keyof typeof QUALITY_LABELS;
 
 
 export default function ChecklistCamaras() {
-    const { user } = useAuth();
+    const { user, profile } = useAuth();
     const [, setVersion] = useState(0);
 
     useEffect(() => {
@@ -75,6 +75,12 @@ export default function ChecklistCamaras() {
     const { camaras } = getCamarasState();
     const { sedes } = getSedesState();
     const { detalles, reportes } = getChecklistState();
+
+    // Filter centrales if user is not admin and has gestion
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
 
     // Filters State
     const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
@@ -127,10 +133,10 @@ export default function ChecklistCamaras() {
 
     // Auto-select first central
     useEffect(() => {
-        if (centrales.length > 0 && !selectedCentral) {
-            setSelectedCentral(centrales[0].id);
+        if (allowedCentrales.length > 0 && !selectedCentral) {
+            setSelectedCentral(allowedCentrales[0].id);
         }
-    }, [centrales, selectedCentral]);
+    }, [allowedCentrales, selectedCentral]);
 
     // Load existing checklist
     const loadChecklist = async () => {
@@ -170,10 +176,10 @@ export default function ChecklistCamaras() {
     // Cascading Filters Logic
     const availableSedes = useMemo(() => {
         if (!selectedCentral) return [];
-        const central = centrales.find(c => c.id === selectedCentral);
+        const central = allowedCentrales.find(c => c.id === selectedCentral);
         if (!central || !central.sedes) return [];
         return sedes.filter(s => central.sedes?.includes(s.id)).sort((a, b) => a.nombre.localeCompare(b.nombre));
-    }, [centrales, sedes, selectedCentral]);
+    }, [allowedCentrales, sedes, selectedCentral]);
 
     const availableZonas = useMemo(() => {
         const filtered = camaras.filter(c => {
@@ -1028,7 +1034,7 @@ export default function ChecklistCamaras() {
                         onChange={(e) => { setSelectedCentral(e.target.value); setSelectedSede('ALL'); setSelectedZona('ALL'); }}
                         className="bg-white border border-slate-300 text-sm font-semibold px-4 py-2 rounded-xl outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer min-w-[150px] appearance-none"
                     >
-                        {centrales.map(sys => <option key={sys.id} value={sys.id}>{sys.nombre}</option>)}
+                        {allowedCentrales.map(sys => <option key={sys.id} value={sys.id}>{sys.nombre}</option>)}
                     </select>
                 </div>
 
@@ -1499,7 +1505,7 @@ export default function ChecklistCamaras() {
                                     <div className="bg-blue-600 p-2.5 rounded-xl text-white"><ShieldCheck size={20} /></div>
                                     <div>
                                         <h3 className="text-lg font-black text-slate-900 tracking-tight">Checklist de Auditoría Técnica</h3>
-                                        <p className="text-blue-600 text-[9px] font-bold uppercase tracking-[0.3em] mt-0.5">{centrales.find(c => c.id === selectedCentral)?.nombre} • Ronda de Seguridad</p>
+                                        <p className="text-blue-600 text-[9px] font-bold uppercase tracking-[0.3em] mt-0.5">{allowedCentrales.find(c => c.id === selectedCentral)?.nombre} • Ronda de Seguridad</p>
                                     </div>
                                 </div>
                                 <div className="flex items-center gap-3">
@@ -1555,7 +1561,7 @@ export default function ChecklistCamaras() {
                                         <div key={zona} className="space-y-4">
                                             <div className="flex flex-col border-l-[3px] border-blue-600 pl-3">
                                                 <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em]">{zona}</h4>
-                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{centrales.find(c => c.id === selectedCentral)?.nombre}</span>
+                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{allowedCentrales.find(c => c.id === selectedCentral)?.nombre}</span>
                                             </div>
                                             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-4">
                                                 {cams.map(cam => (
@@ -1571,7 +1577,7 @@ export default function ChecklistCamaras() {
                                         <div key={zona} className="space-y-4">
                                             <div className="flex flex-col border-l-[3px] border-blue-600 pl-3">
                                                 <h4 className="text-[11px] font-black text-slate-800 uppercase tracking-[0.2em]">{zona}</h4>
-                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{centrales.find(c => c.id === selectedCentral)?.nombre}</span>
+                                                <span className="text-[9px] text-slate-400 font-bold uppercase">{allowedCentrales.find(c => c.id === selectedCentral)?.nombre}</span>
                                             </div>
                                             {renderAuditTable(cams)}
                                         </div>
@@ -1621,7 +1627,7 @@ export default function ChecklistCamaras() {
 
                             <div className="w-full bg-blue-50 p-4 rounded-xl border border-blue-100">
                                 <p className="text-xs text-blue-800 font-medium text-center">
-                                    Se descargará el reporte detallado de auditorías para la central <strong>{centrales.find(c => c.id === selectedCentral)?.nombre}</strong>.
+                                    Se descargará el reporte detallado de auditorías para la central <strong>{allowedCentrales.find(c => c.id === selectedCentral)?.nombre}</strong>.
                                 </p>
                             </div>
 

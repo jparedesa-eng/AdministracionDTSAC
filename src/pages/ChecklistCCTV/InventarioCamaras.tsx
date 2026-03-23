@@ -22,6 +22,7 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { FileDown } from "lucide-react";
 import { DateRangePicker } from "../../components/ui/DateRangePicker";
+import { useAuth } from "../../auth/AuthContext";
 
 export default function InventarioCamaras() {
     const [, setSedesVersion] = useState(0);
@@ -43,6 +44,13 @@ export default function InventarioCamaras() {
     const { sedes } = getSedesState();
     const { centrales } = getCentralesState();
     const { camaras } = getCamarasState();
+    const { profile } = useAuth();
+
+    // Filter centrales if user is not admin and has gestion
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
 
     const [toast, setToast] = useState<ToastState>(null);
 
@@ -56,7 +64,7 @@ export default function InventarioCamaras() {
             <div className="min-h-[400px]">
                 <TabCamaras
                     sedes={sedes}
-                    centrales={centrales}
+                    centrales={allowedCentrales}
                     camaras={camaras}
                     setToast={setToast}
                     onAdd={async (data) => {
@@ -106,7 +114,10 @@ function TabCamaras({
 }) {
     const [search, setSearch] = useState("");
     const [filterSede, setFilterSede] = useState("");
-    const [filterCentral, setFilterCentral] = useState("");
+    const [filterCentral, setFilterCentral] = useState(() => {
+        if (centrales.length > 0) return centrales[0].id;
+        return "";
+    });
     const [filterTipo, setFilterTipo] = useState("");
     const [filterUbicacion, setFilterUbicacion] = useState("");
     const [filterEstado, setFilterEstado] = useState<"all" | "activa" | "inactiva">("all");

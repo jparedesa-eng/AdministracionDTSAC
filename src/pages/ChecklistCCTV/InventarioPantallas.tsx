@@ -11,6 +11,8 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
 import { getPantallasState, subscribePantallas, upsertPantalla, type Pantalla } from "../../store/pantallasStore";
+import { useAuth } from "../../auth/AuthContext";
+import { useMemo } from "react";
 
 export default function InventarioPantallas() {
     const [, setCentralesVersion] = useState(0);
@@ -28,6 +30,12 @@ export default function InventarioPantallas() {
 
     const { centrales } = getCentralesState();
     const { pantallas } = getPantallasState();
+    const { profile } = useAuth();
+
+    const allowedCentrales = useMemo(() => {
+        if (!profile || profile.rol === "admin" || !profile.gestion) return centrales;
+        return centrales.filter(c => c.nombre.toLowerCase() === profile.gestion?.toLowerCase());
+    }, [centrales, profile]);
 
     const [toast, setToast] = useState<ToastState>(null);
 
@@ -36,7 +44,7 @@ export default function InventarioPantallas() {
             <Toast toast={toast} onClose={() => setToast(null)} />
             <div className="min-h-[400px]">
                 <TabPantallas
-                    centrales={centrales}
+                    centrales={allowedCentrales}
                     pantallas={pantallas}
                     onAdd={async (data) => {
                         try {
@@ -74,7 +82,7 @@ function TabPantallas({
     onUpdate: (id: string, data: Partial<Pantalla>) => void;
 }) {
     const [search, setSearch] = useState("");
-    const [filterCentral, setFilterCentral] = useState("");
+    const [filterCentral, setFilterCentral] = useState(centrales.length > 0 ? centrales[0].id : "");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Pantalla | null>(null);
     const [page, setPage] = useState(1);
