@@ -104,13 +104,20 @@ import Forbidden403 from "./pages/Errors/403";
 /* Layout protegido */
 function ProtectedLayout() {
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
-  const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(false);
+  const [isDesktopCollapsed, setIsDesktopCollapsed] = React.useState(() => {
+    const saved = localStorage.getItem("sidebarCollapsed");
+    return saved ? JSON.parse(saved) : false;
+  });
 
   const handleToggleSidebar = () => {
     if (window.innerWidth < 768) {
       setIsMobileOpen(!isMobileOpen);
     } else {
-      setIsDesktopCollapsed(!isDesktopCollapsed);
+      setIsDesktopCollapsed((prev: boolean) => {
+        const newVal = !prev;
+        localStorage.setItem("sidebarCollapsed", JSON.stringify(newVal));
+        return newVal;
+      });
     }
   };
 

@@ -329,8 +329,8 @@ export default function ProgramacionPuestos() {
         }
         if (agentSearch) {
             const lowerSearch = agentSearch.toLowerCase();
-            result = result.filter(a => 
-                a.nombre.toLowerCase().includes(lowerSearch) || 
+            result = result.filter(a =>
+                a.nombre.toLowerCase().includes(lowerSearch) ||
                 (a.dni && a.dni.toLowerCase().includes(lowerSearch))
             );
         }
@@ -1056,10 +1056,9 @@ export default function ProgramacionPuestos() {
                     </div>
                 </div>
 
-                {/* Table Container */}
-                <div id="programacion-table-container" className="flex-1 overflow-auto relative bg-slate-50" style={{ maxHeight: "calc(100vh - 240px)" }}>
-                    <table className="w-full border-collapse text-xs">
-                        <thead className="sticky top-0 z-20 bg-white shadow-sm ring-1 ring-gray-200">
+                <div id="programacion-table-container" className="flex-1 overflow-auto overflow-x-auto relative bg-slate-50 relative" style={{ maxHeight: "calc(100vh - 240px)", willChange: "transform" }}>
+                    <table className="w-max min-w-full table-fixed border-collapse text-xs">
+                        <thead className="sticky top-0 z-20 bg-white border-b border-gray-200">
                             {/* Row 1: Weeks */}
                             {/* Row 1: Weeks */}
                             <tr>
@@ -1076,7 +1075,7 @@ export default function ProgramacionPuestos() {
                                                     placeholder="Buscar agente..."
                                                     value={agentSearch}
                                                     onChange={(e) => setAgentSearch(e.target.value)}
-                                                    className="block w-full pl-7 pr-2 py-1.5 text-[10px] border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white shadow-sm hover:bg-gray-50 transition-colors outline-none font-medium text-gray-700"
+                                                    className="block w-full pl-7 pr-2 py-1.5 text-[10px] border border-gray-200 rounded-md focus:ring-blue-500 focus:border-blue-500 bg-white hover:bg-gray-50 outline-none font-medium text-gray-700"
                                                 />
                                             </div>
                                         )}
@@ -1148,8 +1147,8 @@ export default function ProgramacionPuestos() {
 
                                             {/* Turnos */}
                                             {puesto.turnos.map(turno => (
-                                                <tr key={`${puesto.id}-${turno}`} className="transition-colors">
-                                                    <td className="sticky left-0 z-10 border-r border-dashed border-gray-200 bg-white px-4 py-2 text-[11px] font-medium text-gray-500 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                                                <tr key={`${puesto.id}-${turno}`}>
+                                                    <td className="sticky left-0 z-10 border-r border-dashed border-gray-200 bg-white px-4 py-2 text-[11px] font-medium text-gray-500">
                                                         <div className="flex items-center gap-2 pl-4">
                                                             {turno === 'DIA' ? (
                                                                 <Sun className="h-3 w-3 text-amber-500" />
@@ -1171,7 +1170,7 @@ export default function ProgramacionPuestos() {
                                                             return (
                                                                 <td
                                                                     key={key}
-                                                                    className={`border-r border-dashed border-gray-200 p-1 text-center transition-all h-14 relative group/cell ${cellClass}`}
+                                                                    className={`border-r border-dashed border-gray-200 p-1 text-center h-14 relative group/cell ${cellClass}`}
                                                                     onClick={() => handleCellClick(dayNum, puesto.id, turno)}
                                                                 >
                                                                     <div className="flex flex-col gap-0.5 h-full w-full overflow-hidden">
@@ -1202,7 +1201,7 @@ export default function ProgramacionPuestos() {
                                                                     </div>
 
                                                                     {/* Hover Plus Icon */}
-                                                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 pointer-events-none transition-opacity">
+                                                                    <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 pointer-events-none">
                                                                         <Plus className="h-3 w-3 text-gray-400 opacity-60" />
                                                                     </div>
                                                                 </td>
@@ -1229,8 +1228,8 @@ export default function ProgramacionPuestos() {
                                     </tr>
                                 ) : (
                                     filteredAgents.map((agent) => (
-                                        <tr key={agent.id} className="transition-colors hover:bg-gray-50/50">
-                                            <td className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 text-xs shadow-[2px_0_5px_-2px_rgba(0,0,0,0.02)]">
+                                        <tr key={agent.id} className="hover:bg-gray-50/50">
+                                            <td className="sticky left-0 z-10 border-b border-r border-gray-200 bg-white px-4 py-2 font-medium text-gray-700 text-xs">
                                                 <div className="flex items-center gap-2 overflow-hidden">
                                                     <div className="h-6 w-6 rounded-full bg-blue-50 flex items-center justify-center text-blue-600 font-bold shrink-0">
                                                         {agent.nombre.charAt(0)}
@@ -1250,7 +1249,7 @@ export default function ProgramacionPuestos() {
                                                     return (
                                                         <td
                                                             key={`${agent.id}-${dayNum}`}
-                                                            className="border-b border-r border-gray-200 p-1 text-center transition-all h-14 relative group/cell cursor-pointer hover:bg-gray-50"
+                                                            className="border-b border-r border-gray-200 p-1 text-center h-14 relative group/cell cursor-pointer hover:bg-gray-50"
                                                             onClick={() => {
                                                                 // Open special modal for agent assignment
                                                                 // We need a special handler or reuse existing?
@@ -1281,7 +1280,7 @@ export default function ProgramacionPuestos() {
 
                                                                     // Override if Status is set
                                                                     if (assign.status === 'CUMPLIDO') {
-                                                                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-500 shadow-sm";
+                                                                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-500";
                                                                     } else if (assign.status === 'FALTA') {
                                                                         badgeClass = "bg-red-50 text-red-800 border-red-200 hover:border-red-400";
                                                                     }
@@ -1289,7 +1288,7 @@ export default function ProgramacionPuestos() {
                                                                     return (
                                                                         <div
                                                                             key={idx}
-                                                                            className={`flex-1 ${badgeClass} rounded-md flex flex-col justify-start items-start border text-[8px] leading-none w-full min-h-0 relative px-1.5 py-1.5 transition-all gap-0.5`}
+                                                                            className={`flex-1 ${badgeClass} rounded-md flex flex-col justify-start items-start border text-[8px] leading-none w-full min-h-0 relative px-1.5 py-1.5 gap-0.5`}
                                                                             title={`${puestoName} - ${turno}`}
                                                                         >
                                                                             {/* 1. Turno */}
@@ -1309,7 +1308,7 @@ export default function ProgramacionPuestos() {
                                                             </div>
 
                                                             {/* Hover Plus Icon */}
-                                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 pointer-events-none transition-opacity">
+                                                            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover/cell:opacity-100 pointer-events-none">
                                                                 <Plus className="h-3 w-3 text-gray-400 opacity-60" />
                                                             </div>
                                                         </td>
