@@ -760,12 +760,18 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
                       return sD <= fDateStr && eD >= iDateStr;
                     })
                     .map(s => {
-                      const sTime = new Date(s.usoInicio).getTime();
-                      let tStart = (sTime - baseTime) / (1000 * 60 * 60);
+                      const sD = s.usoInicio.slice(0, 10);
+                      const sHour = parseInt(s.usoInicio.slice(11, 13), 10);
+                      const sMin = parseInt(s.usoInicio.slice(14, 16), 10);
+                      const daysDiffS = Math.round((new Date(sD + "T00:00:00").getTime() - baseTime) / (1000 * 60 * 60 * 24));
+                      let tStart = daysDiffS * 24 + sHour + (sMin / 60);
                       if (tStart < 0) tStart = 0;
 
-                      const eTime = new Date(s.usoFin).getTime();
-                      let tEnd = (eTime - baseTime) / (1000 * 60 * 60);
+                      const eD = s.usoFin.slice(0, 10);
+                      const eHour = parseInt(s.usoFin.slice(11, 13), 10);
+                      const eMin = parseInt(s.usoFin.slice(14, 16), 10);
+                      const daysDiffE = Math.round((new Date(eD + "T00:00:00").getTime() - baseTime) / (1000 * 60 * 60 * 24));
+                      let tEnd = daysDiffE * 24 + eHour + (eMin / 60);
                       if (tEnd > totalHours) tEnd = totalHours;
 
                       const left = (tStart / totalHours) * 100;
