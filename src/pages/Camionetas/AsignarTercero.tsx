@@ -678,12 +678,18 @@ export default function AsignarTercero() {
                       return sD <= fDateStr && eD >= iDateStr;
                     })
                     .map(s => {
-                      const sTime = new Date(s.usoInicio).getTime();
-                      let tStart = (sTime - baseTime) / (1000 * 60 * 60);
+                      const sD = s.usoInicio.slice(0, 10);
+                      const sHour = parseInt(s.usoInicio.slice(11, 13), 10);
+                      const sMin = parseInt(s.usoInicio.slice(14, 16), 10);
+                      const daysDiffS = Math.round((new Date(sD + "T00:00:00").getTime() - baseTime) / (1000 * 60 * 60 * 24));
+                      let tStart = daysDiffS * 24 + sHour + (sMin / 60);
                       if (tStart < 0) tStart = 0;
 
-                      const eTime = new Date(s.usoFin).getTime();
-                      let tEnd = (eTime - baseTime) / (1000 * 60 * 60);
+                      const eD = s.usoFin.slice(0, 10);
+                      const eHour = parseInt(s.usoFin.slice(11, 13), 10);
+                      const eMin = parseInt(s.usoFin.slice(14, 16), 10);
+                      const daysDiffE = Math.round((new Date(eD + "T00:00:00").getTime() - baseTime) / (1000 * 60 * 60 * 24));
+                      let tEnd = daysDiffE * 24 + eHour + (eMin / 60);
                       if (tEnd > totalHours) tEnd = totalHours;
 
                       const left = (tStart / totalHours) * 100;
@@ -699,7 +705,9 @@ export default function AsignarTercero() {
                         >
                           {width > (400 / totalHours) && (
                             <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
-                              {totalDays > 1 ? `${s.usoInicio.slice(5, 10)}` : `${s.usoInicio.slice(11, 16)}`}
+                              {totalDays > 1 
+                                ? `${s.usoInicio.slice(5, 10)} a ${s.usoFin.slice(5, 10)}` 
+                                : `${s.usoInicio.slice(11, 16)} - ${s.usoFin.slice(11, 16)}`}
                             </span>
                           )}
                           <div className="opacity-0 group-hover:opacity-100 absolute -top-12 left-1/2 -translate-x-1/2 bg-gray-900 text-white text-[12px] font-medium px-3 py-1.5 rounded-lg shadow-xl pointer-events-none whitespace-nowrap z-20 transition-opacity">
