@@ -14,6 +14,7 @@ export type ProgramacionTurno = {
     status: AssignmentStatus;
     absence_type?: AbsenceType | null;
     absence_reason?: string | null;
+    usuario_registro_id?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
 };
@@ -100,6 +101,7 @@ export async function refreshProgramacion(
         status: row.status as AssignmentStatus,
         absence_type: row.absence_type as AbsenceType | null,
         absence_reason: row.absence_reason as string | null,
+        usuario_registro_id: row.usuario_registro_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }));
@@ -117,6 +119,7 @@ export async function upsertProgramacion(input: {
     status?: AssignmentStatus;
     absence_type?: AbsenceType | null;
     absence_reason?: string | null;
+    usuario_registro_id?: string;
 }): Promise<void> {
     const payload = {
         fecha: input.fecha,
@@ -126,6 +129,7 @@ export async function upsertProgramacion(input: {
         status: input.status || "PENDING",
         absence_type: input.absence_type || null,
         absence_reason: input.absence_reason || null,
+        ...(input.usuario_registro_id && { usuario_registro_id: input.usuario_registro_id }),
     };
 
     const { error } = await supabase
@@ -150,6 +154,7 @@ export async function bulkUpsertProgramacion(inputs: {
     status?: AssignmentStatus;
     absence_type?: AbsenceType | null;
     absence_reason?: string | null;
+    usuario_registro_id?: string;
 }[]): Promise<void> {
     if (inputs.length === 0) return;
 
@@ -161,6 +166,7 @@ export async function bulkUpsertProgramacion(inputs: {
         status: input.status || "PENDING",
         absence_type: input.absence_type || null,
         absence_reason: input.absence_reason || null,
+        ...(input.usuario_registro_id && { usuario_registro_id: input.usuario_registro_id }),
     }));
 
     // Perform upsert (using a loop for now if batch fails or direct batch if table constraints allow)
@@ -251,6 +257,7 @@ export async function updateAssignmentStatus(
         status,
         absence_type: absenceType,
         absence_reason: absenceReason,
+        usuario_registro_id: turno.usuario_registro_id || undefined,
     });
 }
 

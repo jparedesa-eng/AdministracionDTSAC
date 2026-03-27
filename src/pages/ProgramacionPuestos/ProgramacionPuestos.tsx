@@ -43,6 +43,7 @@ import {
     getProgramacionExportData
 } from "../../store/programacionStore";
 import { upsertAgente } from "../../store/agentesStore";
+import { useAuth } from "../../auth/AuthContext";
 
 // --- Helpers de Fecha ---
 
@@ -186,6 +187,7 @@ export default function ProgramacionPuestos() {
     const [, setPuestosVersion] = useState(0);
     const [, setProgramacionVersion] = useState(0);
     const [, setSupervisoresVersion] = useState(0);
+    const { user } = useAuth();
 
     useEffect(() => {
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
@@ -501,7 +503,8 @@ export default function ProgramacionPuestos() {
                 agente_id: activeAgentCell.agentId,
                 status: 'PENDING',
                 absence_type: null,
-                absence_reason: null
+                absence_reason: null,
+                usuario_registro_id: user?.id
             });
             setAgentModalOpen(false);
             setToast({ type: "success", message: "Turno asignado correctamente." });
@@ -682,7 +685,8 @@ export default function ProgramacionPuestos() {
                 // Auto-create if not exists
                 await upsertAgente({
                     nombre: prosegurName,
-                    activo: true
+                    activo: true,
+                    usuario_registro_id: user?.id
                 });
                 // Find agent again after creation implies store update via listener
                 setToast({ type: "info", message: `Creando agente ${prosegurName}... Inténtelo de nuevo.` });
@@ -732,6 +736,7 @@ export default function ProgramacionPuestos() {
                 status: assignment.status,
                 absence_type: assignment.absenceType || null,
                 absence_reason: assignment.absenceReason || null,
+                usuario_registro_id: user?.id
             }));
 
             if (upsertPayload.length > 0) {

@@ -9,6 +9,7 @@ export type Puesto = {
     sede_id: string;
     turnos: Turno[];
     activo: boolean;
+    usuario_registro_id?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
 };
@@ -71,6 +72,7 @@ export async function refreshPuestos(): Promise<void> {
         sede_id: row.sede_id as string,
         turnos: (row.turnos || []) as Turno[],
         activo: row.activo as boolean,
+        usuario_registro_id: row.usuario_registro_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }));
@@ -85,12 +87,14 @@ export async function upsertPuesto(input: {
     sede_id: string;
     turnos: Turno[];
     activo?: boolean;
+    usuario_registro_id?: string;
 }): Promise<void> {
     const payload = {
         nombre: input.nombre,
         sede_id: input.sede_id,
         turnos: input.turnos,
         activo: input.activo ?? true,
+        ...(input.usuario_registro_id && { usuario_registro_id: input.usuario_registro_id }),
     };
 
     const { error } = await supabase

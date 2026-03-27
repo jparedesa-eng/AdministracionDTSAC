@@ -24,6 +24,7 @@ import {
     type Supervisor
 } from "../../store/supervisoresStore";
 import { getPuestosState, subscribePuestos, upsertPuesto, type Puesto, type Turno } from "../../store/puestosStore";
+import { useAuth } from "../../auth/AuthContext";
 
 export default function GestionRecursos() {
     // Integrar stores desde Supabase
@@ -34,6 +35,7 @@ export default function GestionRecursos() {
 
     // View State
     const [activeTab, setActiveTab] = useState<"agentes" | "puestos">("agentes");
+    const { user } = useAuth();
 
     useEffect(() => {
         const unsubSedes = subscribeSedes(() => setSedesVersion(prev => prev + 1));
@@ -175,7 +177,7 @@ export default function GestionRecursos() {
                             setToast={setToast}
                             onAdd={async (nombre, dni, supervisor) => {
                                 try {
-                                    await upsertAgente({ nombre, dni, supervisor });
+                                    await upsertAgente({ nombre, dni, supervisor, usuario_registro_id: user?.id });
                                     setToast({ type: "success", message: "Agente creado correctamente." });
                                 } catch (error: any) {
                                     setToast({ type: "error", message: error.message || "Error al crear agente." });
@@ -207,7 +209,7 @@ export default function GestionRecursos() {
                             puestos={puestos}
                             onAdd={async (nombre, sede_id, turnos) => {
                                 try {
-                                    await upsertPuesto({ nombre, sede_id, turnos });
+                                    await upsertPuesto({ nombre, sede_id, turnos, usuario_registro_id: user?.id });
                                     setToast({ type: "success", message: "Puesto creado correctamente." });
                                 } catch (error: any) {
                                     setToast({ type: "error", message: error.message || "Error al crear puesto." });

@@ -7,6 +7,7 @@ export type Agente = {
     dni?: string | null;
     supervisor?: string | null;
     activo: boolean;
+    usuario_registro_id?: string | null;
     created_at?: string | null;
     updated_at?: string | null;
 };
@@ -69,6 +70,7 @@ export async function refreshAgentes(): Promise<void> {
         dni: row.dni,
         supervisor: row.supervisor,
         activo: row.activo as boolean,
+        usuario_registro_id: row.usuario_registro_id,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }));
@@ -83,12 +85,14 @@ export async function upsertAgente(input: {
     dni?: string;
     supervisor?: string;
     activo?: boolean;
+    usuario_registro_id?: string;
 }): Promise<void> {
     const payload = {
         nombre: input.nombre,
         dni: input.dni || null,
         supervisor: input.supervisor || null,
         activo: input.activo ?? true,
+        ...(input.usuario_registro_id && { usuario_registro_id: input.usuario_registro_id }),
     };
 
     const { error } = await supabase
