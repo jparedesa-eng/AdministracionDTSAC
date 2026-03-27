@@ -14,7 +14,8 @@ import {
     Sun,
     Moon,
     Camera,
-    FileSpreadsheet
+    FileSpreadsheet,
+    AlertCircle
 } from "lucide-react";
 import * as XLSX from "xlsx";
 import { toPng } from "html-to-image";
@@ -1269,44 +1270,53 @@ export default function ProgramacionPuestos() {
                                                         >
                                                             <div className="flex flex-col gap-0.5 h-full w-full overflow-hidden">
                                                                 {agentAssigns.map((assign, idx) => {
-                                                                    // assign has _meta with puestoNombre
                                                                     const meta = (assign as any)._meta;
                                                                     const turno = meta?.turno;
                                                                     const puestoName = meta?.puestoNombre;
+                                                                    const status = assign.status;
 
-                                                                    let badgeClass = "";
-
-                                                                    // Default based on Turno (Pending)
-                                                                    if (turno === 'DIA') {
-                                                                        badgeClass = "bg-[#FFF9C4] text-[#5D4037] border-amber-200 hover:border-amber-400"; // Light Yellow / Brownish Text
-                                                                    } else {
-                                                                        badgeClass = "bg-blue-50 text-blue-900 border-blue-200 hover:border-blue-400"; // Light Blue
-                                                                    }
-
-                                                                    // Override if Status is set
-                                                                    if (assign.status === 'CUMPLIDO') {
-                                                                        badgeClass = "bg-emerald-100 text-emerald-800 border-emerald-300 hover:border-emerald-500";
-                                                                    } else if (assign.status === 'FALTA') {
-                                                                        badgeClass = "bg-red-50 text-red-800 border-red-200 hover:border-red-400";
+                                                                    // Styles based on Turno
+                                                                    const isDia = turno === 'DIA';
+                                                                    const shiftStyles = isDia 
+                                                                        ? "bg-[#FFFDE7] text-amber-900 border-amber-100/50" 
+                                                                        : "bg-[#E8EAF6] text-indigo-900 border-indigo-100/50";
+                                                                    
+                                                                    // Accent based on Status
+                                                                    let accentClass = "border-l-gray-300";
+                                                                    let StatusIcon = null;
+                                                                    
+                                                                    if (status === 'CUMPLIDO') {
+                                                                        accentClass = "border-l-emerald-500";
+                                                                        StatusIcon = <ShieldCheck className="h-2 w-2 text-emerald-600" />;
+                                                                    } else if (status === 'FALTA') {
+                                                                        accentClass = "border-l-red-500";
+                                                                        StatusIcon = <AlertCircle className="h-2 w-2 text-red-600" />;
                                                                     }
 
                                                                     return (
                                                                         <div
                                                                             key={idx}
-                                                                            className={`flex-1 ${badgeClass} rounded-md flex flex-col justify-start items-start border text-[8px] leading-none w-full min-h-0 relative px-1.5 py-1.5 gap-0.5`}
-                                                                            title={`${puestoName} - ${turno}`}
+                                                                            className={`flex-1 ${shiftStyles} ${accentClass} border-l-4 rounded-md flex flex-col justify-start items-start border text-[8px] leading-none w-full min-h-0 relative px-2 py-1.5 gap-1 shadow-sm`}
+                                                                            title={`${puestoName} - ${turno} (${status})`}
                                                                         >
-                                                                            {/* 1. Turno */}
-                                                                            <div className="flex items-center gap-1 opacity-90 mb-0.5">
-                                                                                {turno === 'DIA' ? <Sun className="h-2 w-2" /> : <Moon className="h-2 w-2" />}
-                                                                                <span className="font-bold text-[7.5px] tracking-wide">{turno}</span>
+                                                                            {/* Header: Turno + Status Icon */}
+                                                                            <div className="flex items-center justify-between w-full mb-0.5">
+                                                                                <div className="flex items-center gap-1 opacity-80">
+                                                                                    {isDia ? <Sun className="h-2 w-2" /> : <Moon className="h-2 w-2" />}
+                                                                                    <span className="font-bold text-[7px] tracking-wider uppercase">{turno}</span>
+                                                                                </div>
+                                                                                {StatusIcon}
                                                                             </div>
 
-                                                                            {/* 2. Puesto */}
-                                                                            <span className="font-bold text-left truncate w-full leading-tight" style={{ fontSize: '8.5px' }}>{puestoName}</span>
+                                                                            {/* Puesto */}
+                                                                            <span className={`font-bold text-left truncate w-full leading-tight ${status === 'FALTA' ? 'line-through opacity-50' : ''}`} style={{ fontSize: '8.5px' }}>
+                                                                                {puestoName}
+                                                                            </span>
 
-                                                                            {/* 3. Sede */}
-                                                                            <span className="text-[7px] text-left opacity-80 truncate w-full italic">{meta?.sedeNombre}</span>
+                                                                            {/* Sede */}
+                                                                            <span className="text-[7px] text-left opacity-70 truncate w-full italic font-medium">
+                                                                                {meta?.sedeNombre}
+                                                                            </span>
                                                                         </div>
                                                                     );
                                                                 })}
