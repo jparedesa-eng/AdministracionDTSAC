@@ -1846,7 +1846,15 @@ export default function ProgramacionPuestos() {
                                         <select
                                             className="w-full text-sm border-gray-300 rounded-lg p-2 bg-gray-50"
                                             value={agentPuestoId}
-                                            onChange={(e) => setAgentPuestoId(e.target.value)}
+                                            onChange={(e) => {
+                                                const pId = e.target.value;
+                                                setAgentPuestoId(pId);
+                                                // Auto-select first available shift
+                                                const pObj = puestos.find(p => p.id === pId);
+                                                if (pObj && pObj.turnos.length > 0) {
+                                                    setAgentTurno(pObj.turnos[0]);
+                                                }
+                                            }}
                                             disabled={!agentSedeId}
                                         >
                                             <option value="">Seleccione Puesto...</option>
@@ -1857,25 +1865,31 @@ export default function ProgramacionPuestos() {
                                     </div>
 
                                     {/* Turno Selector */}
-                                    <div className="space-y-1">
-                                        <label className="text-xs font-bold text-gray-500 uppercase">Turno</label>
-                                        <div className="flex gap-2">
-                                            <button
-                                                onClick={() => setAgentTurno("DIA")}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-medium border ${agentTurno === "DIA" ? "bg-amber-100 border-amber-300 text-amber-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-                                            >
-                                                <Sun className="h-4 w-4 inline mr-2" />
-                                                Día
-                                            </button>
-                                            <button
-                                                onClick={() => setAgentTurno("NOCHE")}
-                                                className={`flex-1 py-2 rounded-lg text-sm font-medium border ${agentTurno === "NOCHE" ? "bg-indigo-100 border-indigo-300 text-indigo-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-                                            >
-                                                <Moon className="h-4 w-4 inline mr-2" />
-                                                Noche
-                                            </button>
+                                    {agentPuestoId && (
+                                        <div className="space-y-1">
+                                            <label className="text-xs font-bold text-gray-500 uppercase">Turno</label>
+                                            <div className="flex gap-2">
+                                                {puestos.find(p => p.id === agentPuestoId)?.turnos.includes("DIA") && (
+                                                    <button
+                                                        onClick={() => setAgentTurno("DIA")}
+                                                        className={`flex-1 py-2 rounded-lg text-sm font-medium border ${agentTurno === "DIA" ? "bg-amber-100 border-amber-300 text-amber-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                                                    >
+                                                        <Sun className="h-4 w-4 inline mr-2" />
+                                                        Día
+                                                    </button>
+                                                )}
+                                                {puestos.find(p => p.id === agentPuestoId)?.turnos.includes("NOCHE") && (
+                                                    <button
+                                                        onClick={() => setAgentTurno("NOCHE")}
+                                                        className={`flex-1 py-2 rounded-lg text-sm font-medium border ${agentTurno === "NOCHE" ? "bg-indigo-100 border-indigo-300 text-indigo-800" : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                                                    >
+                                                        <Moon className="h-4 w-4 inline mr-2" />
+                                                        Noche
+                                                    </button>
+                                                )}
+                                            </div>
                                         </div>
-                                    </div>
+                                    )}
                                 </div>
                                 <div className="flex justify-end gap-3 pt-4 border-t border-gray-100">
                                     <button
