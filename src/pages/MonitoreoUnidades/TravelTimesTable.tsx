@@ -11,16 +11,19 @@ import {
     fetchTravelTimes,
     type TravelTime
 } from '../../store/travelTimesStore';
+import { getDestinationsState, fetchDestinations } from '../../store/destinationStore';
 
 export const TravelTimesTable: React.FC = () => {
     // Subscription State
     const [, setVersion] = useState(0);
     useEffect(() => {
-        fetchTravelTimes().catch(console.error); // Initial fetch
+        fetchTravelTimes().catch(console.error);
+        fetchDestinations().catch(console.error);
         const unsubscribe = subscribeTravelTimes(() => setVersion(v => v + 1));
         return () => { unsubscribe(); };
     }, []);
     const { travelTimes } = getTravelTimesState();
+    const { destinations } = getDestinationsState();
 
     // Local UI State
     const [searchTerm, setSearchTerm] = useState('');
@@ -156,17 +159,16 @@ export const TravelTimesTable: React.FC = () => {
     const ORIGIN_OPTIONS = [
         "PLANTA CONSERVA Y CONGELADO",
         "PLANTA FRESCO MUCHIK",
-        "PLANTA CONSERVA PEDREGAL"
+        "PLANTA CONSERVA PEDREGAL",
+        "APT GRAU"
     ];
 
-    const DESTINATION_OPTIONS = [
-        "CALLAO",
-        "CHANCAY",
-        "PAITA",
-        "TUMBES",
-        "SALAVERRY",
-        "TACNA"
-    ];
+    const DESTINATION_OPTIONS = useMemo(() => {
+        return destinations
+            .filter(d => d.active)
+            .map(d => d.name)
+            .sort();
+    }, [destinations]);
 
     const handleTimeInput = (e: React.ChangeEvent<HTMLInputElement>, field: string) => {
         // Allow only numbers
@@ -211,8 +213,8 @@ export const TravelTimesTable: React.FC = () => {
 
             <div className="flex items-center justify-between gap-4 px-1">
                 <div className="flex flex-col gap-1">
-                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Estándares Operativos</p>
-                    <h2 className="text-2xl font-black text-slate-900 tracking-tight uppercase">Tiempos de Viaje</h2>
+                    <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Estándares Operativos</p>
+                    <h2 className="text-2xl font-bold text-slate-900 tracking-tight uppercase">Tiempos de Viaje</h2>
                 </div>
                 <button
                     onClick={() => handleOpen()}
@@ -240,34 +242,34 @@ export const TravelTimesTable: React.FC = () => {
                         <table className="w-full text-left border-collapse">
                             <thead>
                                 <tr className="border-b border-slate-100 bg-slate-50/50">
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Proceso</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Punto Origen</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Punto Destino</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Min (HH:mm)</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Max (HH:mm)</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Transporte</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Prioridad</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500">Status</th>
-                                    <th className="px-4 py-3 text-[10px] font-black uppercase tracking-widest text-slate-500 text-right">Acciones</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Proceso</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Punto Origen</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Punto Destino</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Min (HH:mm)</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Max (HH:mm)</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Transporte</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Prioridad</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500">Status</th>
+                                    <th className="px-4 py-3 text-xs font-semibold uppercase tracking-wider text-slate-500 text-right">Acciones</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {filteredRoutes.map((route) => (
                                     <tr key={route.id} className="hover:bg-slate-50 transition-colors group">
                                         <td className="px-4 py-3 align-middle">
-                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-black rounded uppercase tracking-wider whitespace-nowrap">{route.proceso}</span>
+                                            <span className="px-2 py-0.5 bg-slate-100 text-slate-700 text-[10px] font-bold rounded uppercase tracking-wider whitespace-nowrap">{route.proceso}</span>
                                         </td>
                                         <td className="px-4 py-3 align-middle text-xs font-bold text-slate-600 uppercase whitespace-nowrap">{route.origen}</td>
                                         <td className="px-4 py-3 align-middle text-xs font-bold text-slate-600 uppercase whitespace-nowrap">{route.destino}</td>
-                                        <td className="px-4 py-3 align-middle text-xs font-black text-slate-900 whitespace-nowrap">{route.min_time}</td>
-                                        <td className="px-4 py-3 align-middle text-xs font-black text-red-600 whitespace-nowrap">{route.max_time}</td>
+                                        <td className="px-4 py-3 align-middle text-xs font-bold text-slate-900 whitespace-nowrap">{route.min_time}</td>
+                                        <td className="px-4 py-3 align-middle text-xs font-bold text-red-600 whitespace-nowrap">{route.max_time}</td>
                                         <td className="px-4 py-3 align-middle">
                                             <div className="flex items-center gap-2 whitespace-nowrap">
                                                 {getEnvioIcon(route.tipo_envio)}
                                                 <span className="text-[10px] font-bold text-slate-500 uppercase">{route.tipo_envio}</span>
                                             </div>
                                         </td>
-                                        <td className="px-4 py-3 align-middle text-[10px] font-black uppercase text-slate-400 whitespace-nowrap">
+                                        <td className="px-4 py-3 align-middle text-[10px] font-bold uppercase text-slate-400 whitespace-nowrap">
                                             {route.tipo_viaje === 'EXPRESS' ? <span className="text-amber-600">EXPRESS</span> : 'REGULAR'}
                                         </td>
                                         <td className="px-4 py-3 align-middle whitespace-nowrap">
@@ -346,22 +348,19 @@ export const TravelTimesTable: React.FC = () => {
 
                     {/* Origen Section */}
                     <div className="space-y-2 pb-2 border-b border-gray-100">
-                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mt-2">Origen</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Origen</label>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-500 mb-1">Nombre Punto Origen *</label>
-                                <select
-                                    className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
+                                <SearchableSelect
+                                    label="Nombre Punto Origen *"
+                                    options={ORIGIN_OPTIONS}
                                     value={formData.origen}
-                                    onChange={e => setFormData({ ...formData, origen: e.target.value })}
-                                >
-                                    <option value="">Seleccionar Origen...</option>
-                                    {ORIGIN_OPTIONS.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
+                                    onChange={(v: string) => setFormData({ ...formData, origen: v })}
+                                />
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-gray-500 mb-1">Latitud Origin</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Latitud Origin</label>
                                     <input
                                         type="text"
                                         className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
@@ -372,7 +371,7 @@ export const TravelTimesTable: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-gray-500 mb-1">Longitud Origin</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Longitud Origin</label>
                                     <input
                                         type="text"
                                         className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
@@ -388,25 +387,19 @@ export const TravelTimesTable: React.FC = () => {
 
                     {/* Destino Section */}
                     <div className="space-y-2 pb-2 border-b border-gray-100">
-                        <label className="block text-xs font-black text-slate-400 uppercase tracking-widest mt-2">Destino</label>
+                        <label className="block text-xs font-bold text-slate-400 uppercase tracking-widest mt-2">Destino</label>
                         <div className="grid grid-cols-2 gap-4">
                             <div>
-                                <label className="block text-[10px] font-bold text-gray-500 mb-1">Nombre Punto Destino *</label>
-                                <input
-                                    list="destination-options"
-                                    type="text"
-                                    className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
+                                <SearchableSelect
+                                    label="Nombre Punto Destino *"
+                                    options={DESTINATION_OPTIONS}
                                     value={formData.destino}
-                                    onChange={e => setFormData({ ...formData, destino: e.target.value })}
-                                    placeholder="Seleccionar o escribir..."
+                                    onChange={(v: string) => setFormData({ ...formData, destino: v })}
                                 />
-                                <datalist id="destination-options">
-                                    {DESTINATION_OPTIONS.map(opt => <option key={opt} value={opt} />)}
-                                </datalist>
                             </div>
                             <div className="grid grid-cols-2 gap-2">
                                 <div>
-                                    <label className="block text-[10px] font-bold text-gray-500 mb-1">Latitud Destino</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Latitud Destino</label>
                                     <input
                                         type="text"
                                         className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
@@ -417,7 +410,7 @@ export const TravelTimesTable: React.FC = () => {
                                     />
                                 </div>
                                 <div>
-                                    <label className="block text-[10px] font-bold text-gray-500 mb-1">Longitud Destino</label>
+                                    <label className="block text-xs font-bold text-gray-500 mb-1">Longitud Destino</label>
                                     <input
                                         type="text"
                                         className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none"
@@ -499,6 +492,69 @@ export const TravelTimesTable: React.FC = () => {
                     </div>
                 </div>
             </Modal>
+        </div>
+    );
+};
+
+const SearchableSelect = ({ label, value, onChange, options = [], placeholder = "Seleccionar..." }: { label: string, value: string, onChange: (v: string) => void, options: string[], placeholder?: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter(opt =>
+        opt.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="space-y-1 w-full relative" ref={wrapperRef}>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>
+            <div className="relative">
+                <input
+                    type="text"
+                    className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none bg-white font-bold uppercase transition-all"
+                    value={isOpen ? search : value}
+                    onChange={e => { setSearch(e.target.value); if (!isOpen) setIsOpen(true); }}
+                    onFocus={() => { setIsOpen(true); setSearch(''); }}
+                    placeholder={placeholder}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <Search size={14} />
+                </div>
+
+                {isOpen && (
+                    <div className="absolute z-[60] w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
+                        {filteredOptions.length === 0 ? (
+                            <div className="p-3 text-xs text-slate-400 text-center italic font-medium">No hay resultados</div>
+                        ) : (
+                            filteredOptions.map((opt, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    className="w-full text-left px-4 py-2 text-xs font-bold uppercase hover:bg-slate-50 transition-colors text-slate-700"
+                                    onClick={() => {
+                                        onChange(opt);
+                                        setIsOpen(false);
+                                        setSearch("");
+                                    }}
+                                >
+                                    {opt}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }`}</style>
         </div>
     );
 };

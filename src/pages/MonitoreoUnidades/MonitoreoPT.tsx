@@ -404,8 +404,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
             const tooltipContent = `
         <div class="px-1.5 py-1 bg-white border border-slate-200 rounded-md font-sans z-[1000] shadow-sm">
-             <div class="text-[10px] font-bold text-gray-900 leading-tight text-center">${unit.plateRemolque}</div>
-             <div class="text-[9px] font-medium text-gray-400 truncate max-w-[100px] text-center">${unit.ubicacionActual}</div>
+             <div class="text-xs font-bold text-gray-900 leading-tight text-center">${unit.plateRemolque}</div>
+             <div class="text-[11px] font-medium text-gray-400 truncate max-w-[100px] text-center">${unit.ubicacionActual}</div>
              ${isStopped ? `<div class="text-[8px] font-bold text-red-600 text-center mt-0.5">${unit.status}</div>` : ''}
              ${needsAlert && !isArrived && !isStopped ? '<div class="text-[8px] font-bold text-orange-500 text-center mt-0.5 animate-pulse">RETRASO</div>' : ''}
         </div>
@@ -1274,9 +1274,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         {(statusFilter === 'ALL' || statusFilter === 'ARRIVED' || statusFilter === 'CANCELLED') && (
                             <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-lg px-2">
                                 <CalendarRange size={12} className="text-slate-400" />
-                                <input type="date" className="bg-transparent text-[9px] font-bold text-slate-600 outline-none w-24" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
+                                <input type="date" className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-24" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
                                 <span className="text-slate-300">-</span>
-                                <input type="date" className="bg-transparent text-[9px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
+                                <input type="date" className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
                             </div>
                         )}
                     </div>
@@ -1298,7 +1298,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 <div key={unit.id} onClick={() => openDetail(unit.id)} className={cardClasses}>
                                     {isSelected && (<div className="absolute top-2 right-2 text-[#1a73e8] animate-in fade-in"><CheckCircle2 size={16} fill="#eef2ff" /></div>)}
                                     {needsAlert && !isArrived && !isCancelled && !isStopped && (
-                                        <div className="absolute top-0 right-0 bg-orange-500 text-white text-[9px] font-black px-2 py-0.5 rounded-bl-lg animate-pulse flex items-center gap-1 z-10"><AlertTriangle size={10} /> REVISIÓN (+3H)</div>
+                                        <div className="absolute top-0 right-0 bg-orange-500 text-white text-[11px] font-bold px-2 py-0.5 rounded-bl-lg animate-pulse flex items-center gap-1 z-10"><AlertTriangle size={10} /> REVISIÓN (+3H)</div>
                                     )}
 
                                     <div className="flex items-center justify-between gap-4">
@@ -1313,8 +1313,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             </div>
                                             <p className="text-[11px] font-medium text-gray-400 line-clamp-2 leading-tight">{unit.transportista}</p>
                                             <div className="flex gap-1 mt-1">
-                                                <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-bold">{unit.proceso}</span>
-                                                <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${unit.status === UnitStatus.TRANSIT ? 'bg-blue-100 text-blue-700' : isStopped ? 'bg-red-100 text-red-700 animate-pulse' : unit.status === UnitStatus.DELIVERED ? 'bg-emerald-100 text-emerald-700' : isCancelled ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-700'}`}>
+                                                <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[11px] font-bold">{unit.proceso}</span>
+                                                <span className={`inline-block px-1.5 py-0.5 rounded text-[11px] font-bold ${unit.status === UnitStatus.TRANSIT ? 'bg-blue-100 text-blue-700' : isStopped ? 'bg-red-100 text-red-700 animate-pulse' : unit.status === UnitStatus.DELIVERED ? 'bg-emerald-100 text-emerald-700' : isCancelled ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-700'}`}>
                                                     {typeof unit.status === 'string' ? unit.status : 'Desconocido'}
                                                 </span>
                                             </div>
@@ -1330,19 +1330,19 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             </div>
                                             <div className="flex justify-between">
                                                 <div>
-                                                    <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Salida</span>
+                                                    <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Salida</span>
                                                     <span className="text-xs font-medium text-gray-600">{formatDate(unit.fechaSalidaPlanta)}</span>
                                                 </div>
                                                 <div className="text-right flex flex-col items-end">
                                                     {unit.almacenDestino1 && (
                                                         <div className="mb-0.5">
-                                                            <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 1 {unit.fechaLlegadaDestino1 ? `- ${formatDate(unit.fechaLlegadaDestino1)}` : ''}</span>
+                                                            <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 1 {unit.fechaLlegadaDestino1 ? `- ${formatDate(unit.fechaLlegadaDestino1)}` : ''}</span>
                                                             <span className="text-xs font-medium text-gray-600 truncate max-w-[100px] block" title={unit.almacenDestino1}>{unit.almacenDestino1}</span>
                                                         </div>
                                                     )}
                                                     {unit.almacenDestino2 && (
                                                         <div>
-                                                            <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 2</span>
+                                                            <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 2</span>
                                                             <span className="text-xs font-medium text-gray-600 truncate max-w-[100px] block" title={unit.almacenDestino2}>{unit.almacenDestino2}</span>
                                                         </div>
                                                     )}
@@ -1352,28 +1352,28 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                                         <div className="min-w-[130px] border-l border-gray-100 pl-4 flex flex-col justify-center gap-1">
                                             <div>
-                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Conductor</span>
+                                                <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Conductor</span>
                                                 <span className="text-xs font-medium text-gray-900 truncate block max-w-[120px]" title={unit.conductor}>{unit.conductor.split(' ')[0]}</span>
                                             </div>
                                             <div>
-                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Teléfono</span>
+                                                <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Teléfono</span>
                                                 <span className="text-xs font-medium text-gray-900 truncate block">{unit.telefono}</span>
                                             </div>
                                             <div>
-                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Envío</span>
+                                                <span className="text-[11px] font-semibold text-gray-400 uppercase block tracking-wider">Envío</span>
                                                 <span className="text-xs font-medium text-gray-900 truncate block">{unit.tipoEnvio}</span>
                                             </div>
                                         </div>
 
                                         <div className="min-w-[180px] flex flex-col justify-center gap-2 text-right">
                                             <div className="bg-gray-50 p-1.5 rounded border border-gray-200">
-                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block mb-0.5 tracking-wider">
+                                                <span className="text-[11px] font-semibold text-gray-400 uppercase block mb-0.5 tracking-wider">
                                                     Ubicación {unit.lastUpdate ? `(${formatDate(unit.lastUpdate)})` : '(-)'}
                                                 </span>
                                                 <span className="text-xs font-bold text-gray-900 uppercase leading-tight block truncate max-w-[170px] ml-auto">{unit.ubicacionActual}</span>
                                             </div>
                                             <div className="bg-blue-50 p-1.5 rounded border border-blue-100">
-                                                <span className="text-[9px] font-semibold text-blue-400 uppercase block mb-0.5 tracking-wider">Estimado Llegada</span>
+                                                <span className="text-[11px] font-semibold text-blue-400 uppercase block mb-0.5 tracking-wider">Estimado Llegada</span>
                                                 <span className="text-sm font-bold text-blue-600 block transition-all">
                                                     {(() => {
                                                         const d = new Date(unit.fechaEstimadaLlegada);
@@ -1409,7 +1409,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[200] p-4 animate-in fade-in">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <h4 className="text-xs font-black text-slate-900 uppercase flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2">
                                 <Flag size={14} className="text-[#ff0000]" /> Finalizar Viaje
                             </h4>
                             <button onClick={() => setFinishTripModal({ ...finishTripModal, open: false })} className="text-slate-400 hover:text-slate-600">
@@ -1418,7 +1418,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         </div>
                         <div className="p-6 space-y-4">
                             <div className="bg-blue-50 p-3 rounded-lg border border-blue-100 mb-2">
-                                <p className="text-[10px] text-blue-700 font-bold">
+                                <p className="text-xs text-blue-700 font-bold">
                                     {finishTripModal.type === 'DEST1'
                                         ? 'Se registrará la llegada al primer punto de destino. El viaje continuará activo.'
                                         : 'Se registrará el cierre definitivo del viaje.'}
@@ -1427,7 +1427,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                             {(finishTripModal.type === 'SINGLE' || finishTripModal.type === 'DEST1') && (
                                 <div className="space-y-1">
-                                    <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
+                                    <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">
                                         {finishTripModal.type === 'DEST1' ? 'Fecha Llegada (1er Punto)' : 'Fecha y Hora de Llegada'}
                                     </label>
                                     <input
@@ -1442,7 +1442,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             {finishTripModal.type === 'DEST2' && (
                                 <div className="space-y-3">
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Salida del 1er Punto</label>
+                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Salida del 1er Punto</label>
                                         <input
                                             type="datetime-local"
                                             className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
@@ -1451,7 +1451,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         />
                                     </div>
                                     <div className="space-y-1">
-                                        <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Llegada al 2do Punto</label>
+                                        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Llegada al 2do Punto</label>
                                         <input
                                             type="datetime-local"
                                             className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
@@ -1465,7 +1465,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             <button
                                 onClick={handleConfirmFinishTrip}
                                 disabled={isFinishingTrip}
-                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {isFinishingTrip && <Loader2 size={12} className="animate-spin" />}
                                 {finishTripModal.type === 'DEST1' ? 'Confirmar Llegada (1er Punto)' : 'Confirmar Cierre de Viaje'}
@@ -1479,7 +1479,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-[200] p-4 animate-in fade-in">
                     <div className="bg-white rounded-xl shadow-2xl w-full max-w-sm overflow-hidden animate-in zoom-in duration-200">
                         <div className="p-4 border-b border-slate-100 bg-slate-50 flex justify-between items-center">
-                            <h4 className="text-xs font-black text-slate-900 uppercase flex items-center gap-2">
+                            <h4 className="text-xs font-bold text-slate-900 uppercase flex items-center gap-2">
                                 <Clock size={14} className="text-[#ff0000]" /> Finalizar {finishStopModal.type === 'PROG' ? 'Parada' : 'Incidente'}
                             </h4>
                             <button onClick={() => setFinishStopModal({ ...finishStopModal, open: false })} className="text-slate-400 hover:text-slate-600">
@@ -1488,7 +1488,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         </div>
                         <div className="p-6 space-y-4">
                             <div className="space-y-1">
-                                <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Fecha y Hora de Fin</label>
+                                <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Fecha y Hora de Fin</label>
                                 <input
                                     type="datetime-local"
                                     className="w-full p-3 bg-white border border-slate-300 rounded-lg text-xs font-bold text-slate-800 outline-none focus:border-[#ff0000]"
@@ -1496,11 +1496,11 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                     onChange={(e) => setFinishStopModal({ ...finishStopModal, endDate: e.target.value })}
                                 />
                             </div>
-                            <p className="text-[9px] text-slate-400 italic">La unidad pasará automáticamente a estado "EN RUTA".</p>
+                            <p className="text-[11px] text-slate-400 italic">La unidad pasará automáticamente a estado "EN RUTA".</p>
                             <button
                                 onClick={handleConfirmFinishStop}
                                 disabled={isFinishingStop}
-                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-xs font-bold uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
                                 {isFinishingStop && <Loader2 size={12} className="animate-spin" />}
                                 Confirmar Fin
@@ -1523,28 +1523,28 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         <div className="flex-1">
                                             <div className="flex items-center gap-4 mb-3">
                                                 <div className="flex flex-col">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tracto</span>
+                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Tracto</span>
                                                     <h3 className="text-xl font-bold text-slate-900 uppercase leading-none tracking-tight">{selectedUnit.plateRemolque}</h3>
                                                 </div>
                                                 {selectedUnit.plateSemiRemolque && selectedUnit.plateSemiRemolque !== 'N/A' && (
                                                     <div className="flex flex-col border-l border-slate-200 pl-4">
-                                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Placa</span>
+                                                        <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Placa</span>
                                                         <h3 className="text-xl font-bold text-slate-400 uppercase leading-none tracking-tight">{selectedUnit.plateSemiRemolque}</h3>
                                                     </div>
                                                 )}
                                                 <div className="ml-auto flex flex-col items-end">
-                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Proceso</span>
-                                                    <span className="text-[10px] font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 uppercase shadow-sm tracking-wide">{selectedUnit.proceso}</span>
+                                                    <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Proceso</span>
+                                                    <span className="text-xs font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 uppercase shadow-sm tracking-wide">{selectedUnit.proceso}</span>
                                                 </div>
                                             </div>
 
                                             <div className="flex flex-col border-t border-slate-100 pt-3">
-                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Responsable del Viaje</span>
+                                                <span className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-1">Responsable del Viaje</span>
                                                 <div className="flex items-center justify-between">
                                                     <p className="text-sm font-bold text-[#1a73e8] uppercase tracking-wide">{selectedUnit.conductor}</p>
                                                     <div className="flex items-center gap-1.5 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 text-[#1a73e8]">
                                                         <Phone size={12} fill="currentColor" fillOpacity={0.2} />
-                                                        <span className="text-[11px] font-black">{selectedUnit.telefono}</span>
+                                                        <span className="text-[11px] font-bold">{selectedUnit.telefono}</span>
                                                     </div>
                                                 </div>
                                             </div>
@@ -1555,13 +1555,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                                 {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && (
                                     <div className="flex gap-2">
-                                        <button onClick={handleEditUnit} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"><Edit3 size={14} /> Editar Registro</button>
-                                        <button onClick={handleInitiateFinishTrip} className="flex-1 bg-slate-900 hover:bg-black text-white py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-slate-200"><Flag size={14} /> Finalizar</button>
-                                        <button onClick={handleCancelTrip} className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all" title="Cancelar Viaje por Error"><Ban size={14} /></button>
+                                        <button onClick={handleEditUnit} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"><Edit3 size={14} /> Editar Registro</button>
+                                        <button onClick={handleInitiateFinishTrip} className="flex-1 bg-slate-900 hover:bg-black text-white py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-slate-200"><Flag size={14} /> Finalizar</button>
+                                        <button onClick={handleCancelTrip} className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-xl text-xs font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all" title="Cancelar Viaje por Error"><Ban size={14} /></button>
                                     </div>
                                 )}
                                 {(selectedUnit.status === UnitStatus.DELIVERED || selectedUnit.status === 'CANCELADO') && (
-                                    <div className="bg-slate-100 p-3 rounded-xl text-center border border-slate-200"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Viaje Cerrado: {selectedUnit.status}</p></div>
+                                    <div className="bg-slate-100 p-3 rounded-xl text-center border border-slate-200"><p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Viaje Cerrado: {selectedUnit.status}</p></div>
                                 )}
                             </div>
 
@@ -1588,19 +1588,19 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     <AlertTriangle className="text-orange-500 shrink-0" size={20} />
                                                     <div>
                                                         <h4 className="text-xs font-bold text-orange-200 uppercase tracking-wide">Unidad Detenida</h4>
-                                                        <p className="text-[10px] text-orange-200/60 mt-1">
+                                                        <p className="text-xs text-orange-200/60 mt-1">
                                                             No se pueden registrar controles de ruta mientras la unidad está en parada activa.
                                                             <br />
                                                             <strong>Por favor, finalice la parada primero.</strong>
                                                         </p>
-                                                        <button onClick={() => setActiveTab('PARADAS')} className="mt-2 text-[9px] font-bold underline text-orange-400 uppercase tracking-wider hover:text-orange-300">Ir a Paradas →</button>
+                                                        <button onClick={() => setActiveTab('PARADAS')} className="mt-2 text-[11px] font-bold underline text-orange-400 uppercase tracking-wider hover:text-orange-300">Ir a Paradas →</button>
                                                     </div>
                                                 </div>
                                             ) : (
                                                 <form onSubmit={handleUpdateControl} className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                            <label className="text-xs font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
                                                                 <Calendar size={12} className="text-white" /> Fecha y Hora
                                                             </label>
                                                             <div className="relative">
@@ -1628,7 +1628,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                             const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
                                                                             setReportForm({ ...reportForm, reportDateTime: localIso });
                                                                         }}
-                                                                        className="px-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-[9px] font-black text-blue-400 uppercase tracking-tighter hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-900/20"
+                                                                        className="px-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-[11px] font-bold text-blue-400 uppercase tracking-tighter hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-900/20"
                                                                         title="Establecer Hora Actual"
                                                                     >
                                                                         Ahora
@@ -1637,7 +1637,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             </div>
                                                         </div>
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                            <label className="text-xs font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
                                                                 <Truck size={12} className="text-white" /> Ubicación Actual
                                                             </label>
                                                             <input
@@ -1652,7 +1652,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                                                     <div className="grid grid-cols-4 gap-4">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                            <label className="text-xs font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
                                                                 <MapPin size={12} className="text-white" /> Latitud
                                                             </label>
                                                             <input
@@ -1665,7 +1665,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             />
                                                         </div>
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                            <label className="text-xs font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
                                                                 <MapPin size={12} className="text-white" /> Longitud
                                                             </label>
                                                             <input
@@ -1681,7 +1681,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             <button
                                                                 type="submit"
                                                                 disabled={isSavingControl}
-                                                                className="w-full py-2.5 bg-[#1a73e8] hover:bg-blue-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                                                className="w-full py-2.5 bg-[#1a73e8] hover:bg-blue-700 text-white rounded-xl text-xs font-bold uppercase tracking-wider shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                                             >
                                                                 {isSavingControl && <Loader2 size={14} className="animate-spin" />}
                                                                 {editingControlIndex !== null ? 'Actualizar' : 'Reportar Ubicación'}
@@ -1692,7 +1692,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             )}
                                         </div>
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
-                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Clock size={14} /> Historial de Ruta</h4>
+                                            <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Clock size={14} /> Historial de Ruta</h4>
                                             {selectedUnit.controles.length === 0 ? (<div className="text-center py-8 text-slate-400 text-xs italic">Aún no se han registrado controles de ruta.</div>) : (
                                                 <div className="space-y-1.5 pl-1">
                                                     {selectedUnit.controles.map((cp, idx) => {
@@ -1709,12 +1709,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 <div className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-red-200 hover:shadow-sm transition-all flex justify-between items-center group/card">
                                                                     <div className="flex-1 min-w-0">
                                                                         <div className="flex items-center gap-2 mb-0.5">
-                                                                            <span className="text-[10px] font-bold text-slate-400">CP-{idx + 1}</span>
+                                                                            <span className="text-xs font-bold text-slate-400">CP-{idx + 1}</span>
                                                                             <div className="flex items-center gap-1.5 text-slate-600">
                                                                                 <Calendar size={10} className="text-blue-600 opacity-70" />
-                                                                                <span className="text-[10px] font-bold">{displayDate}</span>
+                                                                                <span className="text-xs font-bold">{displayDate}</span>
                                                                                 <Clock size={10} className="ml-1 text-slate-400 opacity-70" />
-                                                                                <span className="text-[10px] font-bold text-slate-900">{displayTime}</span>
+                                                                                <span className="text-xs font-bold text-slate-900">{displayTime}</span>
                                                                             </div>
                                                                         </div>
                                                                         <div className="flex items-center gap-2">
@@ -1755,32 +1755,32 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             <div className="p-4 border-b border-emerald-100 bg-emerald-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2"><CheckCircle2 size={16} /> Programadas</h4></div>
                                             <div className="p-4">
                                                 {!showAddStopProg ? (
-                                                    <button onClick={() => setShowAddStopProg(true)} className="w-full py-3 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-emerald-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Parada</button>
+                                                    <button onClick={() => setShowAddStopProg(true)} className="w-full py-3 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Parada</button>
                                                 ) : (
                                                     <div className="mb-4 bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
-                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Lugar / Motivo</label><input autoFocus className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold uppercase focus:border-emerald-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Ej: ALMUERZO / GRIFO" /></div>
+                                                            <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Lugar / Motivo</label><input autoFocus className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold uppercase focus:border-emerald-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Ej: ALMUERZO / GRIFO" /></div>
 
                                                             <div className="space-y-3">
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
-                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
+                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 pt-2">
                                                                     <input type="checkbox" id="activeStopProg" className="w-4 h-4 text-emerald-600" checked={isStopOngoing} onChange={e => setIsStopOngoing(e.target.checked)} />
-                                                                    <label htmlFor="activeStopProg" className="text-[10px] font-bold text-emerald-700 cursor-pointer">Parada en curso (Unidad Detenida)</label>
+                                                                    <label htmlFor="activeStopProg" className="text-xs font-bold text-emerald-700 cursor-pointer">Parada en curso (Unidad Detenida)</label>
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-2">
-                                                                <button onClick={() => setShowAddStopProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
+                                                                <button onClick={() => setShowAddStopProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
                                                                 <button
                                                                     onClick={() => handleAddStop('PROG')}
                                                                     disabled={isSavingStop}
-                                                                    className="flex-[2] py-3 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                                                                    className="flex-[2] py-3 bg-emerald-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
                                                                 >
                                                                     {isSavingStop && <Loader2 size={12} className="animate-spin" />}
                                                                     Confirmar Parada
@@ -1796,8 +1796,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs border border-emerald-100">{idx + 1}</div>
                                                                 <div>
-                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} {!stop.end && <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
-                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
+                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} {!stop.end && <span className="text-[11px] bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
+                                                                    <p className="text-xs text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
@@ -1806,7 +1806,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                     <button
                                                                         onClick={() => initiateFinishStop('PROG', idx)}
                                                                         disabled={isSavingStop}
-                                                                        className="text-[9px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1 disabled:opacity-50"
+                                                                        className="text-[11px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1 disabled:opacity-50"
                                                                     >
                                                                         {isSavingStop ? <Loader2 size={10} className="animate-spin" /> : <PlayCircle size={10} />}
                                                                         FINALIZAR
@@ -1824,32 +1824,32 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             <div className="p-4 border-b border-amber-100 bg-amber-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-2"><AlertTriangle size={16} /> No Programadas</h4></div>
                                             <div className="p-4">
                                                 {!showAddStopNoProg ? (
-                                                    <button onClick={() => setShowAddStopNoProg(true)} className="w-full py-3 border-2 border-dashed border-amber-200 text-amber-600 rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-amber-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Incidencia</button>
+                                                    <button onClick={() => setShowAddStopNoProg(true)} className="w-full py-3 border-2 border-dashed border-amber-200 text-amber-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-amber-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Incidencia</button>
                                                 ) : (
                                                     <div className="mb-4 bg-amber-50/50 p-5 rounded-xl border border-amber-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
-                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Ubicación</label><input autoFocus className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Km / Ref" /></div>
-                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Causa / Motivo</label><input className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.cause} onChange={e => setNewStopForm({ ...newStopForm, cause: e.target.value })} placeholder="Falla Mecánica / Tráfico" /></div>
+                                                            <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Ubicación</label><input autoFocus className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Km / Ref" /></div>
+                                                            <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Causa / Motivo</label><input className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.cause} onChange={e => setNewStopForm({ ...newStopForm, cause: e.target.value })} placeholder="Falla Mecánica / Tráfico" /></div>
                                                             <div className="space-y-3">
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
-                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
+                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
-                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 pt-2">
                                                                     <input type="checkbox" id="activeStopNoProg" className="w-4 h-4 text-amber-600" checked={isStopOngoing} onChange={e => setIsStopOngoing(e.target.checked)} />
-                                                                    <label htmlFor="activeStopNoProg" className="text-[10px] font-bold text-amber-700 cursor-pointer">Incidente en curso (Unidad Detenida)</label>
+                                                                    <label htmlFor="activeStopNoProg" className="text-xs font-bold text-amber-700 cursor-pointer">Incidente en curso (Unidad Detenida)</label>
                                                                 </div>
                                                             </div>
                                                             <div className="flex gap-2">
-                                                                <button onClick={() => setShowAddStopNoProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
+                                                                <button onClick={() => setShowAddStopNoProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
                                                                 <button
                                                                     onClick={() => handleAddStop('NOPROG')}
                                                                     disabled={isSavingStop}
-                                                                    className="flex-[2] py-3 bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-rose-700 transition-colors shadow-lg shadow-rose-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                                                                    className="flex-[2] py-3 bg-rose-600 text-white rounded-lg text-xs font-bold uppercase tracking-wider hover:bg-rose-700 transition-colors shadow-lg shadow-rose-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
                                                                 >
                                                                     {isSavingStop && <Loader2 size={12} className="animate-spin" />}
                                                                     Reportar Incidente
@@ -1865,13 +1865,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             <div className="flex items-center gap-4">
                                                                 <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-bold text-xs border border-amber-100">!</div>
                                                                 <div>
-                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} <span className="text-amber-600">({stop.cause})</span> {!stop.end && <span className="text-[9px] bg-amber-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
-                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
+                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} <span className="text-amber-600">({stop.cause})</span> {!stop.end && <span className="text-[11px] bg-amber-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
+                                                                    <p className="text-xs text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[9px] font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
+                                                                {!stop.end && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[11px] font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
                                                                 <button onClick={() => handleDeleteStop('NOPROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
                                                             </div>
                                                         </div>
@@ -1910,24 +1910,24 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800">
                                             <div className="flex items-center justify-between">
                                                 <div><h4 className="text-xl font-bold uppercase tracking-tight">{selectedUnit.plateRemolque}</h4><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{selectedUnit.transportista}</p></div>
-                                                <div className="text-right"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ETA</p><p className="text-sm font-bold text-white">{new Date(selectedUnit.fechaEstimadaLlegada).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
+                                                <div className="text-right"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider">ETA</p><p className="text-sm font-bold text-white">{new Date(selectedUnit.fechaEstimadaLlegada).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
                                             </div>
                                             <div className="mt-6 flex items-center justify-between gap-4">
-                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Origen</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.origin}</p></div>
+                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Origen</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.origin}</p></div>
                                                 <div className="text-slate-500">→</div>
-                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl text-right"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Destino</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.destination}</p></div>
+                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl text-right"><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">Destino</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.destination}</p></div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Controles</p><p className="text-2xl font-bold text-slate-900">{selectedUnit.controles.length}</p></div>
-                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Incidencias</p><p className="text-2xl font-bold text-amber-500">{selectedUnit.paradasNoProg.length}</p></div>
+                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Controles</p><p className="text-2xl font-bold text-slate-900">{selectedUnit.controles.length}</p></div>
+                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-xs font-bold text-slate-400 uppercase tracking-wider mb-1">Incidencias</p><p className="text-2xl font-bold text-amber-500">{selectedUnit.paradasNoProg.length}</p></div>
                                         </div>
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
                                             <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><LayoutList size={14} /> Bitácora de Viaje</h5>
                                             <div className="space-y-4">
                                                 <div className="flex gap-3">
                                                     <div className="flex flex-col items-center"><div className="w-2 h-2 bg-slate-900 rounded-full"></div><div className="w-0.5 flex-1 bg-slate-200 my-1"></div></div>
-                                                    <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{new Date(selectedUnit.fechaSalidaPlanta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p><p className="text-xs font-bold text-slate-900 uppercase">Inicio de Viaje</p><p className="text-[10px] text-slate-500 uppercase">{selectedUnit.origin}</p></div>
+                                                    <div className="pb-4"><p className="text-[11px] font-bold text-slate-400">{new Date(selectedUnit.fechaSalidaPlanta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p><p className="text-xs font-bold text-slate-900 uppercase">Inicio de Viaje</p><p className="text-xs text-slate-500 uppercase">{selectedUnit.origin}</p></div>
                                                 </div>
                                                 {(selectedUnit.controles || []).map((cp, idx) => {
                                                     const dateObj = new Date(cp.time);
@@ -1937,13 +1937,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     return (
                                                         <div key={`ctrl-${idx}`} className="flex gap-3">
                                                             <div className="flex flex-col items-center"><div className="w-2 h-2 bg-slate-400 rounded-full border border-white"></div><div className="w-0.5 flex-1 bg-slate-200 my-1"></div></div>
-                                                            <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{displayDate} {displayTime}</p><p className="text-xs font-bold text-slate-700 uppercase">{cp.location}</p><p className="text-[9px] text-slate-400">Control de Paso #{idx + 1}</p></div>
+                                                            <div className="pb-4"><p className="text-[11px] font-bold text-slate-400">{displayDate} {displayTime}</p><p className="text-xs font-bold text-slate-700 uppercase">{cp.location}</p><p className="text-[11px] text-slate-400">Control de Paso #{idx + 1}</p></div>
                                                         </div>
                                                     );
                                                 })}
                                                 <div className="flex gap-3">
                                                     <div className="flex flex-col items-center"><div className="w-2.5 h-2.5 bg-[#1a73e8] rounded-full animate-pulse"></div></div>
-                                                    <div><p className="text-[9px] font-bold text-[#1a73e8]">ACTUAL</p><p className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.ubicacionActual}</p></div>
+                                                    <div><p className="text-[11px] font-bold text-[#1a73e8]">ACTUAL</p><p className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.ubicacionActual}</p></div>
                                                 </div>
                                             </div>
                                         </div>
@@ -1964,8 +1964,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                     <RouteIcon size={24} className="stroke-bold" />
                                 </div>
                                 <div>
-                                    <h3 className="text-xl font-black text-slate-900 uppercase tracking-tight leading-none">{isEditMode ? 'Editar Registro' : 'Apertura de Operación'}</h3>
-                                    <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1">{isEditMode ? 'Modificación de Datos' : 'Registro de Nuevo Viaje'}</p>
+                                    <h3 className="text-xl font-bold text-slate-900 uppercase tracking-tight leading-none">{isEditMode ? 'Editar Registro' : 'Apertura de Operación'}</h3>
+                                    <p className="text-xs text-slate-400 font-bold uppercase tracking-widest mt-1">{isEditMode ? 'Modificación de Datos' : 'Registro de Nuevo Viaje'}</p>
                                 </div>
                             </div>
                             <button onClick={() => setIsAddModalOpen(false)} className="p-2 text-slate-400 hover:bg-slate-100 rounded-lg transition-colors"><X size={20} /></button>
@@ -1979,8 +1979,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             <MapPin size={20} className="stroke-bold" />
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Itinerario y Tiempos</h4>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Definición de ruta</p>
+                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Itinerario y Tiempos</h4>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Definición de ruta</p>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -2066,8 +2066,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             <Package size={20} className="stroke-bold" />
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Información Logística</h4>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datos de carga</p>
+                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Información Logística</h4>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Datos de carga</p>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -2088,8 +2088,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             <Truck size={20} className="stroke-bold" />
                                         </div>
                                         <div>
-                                            <h4 className="text-xs font-black text-slate-900 uppercase tracking-tight">Unidad de Transporte</h4>
-                                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Datos del vehículo</p>
+                                            <h4 className="text-xs font-bold text-slate-900 uppercase tracking-tight">Unidad de Transporte</h4>
+                                            <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Datos del vehículo</p>
                                         </div>
                                     </div>
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -2149,8 +2149,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 </div>
 
                                 <div className="flex justify-end gap-3 pt-2">
-                                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase text-slate-500 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all">Cancelar Operación</button>
-                                    <button type="submit" className="bg-[#ff0000] text-white px-6 py-2.5 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 transition-all flex items-center gap-2"><Save size={14} /> {isEditMode ? 'Guardar Cambios' : 'Iniciar Seguimiento'}</button>
+                                    <button type="button" onClick={() => setIsAddModalOpen(false)} className="px-5 py-2.5 rounded-xl text-xs font-bold uppercase text-slate-500 hover:bg-slate-100 border border-transparent hover:border-slate-200 transition-all">Cancelar Operación</button>
+                                    <button type="submit" className="bg-[#ff0000] text-white px-6 py-2.5 rounded-xl font-bold text-xs uppercase tracking-widest hover:bg-red-600 transition-all flex items-center gap-2"><Save size={14} /> {isEditMode ? 'Guardar Cambios' : 'Iniciar Seguimiento'}</button>
                                 </div>
                             </form>
                         </div>
@@ -2166,7 +2166,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 <AlertTriangle size={24} />
                             </div>
                             <div>
-                                <h3 className="text-lg font-black text-slate-800">Confirmar Cancelación</h3>
+                                <h3 className="text-lg font-bold text-slate-800">Confirmar Cancelación</h3>
                                 <p className="text-xs font-medium text-slate-500 mt-2">¿Desea cancelar el monitoreo registrado?</p>
                             </div>
                             <div className="grid grid-cols-2 gap-3 pt-2">
@@ -2224,7 +2224,7 @@ const DataFormInput = ({ label, value, onChange, options = [], placeholder = "" 
 
     return (
         <div className="group space-y-1 w-full relative" ref={wrapperRef}>
-            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
+            <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
             <div className="relative">
                 <input
                     type="text"
@@ -2267,7 +2267,7 @@ const DataFormInput = ({ label, value, onChange, options = [], placeholder = "" 
 
 const FormInput = ({ label, value, onChange, type = "text", options = [], placeholder = "", required = true, error }: { label: string, value: string, onChange: (v: string) => void, type?: string, options?: string[], placeholder?: string, required?: boolean, error?: string }) => (
     <div className="group space-y-1 w-full">
-        <label className="text-[9px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
+        <label className="text-[11px] font-bold text-slate-400 uppercase tracking-widest ml-1 group-focus-within:text-slate-700 transition-colors">{label}</label>
         {type === 'select' ? (
             <div className="relative">
                 <select required={required} className={`w-full p-2.5 bg-white border-2 ${error ? 'border-red-500' : 'border-slate-200 hover:border-slate-300'} rounded-xl text-xs font-bold uppercase outline-none focus:border-slate-900 transition-all text-slate-700 appearance-none cursor-pointer`} value={value} onChange={e => onChange(e.target.value)}>
@@ -2290,6 +2290,6 @@ const FormInput = ({ label, value, onChange, type = "text", options = [], placeh
                 placeholder={placeholder}
             />
         )}
-        {error && <p className="text-[9px] font-bold text-red-500 ml-1 mt-0.5 animate-in slide-in-from-top-1">{error}</p>}
+        {error && <p className="text-[11px] font-bold text-red-500 ml-1 mt-0.5 animate-in slide-in-from-top-1">{error}</p>}
     </div>
 );
