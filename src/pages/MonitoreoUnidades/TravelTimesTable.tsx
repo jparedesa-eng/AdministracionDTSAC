@@ -13,6 +13,69 @@ import {
 } from '../../store/travelTimesStore';
 import { getDestinationsState, fetchDestinations } from '../../store/destinationStore';
 
+const SearchableSelect = ({ label, value, onChange, options = [], placeholder = "Seleccionar..." }: { label: string, value: string, onChange: (v: string) => void, options: string[], placeholder?: string }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    const [search, setSearch] = useState("");
+    const wrapperRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, []);
+
+    const filteredOptions = options.filter(opt =>
+        opt.toLowerCase().includes(search.toLowerCase())
+    );
+
+    return (
+        <div className="space-y-1 w-full relative" ref={wrapperRef}>
+            <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>
+            <div className="relative">
+                <input
+                    type="text"
+                    className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none bg-white font-bold uppercase transition-all"
+                    value={isOpen ? search : value}
+                    onChange={e => { setSearch(e.target.value); if (!isOpen) setIsOpen(true); }}
+                    onFocus={() => { setIsOpen(true); setSearch(''); }}
+                    placeholder={placeholder}
+                />
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <Search size={14} />
+                </div>
+
+                {isOpen && (
+                    <div className="absolute z-[60] w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
+                        {filteredOptions.length === 0 ? (
+                            <div className="p-3 text-xs text-slate-400 text-center italic font-medium">No hay resultados</div>
+                        ) : (
+                            filteredOptions.map((opt, idx) => (
+                                <button
+                                    key={idx}
+                                    type="button"
+                                    className="w-full text-left px-4 py-2 text-xs font-bold uppercase hover:bg-slate-50 transition-colors text-slate-700"
+                                    onClick={() => {
+                                        onChange(opt);
+                                        setIsOpen(false);
+                                        setSearch("");
+                                    }}
+                                >
+                                    {opt}
+                                </button>
+                            ))
+                        )}
+                    </div>
+                )}
+            </div>
+            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }`}</style>
+        </div>
+    );
+};
+
 export const TravelTimesTable: React.FC = () => {
     // Subscription State
     const [, setVersion] = useState(0);
@@ -496,67 +559,6 @@ export const TravelTimesTable: React.FC = () => {
     );
 };
 
-const SearchableSelect = ({ label, value, onChange, options = [], placeholder = "Seleccionar..." }: { label: string, value: string, onChange: (v: string) => void, options: string[], placeholder?: string }) => {
-    const [isOpen, setIsOpen] = useState(false);
-    const [search, setSearch] = useState("");
-    const wrapperRef = React.useRef<HTMLDivElement>(null);
 
-    React.useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, []);
-
-    const filteredOptions = options.filter(opt =>
-        opt.toLowerCase().includes(search.toLowerCase())
-    );
-
-    return (
-        <div className="space-y-1 w-full relative" ref={wrapperRef}>
-            <label className="block text-xs font-bold text-gray-500 mb-1">{label}</label>
-            <div className="relative">
-                <input
-                    type="text"
-                    className="w-full h-10 rounded-lg border border-gray-200 focus:border-gray-400 text-sm px-3 outline-none bg-white font-bold uppercase transition-all"
-                    value={isOpen ? search : value}
-                    onChange={e => { setSearch(e.target.value); if (!isOpen) setIsOpen(true); }}
-                    onFocus={() => { setIsOpen(true); setSearch(''); }}
-                    placeholder={placeholder}
-                />
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
-                    <Search size={14} />
-                </div>
-
-                {isOpen && (
-                    <div className="absolute z-[60] w-full mt-1 bg-white border border-slate-200 rounded-xl shadow-xl max-h-60 overflow-y-auto custom-scrollbar">
-                        {filteredOptions.length === 0 ? (
-                            <div className="p-3 text-xs text-slate-400 text-center italic font-medium">No hay resultados</div>
-                        ) : (
-                            filteredOptions.map((opt, idx) => (
-                                <button
-                                    key={idx}
-                                    type="button"
-                                    className="w-full text-left px-4 py-2 text-xs font-bold uppercase hover:bg-slate-50 transition-colors text-slate-700"
-                                    onClick={() => {
-                                        onChange(opt);
-                                        setIsOpen(false);
-                                        setSearch("");
-                                    }}
-                                >
-                                    {opt}
-                                </button>
-                            ))
-                        )}
-                    </div>
-                )}
-            </div>
-            <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; }`}</style>
-        </div>
-    );
-};
 
 

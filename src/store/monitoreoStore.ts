@@ -158,7 +158,8 @@ export async function fetchUnits(force = false): Promise<void> {
 
         if (error) throw error;
 
-        // Map Supabase rows (snake_case) to TransportUnit (camelCase)        state.units = (data || []).map((row: any) => {
+        // Map Supabase rows (snake_case) to TransportUnit (camelCase)
+        state.units = (data || []).map((row: any) => {
             // Mapping the relational controls and stops
             const rawEvents = (row[CONTROLES_TABLE] || []);
             const controles = rawEvents
@@ -278,7 +279,6 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
     notify();
 
     try {
-        // Map camelCase app model to snake_case DB columns
         const payload = {
             unit_name: unit.unitName,
             proceso: unit.proceso,
@@ -295,22 +295,15 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
             ubicacion_actual: unit.ubicacionActual,
             fecha_estimada_llegada: unit.fechaEstimadaLlegada,
             status: unit.status,
-
-            // JSON fields (Empty for new)
             path_points: unit.path,
-
             almacen_destino1: unit.almacenDestino1,
             almacen_destino2: unit.almacenDestino2,
-            // Only include fields that exist in the form/unit object
             origin: unit.origin,
             destination: unit.destination,
             ruta_name: unit.rutaName,
             area: unit.area,
-
             last_location: unit.lastLocation,
             last_update: unit.lastUpdate,
-
-            // Add other fields as they become relevant or defined in the UI
             tiempo_transito_min: unit.tiempoTransitoMin,
             tiempo_transito_max: unit.tiempoTransitoMax,
             usuario_creacion_id: unit.usuarioCreacionId
@@ -323,21 +316,14 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
             .single();
 
         if (error) {
-            // Revert optimistic update if necessary (for simplicity we just clear loading for now)
             state.loading = false;
             notify();
             throw error;
         }
 
-        // Finalize state with the DB record
-        const realUnit = { ...unit, id: data.id.toString() } as TransportUnit;
-        state.units = state.units.map(u => u.id === 'PREVIEW' ? realUnit : u);
-        state.loading = false;
-        notify();
-
+        await fetchUnits(true);
         return data.id.toString();
     } catch (err: any) {
-        state.units = state.units.filter(u => u.id !== 'PREVIEW');
         state.error = err.message;
         state.loading = false;
         notify();
@@ -347,32 +333,23 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
 
 export async function updateUnit(id: string, updates: Partial<TransportUnit>): Promise<void> {
     try {
-        // Map updates to snake_case
         const mappedUpdates: any = {};
-        // Mapping logic... (omitted for brevity in thinking, will use full content)
         if (updates.proceso !== undefined) mappedUpdates.proceso = updates.proceso;
         if (updates.status !== undefined) mappedUpdates.status = updates.status;
         if (updates.ubicacionActual !== undefined) mappedUpdates.ubicacion_actual = updates.ubicacionActual;
         if (updates.lastUpdate !== undefined) mappedUpdates.last_update = updates.lastUpdate;
         if (updates.lastLocation !== undefined) mappedUpdates.last_location = updates.lastLocation;
-
-        // NOTE: we skip updating 'controles', 'paradas_prog' etc in the main table
-        // as they are now in the relational table.
         if (updates.path !== undefined) mappedUpdates.path_points = updates.path;
-
         if (updates.fechaLlegadaDestino1 !== undefined) mappedUpdates.fecha_llegada_destino1 = updates.fechaLlegadaDestino1;
         if (updates.fechaSalidaDestino1 !== undefined) mappedUpdates.fecha_salida_destino1 = updates.fechaSalidaDestino1;
         if (updates.fechaLlegadaDestino2 !== undefined) mappedUpdates.fecha_llegada_destino2 = updates.fechaLlegadaDestino2;
-
         if (updates.tiempoTotal1 !== undefined) mappedUpdates.tiempo_total1 = updates.tiempoTotal1;
         if (updates.tiempoNeto1 !== undefined) mappedUpdates.tiempo_neto1 = updates.tiempoNeto1;
         if (updates.tiempoTotal2 !== undefined) mappedUpdates.tiempo_total2 = updates.tiempoTotal2;
         if (updates.tiempoNeto2 !== undefined) mappedUpdates.tiempo_neto2 = updates.tiempoNeto2;
-
         if (updates.calificacionTTotal !== undefined) mappedUpdates.calificacion_t_total = updates.calificacionTTotal;
         if (updates.calificacionTNeto !== undefined) mappedUpdates.calificacion_t_neto = updates.calificacionTNeto;
         if (updates.fechaEstimadaLlegada !== undefined) mappedUpdates.fecha_estimada_llegada = updates.fechaEstimadaLlegada;
-
         if (updates.unitName !== undefined) mappedUpdates.unit_name = updates.unitName;
         if (updates.fechaIngresoPlanta !== undefined) mappedUpdates.fecha_ingreso_planta = updates.fechaIngresoPlanta;
         if (updates.fechaSalidaPlanta !== undefined) mappedUpdates.fecha_salida_planta = updates.fechaSalidaPlanta;
@@ -390,7 +367,6 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
         if (updates.almacenDestino1 !== undefined) mappedUpdates.almacen_destino1 = updates.almacenDestino1;
         if (updates.almacenDestino2 !== undefined) mappedUpdates.almacen_destino2 = updates.almacenDestino2;
 
-        // TRUE OPTIMISTIC: Update local state BEFORE Supabase call
         const originalUnits = [...state.units];
         state.units = state.units.map(u => u.id === id ? { ...u, ...updates } : u);
         notify();
@@ -401,7 +377,6 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
             .eq('id', id);
 
         if (error) {
-            // REVERT if failed
             state.units = originalUnits;
             state.error = error.message;
             notify();
@@ -413,12 +388,8 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
     }
 }
 
-/**
- * Automatically synchronizes the unit's summary (main table) with the relational events
- */
 export async function syncUnitSummary(unitId: string) {
     try {
-        // 1. Get ALL events for this unit
         const { data: events, error: eError } = await supabase
             .from(CONTROLES_TABLE)
             .select('*')
@@ -427,7 +398,6 @@ export async function syncUnitSummary(unitId: string) {
 
         if (eError) throw eError;
 
-        // 2. Get the unit row (to have access to defaults like origin)
         const { data: unit, error: uError } = await supabase
             .from(TABLE_NAME)
             .select('origin, fecha_salida_planta, status')
@@ -436,24 +406,27 @@ export async function syncUnitSummary(unitId: string) {
 
         if (uError) throw uError;
 
-        // 3. Determine latest state
+        const terminalStatuses = ['LLEGADO', 'CANCELADO', 'Entregado'];
+        if (terminalStatuses.includes(unit.status)) {
+            return;
+        }
+
         const lastEvent = events && events.length > 0 ? events[events.length - 1] : null;
         
         let newStatus = unit.status;
-
-        // Only auto-update status if currently in an active state (not arrived/cancelled)
-        const activeStatuses = ['EN RUTA', 'EN PARADA', 'INCIDENTE', 'PENDIENTE'];
+        const activeStatuses = ['En Ruta', 'EN PARADA', 'INCIDENTE', 'PENDIENTE', 'En Planta'];
+        
         if (activeStatuses.includes(unit.status)) {
             if (lastEvent) {
                 if (!lastEvent.timestamp_fin) {
                     if (lastEvent.tipo === 'PARADA_PROG') newStatus = 'EN PARADA';
                     else if (lastEvent.tipo === 'PARADA_NOPROG') newStatus = 'INCIDENTE';
-                    else newStatus = 'EN RUTA';
+                    else newStatus = 'En Ruta';
                 } else {
-                    newStatus = 'EN RUTA';
+                    newStatus = 'En Ruta';
                 }
             } else {
-                newStatus = 'EN RUTA';
+                newStatus = 'En Ruta';
             }
         }
 
@@ -464,23 +437,13 @@ export async function syncUnitSummary(unitId: string) {
             status: newStatus
         };
 
-        // 4. Update main table
-        const { error: syncError } = await supabase
-            .from(TABLE_NAME)
-            .update(updates)
-            .eq('id', unitId);
-
-        if (syncError) throw syncError;
-
+        await supabase.from(TABLE_NAME).update(updates).eq('id', unitId);
     } catch (err) {
         console.error("Error syncing unit summary:", err);
     }
 }
 
-/**
- * Adds a control point, stop or incident to the relational table
- */
-export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PROG' | 'PARADA_NOPROG', data: any) {
+export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PROG' | 'PARADA_NOPROG', data: any, skipSync = false) {
     const payload = {
         unidad_id: unitId,
         tipo,
@@ -493,65 +456,85 @@ export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PRO
         lng: data.coords?.lng
     };
 
-    const { error } = await supabase
-        .from(CONTROLES_TABLE)
-        .insert(payload);
-
+    const { error } = await supabase.from(CONTROLES_TABLE).insert(payload);
     if (error) throw error;
-    
-    // AUTO-SYNC main table summary
-    await syncUnitSummary(unitId);
-    
-    // Refresh units after relational insert
+
+    if (!skipSync) await syncUnitSummary(unitId);
     await fetchUnits(true);
 }
 
-/**
- * Updates a specific event (e.g. finishing a stop)
- */
-export async function updateEventInDB(eventId: string, updates: any) {
+export async function updateEventInDB(eventId: string, updates: any, skipSync = false) {
     const mapped: any = {};
-    if (updates.endTime !== undefined || updates.end !== undefined) {
-        mapped.timestamp_fin = updates.endTime || updates.end;
-    }
-    if (updates.duration !== undefined || updates.time !== undefined) {
-        mapped.duracion = updates.duration || updates.time;
-    }
+    if (updates.endTime !== undefined) mapped.timestamp_fin = updates.endTime;
+    if (updates.duration !== undefined) mapped.duracion = updates.duration;
     if (updates.location !== undefined) mapped.ubicacion = updates.location;
     if (updates.coords !== undefined) {
         mapped.lat = updates.coords.lat;
         mapped.lng = updates.coords.lng;
     }
 
-    const { error } = await supabase
-        .from(CONTROLES_TABLE)
-        .update(mapped)
-        .eq('id', eventId);
-
+    const { error } = await supabase.from(CONTROLES_TABLE).update(mapped).eq('id', eventId);
     if (error) throw error;
 
-    // We need unitId to sync. Let's get it.
     const { data: eventData } = await supabase.from(CONTROLES_TABLE).select('unidad_id').eq('id', eventId).single();
-    if (eventData) await syncUnitSummary(eventData.unidad_id);
-
+    if (eventData && !skipSync) await syncUnitSummary(eventData.unidad_id);
     await fetchUnits(true);
 }
 
-/**
- * Deletes an event
- */
-export async function deleteEventFromDB(eventId: string) {
-    // Get unitId BEFORE deletion to sync summary after
+export async function deleteEventFromDB(eventId: string, skipSync = false) {
     const { data: eventData } = await supabase.from(CONTROLES_TABLE).select('unidad_id').eq('id', eventId).single();
-
-    const { error } = await supabase
-        .from(CONTROLES_TABLE)
-        .delete()
-        .eq('id', eventId);
-
+    const { error } = await supabase.from(CONTROLES_TABLE).delete().eq('id', eventId);
     if (error) throw error;
 
-    if (eventData) await syncUnitSummary(eventData.unidad_id);
-    
+    if (eventData && !skipSync) await syncUnitSummary(eventData.unidad_id);
     await fetchUnits(true);
+}
+
+export async function finalizeTripInDB(unitId: string, mode: 'SINGLE' | 'DEST1' | 'DEST2', data: any) {
+    try {
+        await addEventToDB(unitId, 'CONTROL', {
+            time: data.arrivalDateTime,
+            location: data.locationName,
+            coords: data.coords
+        }, true);
+
+        const updates: any = {
+            last_location: data.locationName,
+            ubicacion_actual: data.locationName,
+            last_update: data.arrivalDateTime
+        };
+
+        if (mode === 'SINGLE' || mode === 'DEST2') {
+            updates.status = UnitStatus.DELIVERED;
+            if (mode === 'DEST2') {
+                updates.fecha_llegada_destino2 = data.arrivalDateTime;
+                updates.fecha_salida_destino1 = data.exitD1;
+                updates.tiempo_total2 = data.tiempoTotal;
+                updates.tiempo_neto2 = data.tiempoNeto;
+            } else {
+                updates.fecha_llegada_destino1 = data.arrivalDateTime;
+                updates.tiempo_total1 = data.tiempoTotal;
+                updates.tiempo_neto1 = data.tiempoNeto;
+                updates.calificacion_t_total = data.score;
+                updates.calificacion_t_neto = data.score;
+            }
+        } else if (mode === 'DEST1') {
+            updates.fecha_llegada_destino1 = data.arrivalDateTime;
+            updates.tiempo_total1 = data.tiempoTotal;
+            updates.tiempo_neto1 = data.tiempoNeto;
+            updates.calificacion_t_total = data.score;
+            updates.calificacion_t_neto = data.score;
+            updates.ubicacion_actual = `LLEGADA A PUNTO 1: ${data.locationName}`;
+        }
+
+        if (data.path) updates.path_points = data.path;
+
+        const { error } = await supabase.from(TABLE_NAME).update(updates).eq('id', unitId);
+        if (error) throw error;
+
+        await fetchUnits(true);
+    } catch (err) {
+        console.error("Error in finalizeTripInDB:", err);
+        throw err;
+    }
 }

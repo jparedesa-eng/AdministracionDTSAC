@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createUnit, updateUnit, UnitStatus, addEventToDB, updateEventInDB, deleteEventFromDB } from '../../store/monitoreoStore';
+import { createUnit, updateUnit, UnitStatus, addEventToDB, updateEventInDB, deleteEventFromDB, finalizeTripInDB, fetchUnits } from '../../store/monitoreoStore';
 import type { TransportUnit, LatLng } from '../../store/monitoreoStore';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
@@ -229,7 +229,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             if (!matchesSearch) return false;
 
             if ((statusFilter === 'ALL' || statusFilter === 'ARRIVED' || statusFilter === 'CANCELLED') && (dateRange.start || dateRange.end)) {
-                const unitDate = new Date(u.fechaSalidaPlanta);
+                // If filtering by arrivals, use the arrival date instead of departure date
+                let unitDateRaw = u.fechaSalidaPlanta;
+                if (statusFilter === 'ARRIVED') {
+                    unitDateRaw = u.fechaLlegadaDestino2 || u.fechaLlegadaDestino1 || u.lastUpdate;
+                }
+                
+                if (!unitDateRaw) return false;
+
+                const unitDate = new Date(unitDateRaw);
                 const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
                 const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
                 end.setHours(23, 59, 59);
@@ -497,23 +505,20 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         const now = new Date();
         const departureDate = new Date(unit.fechaSalidaPlanta);
+        // Ensure lastUpdateDate is interpreted as a full Date object
         const lastUpdateDate = new Date(unit.lastUpdate);
 
         const type = finishTripModal.type;
 
         // --- HELPER: Calculate Metrics ---
-        // Calculates Time/Score based on Arrival Date relative to Departure
-        // deductMs: Optional time to subtract from Net Time (e.g., dead time at D1)
         const calculateMetrics = (arrivalDate: Date, deductMs: number = 0) => {
             const totalMs = arrivalDate.getTime() - departureDate.getTime();
             const totalMins = Math.floor(totalMs / 60000);
 
-            // Total Time String
             const totalH = Math.floor(totalMins / 60);
             const totalM = totalMins % 60;
             const tiempoTotal = `${totalH}h ${totalM}m`;
 
-            // Net Time (Total - Stops - Deductions)
             const stopsMins = [...unit.paradasProg, ...unit.paradasNoProg].reduce((acc, stop) => {
                 if (!stop.time) return acc;
                 let m = 0;
@@ -524,14 +529,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 return acc + m;
             }, 0);
 
-            // Subtract extra deduction (converted to minutes)
             const deductMins = Math.floor(deductMs / 60000);
             const netMins = Math.max(0, totalMins - stopsMins - deductMins);
             const netH = Math.floor(netMins / 60);
             const netM = netMins % 60;
             const tiempoNeto = `${netH}h ${netM}m`;
 
-            // Score Logic (Always based on Net Time vs Checkpoints)
             const parseMinMax = (s: string) => {
                 if (!s) return 0;
                 const parts = s.split(':').map(Number);
@@ -553,46 +556,52 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         setIsFinishingTrip(true);
         try {
+            // --- DATE VALIDATION HELPER ---
+            const validateDates = (testDate: Date, label: string) => {
+                if (testDate.getTime() < departureDate.getTime()) {
+                    showAlert("Error de Fecha", `${label} no puede ser anterior a la salida de planta (${formatDate(unit.fechaSalidaPlanta)}).`);
+                    return false;
+                }
+                if (testDate.getTime() < lastUpdateDate.getTime()) {
+                    showAlert("Error de Fecha", `${label} no puede ser anterior al último reporte registrado (${formatDate(unit.lastUpdate)}).`);
+                    return false;
+                }
+                if (testDate.getTime() > now.getTime()) {
+                    showAlert("Error de Fecha", `${label} no puede ser una fecha futura.`);
+                    return false;
+                }
+                return true;
+            };
+
             // --- SCENARIO 1: SINGLE DESTINATION ---
             if (type === 'SINGLE') {
                 const finishDate = new Date(finishTripModal.date);
-                if (finishDate < departureDate) { showAlert("Error", "La fecha de llegada no puede ser anterior a la salida de planta."); return; }
-                if (finishDate < lastUpdateDate) { showAlert("Error", "La fecha de llegada no puede ser anterior al último reporte."); return; }
-                if (finishDate > now) { showAlert("Error", "La fecha de llegada no puede ser futura."); return; }
+                if (!validateDates(finishDate, "La fecha de llegada")) return;
 
-                // Calculate everything based on Single/D1 logic
                 const metrics = calculateMetrics(finishDate);
-                await finalizeTrip(unit, finishDate.toISOString(), unit.almacenDestino1 || unit.destination, metrics);
+                await finalizeTripInDB(unit.id, 'SINGLE', {
+                    arrivalDateTime: finishDate.toISOString(),
+                    locationName: unit.almacenDestino1 || unit.destination,
+                    coords: DESTINATION_GPS,
+                    ...metrics
+                });
+                setFinishTripModal(prev => ({ ...prev, open: false }));
+                setToast({ type: 'success', message: 'Viaje finalizado correctamente' });
             }
 
             // --- SCENARIO 2: ARRIVAL AT DESTINATION 1 (INTERMEDIATE) ---
             else if (type === 'DEST1') {
                 const finishDate = new Date(finishTripModal.date);
-                if (finishDate < departureDate) { showAlert("Error", "La fecha de llegada no puede ser anterior a la salida de planta."); return; }
-                if (finishDate < lastUpdateDate) { showAlert("Error", "La fecha de llegada no puede ser anterior al último reporte."); return; }
-                if (finishDate > now) { showAlert("Error", "La fecha de llegada no puede ser futura."); return; }
+                if (!validateDates(finishDate, "La fecha de llegada al Punto 1")) return;
 
-                // Always calc metrics for DEST1 (Base calculation)
                 const metrics = calculateMetrics(finishDate);
-
-                let updates: any = {
-                    fechaLlegadaDestino1: finishDate.toISOString(),
-                    ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
-                    lastUpdate: finishDate.toISOString(),
-                    tiempoTotal1: metrics.tiempoTotal,
-                    tiempoNeto1: metrics.tiempoNeto,
-                    calificacionTTotal: metrics.score,
-                    calificacionTNeto: metrics.score
-                };
-
-                await updateUnit(unit.id, updates);
-                // RELATIONAL: Add arrival control
-                await addEventToDB(unit.id, 'CONTROL', {
-                    time: finishDate.toISOString(),
-                    location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
-                    coords: DESTINATION_GPS
+                await finalizeTripInDB(unit.id, 'DEST1', {
+                    arrivalDateTime: finishDate.toISOString(),
+                    locationName: unit.almacenDestino1,
+                    coords: DESTINATION_GPS,
+                    ...metrics
                 });
-                setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+                setFinishTripModal(prev => ({ ...prev, open: false }));
                 setToast({ type: 'success', message: 'Llegada a Punto 1 registrada' });
             }
 
@@ -602,84 +611,43 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 const arriveD2 = new Date(finishTripModal.dateArriveD2);
                 const arriveD1 = unit.fechaLlegadaDestino1 ? new Date(unit.fechaLlegadaDestino1) : departureDate;
 
-                if (exitD1 < arriveD1) { showAlert("Error", "La salida del Punto 1 no puede ser antes de haber llegado."); return; }
-                if (arriveD2 < exitD1) { showAlert("Error", "La llegada al Punto 2 no puede ser antes de salir del Punto 1."); return; }
-                if (arriveD2 > now) { showAlert("Error", "La llegada final no puede ser futura."); return; }
+                if (exitD1.getTime() < arriveD1.getTime()) {
+                    showAlert("Error", `La salida del Punto 1 (${formatDate(exitD1.toISOString())}) no puede ser anterior a la llegada (${formatDate(arriveD1.toISOString())}).`);
+                    return;
+                }
+                if (!validateDates(arriveD2, "La fecha de llegada final")) return;
+                if (arriveD2.getTime() < exitD1.getTime()) {
+                    showAlert("Error", "La llegada al Punto 2 no puede ser anterior a la salida del Punto 1.");
+                    return;
+                }
 
-                // Dead Time at D1 = Exit D1 - Arrival D1
                 const deadTimeMs = exitD1.getTime() - arriveD1.getTime();
-
-                // Calculate Metrics for D2 (Deducting Dead Time)
                 const metrics = calculateMetrics(arriveD2, deadTimeMs);
 
                 const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
                 const segment = await fetchRoadRoute([lastPoint, DESTINATION_GPS]);
                 const newPath = [...(unit.path || []), ...segment.slice(1)];
 
-                let updates: any = {
-                    status: UnitStatus.DELIVERED,
-                    ubicacionActual: `LLEGADA A ${unit.almacenDestino2}`,
-                    lastUpdate: arriveD2.toISOString(),
-                    fechaSalidaDestino1: exitD1.toISOString(),
-                    fechaLlegadaDestino2: arriveD2.toISOString(),
+                await finalizeTripInDB(unit.id, 'DEST2', {
+                    arrivalDateTime: arriveD2.toISOString(),
+                    locationName: unit.almacenDestino2,
+                    coords: DESTINATION_GPS,
+                    exitD1: exitD1.toISOString(),
                     path: newPath,
-                    tiempoTotal2: metrics.tiempoTotal,
-                    tiempoNeto2: metrics.tiempoNeto
-                };
-
-                await updateUnit(unit.id, updates);
-                // RELATIONAL: Add arrival control
-                await addEventToDB(unit.id, 'CONTROL', {
-                    time: arriveD2.toISOString(),
-                    location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
-                    coords: DESTINATION_GPS
+                    ...metrics
                 });
-                setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+                setFinishTripModal(prev => ({ ...prev, open: false }));
                 setToast({ type: 'success', message: 'Viaje finalizado correctamente' });
             }
         } catch (error) {
             console.error("Error finishing trip:", error);
-            showAlert("Error", "No se pudo finalizar el viaje. Intente nuevamente.");
+            showAlert("Error", "No se pudo finalizar el viaje. Compruebe su conexión e intente nuevamente.");
         } finally {
             setIsFinishingTrip(false);
         }
     };
     ;
 
-    // Helper for Single Finish
-    const finalizeTrip = async (unit: TransportUnit, finishDateStr: string, locationName: string, metrics: { tiempoTotal: string; tiempoNeto: string; score: string }) => {
-        const finishDate = new Date(finishDateStr);
-        const finalCoords = DESTINATION_GPS;
-
-        // RELATIONAL: Add arrival control
-        await addEventToDB(unit.id, 'CONTROL', {
-            time: finishDate.toISOString(),
-            location: `LLEGADA A ${locationName}`,
-            coords: finalCoords
-        });
-
-        // Update Path with Segment Routing
-        const lastPathPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
-        const segment = await fetchRoadRoute([lastPathPoint, finalCoords]);
-        const newPath = [...(unit.path || []), ...segment.slice(1)];
-
-
-
-        await updateUnit(unit.id, {
-            status: UnitStatus.DELIVERED,
-            ubicacionActual: `LLEGADA A ${locationName}`,
-            lastUpdate: finishDate.toISOString(),
-            // controles: newControles, -> handled by addEventToDB
-            path: newPath,
-            fechaLlegadaDestino1: finishDate.toISOString(), // Standard Single arrival
-            tiempoTotal1: metrics.tiempoTotal,
-            tiempoNeto1: metrics.tiempoNeto,
-            calificacionTTotal: metrics.score,
-            calificacionTNeto: metrics.score
-        });
-
-        setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
-    };
 
     // State for Cancel Trip Confirmation
     const [confirmCancelModal, setConfirmCancelModal] = useState(false);
@@ -862,7 +830,22 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         allowTaint: true,
                         logging: false,
                         scale: 2,
-                        ignoreElements: (element) => element.classList.contains('leaflet-control-zoom')
+                        ignoreElements: (element) => element.classList.contains('leaflet-control-zoom'),
+                        onclone: (clonedDoc: Document) => {
+                            // Aggressive fix for oklch in Tailwind 4 / Modern CSS
+                            const all = clonedDoc.getElementsByTagName("*");
+                            for (let i = 0; i < all.length; i++) {
+                                const el = all[i] as HTMLElement;
+                                // Force compute the style to check for oklch
+                                // Though window.getComputedStyle(el) might be slow, it's necessary here
+                                try {
+                                    const comp = window.getComputedStyle(el);
+                                    if (comp.backgroundColor.includes('oklch')) el.style.backgroundColor = 'rgba(0,0,0,0)';
+                                    if (comp.color.includes('oklch')) el.style.color = 'inherit';
+                                    if (comp.borderColor.includes('oklch')) el.style.borderColor = 'inherit';
+                                } catch (e) {}
+                            }
+                        }
                     });
                     mapImage = canvas.toDataURL('image/png');
                 } catch (e) {
@@ -964,7 +947,26 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 margin: 0,
                 filename: `Reporte_Ruta_${new Date().toISOString().split('T')[0]}.pdf`,
                 image: { type: 'jpeg', quality: 0.95 },
-                html2canvas: { scale: 1.5, useCORS: true, scrollY: 0 },
+                html2canvas: { 
+                    scale: 1.5, 
+                    useCORS: true, 
+                    scrollY: 0,
+                    onclone: (clonedDoc: Document) => {
+                        // For the report PDF, we strictly use inline styles provided in htmlContent.
+                        // Removing global styles prevents html2canvas from attempting to parse
+                        // Tailwind 4 variables that use oklch.
+                        const styles = clonedDoc.getElementsByTagName('style');
+                        for (let i = styles.length - 1; i >= 0; i--) {
+                            styles[i].parentNode?.removeChild(styles[i]);
+                        }
+                        const links = clonedDoc.getElementsByTagName('link');
+                        for (let i = links.length - 1; i >= 0; i--) {
+                            if (links[i].rel === 'stylesheet') {
+                                links[i].parentNode?.removeChild(links[i]);
+                            }
+                        }
+                    }
+                },
                 jsPDF: { unit: 'px', format: [1122, 794], orientation: 'landscape', hotfixes: ['px_scaling'] } as any
             }).from(element).save();
 
@@ -1270,6 +1272,14 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 <input type="date" className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-24" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
                                 <span className="text-slate-300">-</span>
                                 <input type="date" className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
+                                <button 
+                                    onClick={() => fetchUnits(true)}
+                                    className="ml-1 bg-white border border-slate-200 text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-all flex items-center gap-1"
+                                    title="Aplicar filtro y refrescar"
+                                >
+                                    <Search size={10} strokeWidth={3} />
+                                    <span className="text-[9px] font-extrabold uppercase">Filtrar</span>
+                                </button>
                             </div>
                         )}
                     </div>
