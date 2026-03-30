@@ -38,7 +38,9 @@ import {
     MapPin,
     PlayCircle,
     Monitor,
-    Loader2
+    Loader2,
+    Phone,
+    Calendar
 } from 'lucide-react';
 
 const GLOBAL_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };
@@ -373,11 +375,11 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             const weight = isSelected ? 5 : 3;
 
             const tooltipContent = `
-        <div class="px-2 py-1 bg-white border border-slate-300 rounded font-sans z-[1000]">
-             <div class="text-[10px] font-black text-slate-900 leading-none mb-0.5 text-center">${unit.plateRemolque}</div>
-             <div class="text-[8px] font-bold text-slate-500 truncate max-w-[100px] text-center">${unit.ubicacionActual}</div>
-             ${isStopped ? `<div class="text-[8px] font-black text-red-600 text-center mt-1">${unit.status}</div>` : ''}
-             ${needsAlert && !isArrived && !isStopped ? '<div class="text-[8px] font-black text-orange-500 text-center mt-1 animate-pulse">!ALERTA!</div>' : ''}
+        <div class="px-1.5 py-1 bg-white border border-slate-200 rounded-md font-sans z-[1000] shadow-sm">
+             <div class="text-[10px] font-bold text-gray-900 leading-tight text-center">${unit.plateRemolque}</div>
+             <div class="text-[9px] font-medium text-gray-400 truncate max-w-[100px] text-center">${unit.ubicacionActual}</div>
+             ${isStopped ? `<div class="text-[8px] font-bold text-red-600 text-center mt-0.5">${unit.status}</div>` : ''}
+             ${needsAlert && !isArrived && !isStopped ? '<div class="text-[8px] font-bold text-orange-500 text-center mt-0.5 animate-pulse">RETRASO</div>' : ''}
         </div>
       `;
 
@@ -550,7 +552,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
                 lastUpdate: finishDate.toISOString(),
                 controles: [...unit.controles, {
-                    time: finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    time: finishDate.toISOString(),
                     location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
                     coords: DESTINATION_GPS
                 }],
@@ -592,7 +594,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 fechaSalidaDestino1: exitD1.toISOString(),
                 fechaLlegadaDestino2: arriveD2.toISOString(),
                 controles: [...unit.controles, {
-                    time: arriveD2.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    time: arriveD2.toISOString(),
                     location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
                     coords: DESTINATION_GPS
                 }],
@@ -611,12 +613,11 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     // Helper for Single Finish
     const finalizeTrip = async (unit: TransportUnit, finishDateStr: string, locationName: string, metrics: { tiempoTotal: string; tiempoNeto: string; score: string }) => {
         const finishDate = new Date(finishDateStr);
-        const formattedTime = finishDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         const finalCoords = DESTINATION_GPS;
 
         let newControles = [...unit.controles];
         newControles.push({
-            time: formattedTime,
+            time: finishDate.toISOString(),
             location: `LLEGADA A ${locationName}`,
             coords: finalCoords
         });
@@ -977,18 +978,19 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         setIsSavingControl(true);
         const newPoint: LatLng = { lat: nLat, lng: nLng };
-        const formattedTime = reportDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        const isoDateTime = reportDateTime.toISOString();
 
         let newControles = [...u.controles];
         if (editingControlIndex !== null) {
             newControles[editingControlIndex] = {
                 ...newControles[editingControlIndex],
+                time: isoDateTime,
                 location: reportForm.location.toUpperCase(),
                 coords: newPoint
             };
         } else {
             newControles.push({
-                time: formattedTime,
+                time: isoDateTime,
                 location: reportForm.location.toUpperCase(),
                 coords: newPoint
             });
@@ -1194,7 +1196,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             {isExporting ? 'Generando...' : 'Reporte'}
                         </button>
                         <button onClick={() => { setIsEditMode(false); setForm({ ...form, plateRemolque: '' }); setIsAddModalOpen(true); }} className="bg-blue-600 text-white px-5 py-2 rounded-lg flex items-center gap-2 font-medium text-sm hover:bg-blue-700 transition-all shadow-sm">
-                            <Plus size={16} /> Nueva Apertura
+                            <Plus size={16} /> Nueva Monitoreo
                         </button>
                     </div>
                 </div>
@@ -1244,75 +1246,75 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                     <div className="flex items-center justify-between gap-4">
                                         <div className="min-w-[140px] flex flex-col gap-1">
                                             <div className="flex items-center gap-1">
-                                                <h3 className={`text-sm font-black uppercase ${isSelected ? 'text-[#1a73e8]' : 'text-slate-800'}`}>
+                                                <h3 className={`text-base font-bold ${isSelected ? 'text-[#1a73e8]' : 'text-gray-900'}`}>
                                                     {unit.plateRemolque}
                                                 </h3>
                                                 {unit.plateSemiRemolque && unit.plateSemiRemolque !== 'N/A' && (
-                                                    <span className="text-xs font-bold text-slate-400 uppercase">/ {unit.plateSemiRemolque}</span>
+                                                    <span className="text-xs font-medium text-gray-400">/ {unit.plateSemiRemolque}</span>
                                                 )}
                                             </div>
-                                            <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest truncate max-w-[140px]">{unit.transportista}</p>
+                                            <p className="text-[11px] font-medium text-gray-400 truncate max-w-[140px]">{unit.transportista}</p>
                                             <div className="flex gap-1 mt-1">
-                                                <span className="inline-block px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[8px] font-black uppercase tracking-wider">{unit.proceso}</span>
-                                                <span className={`inline-block px-2 py-0.5 rounded text-[8px] font-black uppercase tracking-wider ${unit.status === UnitStatus.TRANSIT ? 'bg-blue-100 text-blue-700' : isStopped ? 'bg-red-100 text-red-700 animate-pulse' : unit.status === UnitStatus.DELIVERED ? 'bg-emerald-100 text-emerald-700' : isCancelled ? 'bg-slate-200 text-slate-600' : 'bg-slate-200 text-slate-700'}`}>
+                                                <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-bold">{unit.proceso}</span>
+                                                <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${unit.status === UnitStatus.TRANSIT ? 'bg-blue-100 text-blue-700' : isStopped ? 'bg-red-100 text-red-700 animate-pulse' : unit.status === UnitStatus.DELIVERED ? 'bg-emerald-100 text-emerald-700' : isCancelled ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-700'}`}>
                                                     {typeof unit.status === 'string' ? unit.status : 'Desconocido'}
                                                 </span>
                                             </div>
                                         </div>
 
-                                        <div className="flex-1 border-l border-slate-100 pl-4 flex flex-col justify-center gap-2">
+                                        <div className="flex-1 border-l border-gray-100 pl-4 flex flex-col justify-center gap-2">
                                             <div className="flex items-center gap-2">
-                                                <div className="w-1.5 h-1.5 rounded-full bg-slate-800" />
-                                                <span className="text-[10px] font-black text-slate-700 uppercase truncate">{unit.origin}</span>
-                                                <div className="h-[1px] bg-slate-200 flex-1"></div>
-                                                <span className="text-[10px] font-black text-slate-700 uppercase truncate">{unit.destination}</span>
-                                                <div className={`w-1.5 h-1.5 rounded-full ${isArrived ? 'bg-emerald-500' : 'bg-slate-300'}`} />
+                                                <div className="w-1.5 h-1.5 rounded-full bg-gray-900" />
+                                                <span className="text-xs font-bold text-gray-700 truncate">{unit.origin}</span>
+                                                <div className="h-[1px] bg-gray-100 flex-1"></div>
+                                                <span className="text-xs font-bold text-gray-700 truncate">{unit.destination}</span>
+                                                <div className={`w-1.5 h-1.5 rounded-full ${isArrived ? 'bg-emerald-500' : 'bg-gray-300'}`} />
                                             </div>
                                             <div className="flex justify-between">
                                                 <div>
-                                                    <span className="text-[7px] font-bold text-slate-400 uppercase block">SALIDA</span>
-                                                    <span className="text-[9px] font-bold text-slate-600">{formatDate(unit.fechaSalidaPlanta)}</span>
+                                                    <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Salida</span>
+                                                    <span className="text-xs font-medium text-gray-600">{formatDate(unit.fechaSalidaPlanta)}</span>
                                                 </div>
                                                 <div className="text-right flex flex-col items-end">
                                                     {unit.almacenDestino1 && (
                                                         <div className="mb-0.5">
-                                                            <span className="text-[7px] font-bold text-slate-400 uppercase block">LLEGADA 1 {unit.fechaLlegadaDestino1 ? `- ${formatDate(unit.fechaLlegadaDestino1)}` : ''}</span>
-                                                            <span className="text-[9px] font-bold text-slate-600 truncate max-w-[100px] block" title={unit.almacenDestino1}>{unit.almacenDestino1}</span>
+                                                            <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 1 {unit.fechaLlegadaDestino1 ? `- ${formatDate(unit.fechaLlegadaDestino1)}` : ''}</span>
+                                                            <span className="text-xs font-medium text-gray-600 truncate max-w-[100px] block" title={unit.almacenDestino1}>{unit.almacenDestino1}</span>
                                                         </div>
                                                     )}
                                                     {unit.almacenDestino2 && (
                                                         <div>
-                                                            <span className="text-[7px] font-bold text-slate-400 uppercase block">LLEGADA 2</span>
-                                                            <span className="text-[9px] font-bold text-slate-600 truncate max-w-[100px] block" title={unit.almacenDestino2}>{unit.almacenDestino2}</span>
+                                                            <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Llegada 2</span>
+                                                            <span className="text-xs font-medium text-gray-600 truncate max-w-[100px] block" title={unit.almacenDestino2}>{unit.almacenDestino2}</span>
                                                         </div>
                                                     )}
                                                 </div>
                                             </div>
                                         </div>
 
-                                        <div className="min-w-[130px] border-l border-slate-100 pl-4 flex flex-col justify-center gap-1">
+                                        <div className="min-w-[130px] border-l border-gray-100 pl-4 flex flex-col justify-center gap-1">
                                             <div>
-                                                <span className="text-[7px] font-bold text-slate-400 uppercase block">CONDUCTOR</span>
-                                                <span className="text-[9px] font-bold text-slate-800 truncate block max-w-[120px]" title={unit.conductor}>{unit.conductor.split(' ')[0]}</span>
+                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Conductor</span>
+                                                <span className="text-xs font-medium text-gray-900 truncate block max-w-[120px]" title={unit.conductor}>{unit.conductor.split(' ')[0]}</span>
                                             </div>
                                             <div>
-                                                <span className="text-[7px] font-bold text-slate-400 uppercase block">TELÉFONO</span>
-                                                <span className="text-[9px] font-bold text-slate-800 truncate block">{unit.telefono}</span>
+                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Teléfono</span>
+                                                <span className="text-xs font-medium text-gray-900 truncate block">{unit.telefono}</span>
                                             </div>
                                             <div>
-                                                <span className="text-[7px] font-bold text-slate-400 uppercase block">TIPO ENVÍO</span>
-                                                <span className="text-[9px] font-bold text-slate-800 truncate block">{unit.tipoEnvio}</span>
+                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block tracking-wider">Envío</span>
+                                                <span className="text-xs font-medium text-gray-900 truncate block">{unit.tipoEnvio}</span>
                                             </div>
                                         </div>
 
                                         <div className="min-w-[140px] flex flex-col justify-center gap-2 text-right">
-                                            <div className="bg-slate-50 p-1.5 rounded border border-slate-200">
-                                                <span className="text-[7px] font-bold text-slate-400 uppercase block mb-0.5">ÚLTIMA UBICACIÓN ({formatDate(unit.lastUpdate).split(' ')[1] || ''})</span>
-                                                <span className="text-[9px] font-black text-slate-800 uppercase leading-tight block truncate max-w-[130px] ml-auto">{unit.ubicacionActual}</span>
+                                            <div className="bg-gray-50 p-1.5 rounded border border-gray-200">
+                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block mb-0.5 tracking-wider">Ubicación ({formatDate(unit.lastUpdate).split(' ')[1] || ''})</span>
+                                                <span className="text-xs font-bold text-gray-900 uppercase leading-tight block truncate max-w-[130px] ml-auto">{unit.ubicacionActual}</span>
                                             </div>
-                                            <div className="bg-blue-50 p-1.5 rounded border border-blue-200">
-                                                <span className="text-[7px] font-bold text-blue-400 uppercase block mb-0.5">ESTIMADO LLEGADA</span>
-                                                <span className="text-[10px] font-black text-blue-700 block transition-all hover:scale-105 cursor-default">
+                                            <div className="bg-blue-50 p-1.5 rounded border border-blue-100">
+                                                <span className="text-[9px] font-semibold text-blue-400 uppercase block mb-0.5 tracking-wider">Estimado Llegada</span>
+                                                <span className="text-sm font-bold text-blue-600 block transition-all">
                                                     {(() => {
                                                         const d = new Date(unit.fechaEstimadaLlegada);
                                                         return `${d.toLocaleDateString('es-PE', { day: '2-digit', month: '2-digit', year: 'numeric' })} - ${d.toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit', hour12: false })}`;
@@ -1337,8 +1339,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     <div ref={mapContainerRef} className="w-full h-full z-0" />
                     <div className="absolute top-4 left-4 z-[1] bg-white/95 px-3 py-2 rounded-lg border border-slate-200 pointer-events-none">
                         <div className="flex items-center gap-2">
-                            <div className="w-2 h-2 bg-[#ff0000] rounded-full animate-pulse" />
-                            <span className="text-[8px] font-medium uppercase text-slate-900">Mapa Monitoreo</span>
+                            <div className="w-2 h-2 bg-blue-600 rounded-full animate-pulse" />
+                            <span className="text-xs font-semibold text-gray-900">Mapa de Monitoreo</span>
                         </div>
                     </div>
                 </div>
@@ -1453,12 +1455,34 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             <div className="p-5 border-b border-slate-100 bg-slate-50 shrink-0">
                                 <div className="flex justify-between items-start mb-4">
                                     <div className="flex gap-4">
-                                        <div className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center border border-slate-700 shrink-0"><Truck size={24} /></div>
-                                        <div>
-                                            <h3 className="text-lg font-black text-slate-900 uppercase leading-none">{selectedUnit.unitName}</h3>
-                                            <div className="flex items-center gap-2 mt-2">
-                                                <span className="text-[9px] font-bold bg-white border border-slate-200 px-2 py-0.5 rounded text-slate-500 uppercase">{selectedUnit.proceso}</span>
-                                                <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">{selectedUnit.conductor}</span>
+                                        <div className="w-12 h-12 bg-slate-900 text-white rounded-xl flex items-center justify-center border border-slate-700 shrink-0 shadow-lg"><Truck size={24} /></div>
+                                        <div className="flex-1">
+                                            <div className="flex items-center gap-4 mb-3">
+                                                <div className="flex flex-col">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Tracto</span>
+                                                    <h3 className="text-xl font-bold text-slate-900 uppercase leading-none tracking-tight">{selectedUnit.plateRemolque}</h3>
+                                                </div>
+                                                {selectedUnit.plateSemiRemolque && selectedUnit.plateSemiRemolque !== 'N/A' && (
+                                                    <div className="flex flex-col border-l border-slate-200 pl-4">
+                                                        <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Placa</span>
+                                                        <h3 className="text-xl font-bold text-slate-400 uppercase leading-none tracking-tight">{selectedUnit.plateSemiRemolque}</h3>
+                                                    </div>
+                                                )}
+                                                <div className="ml-auto flex flex-col items-end">
+                                                    <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Proceso</span>
+                                                    <span className="text-[10px] font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 uppercase shadow-sm tracking-wide">{selectedUnit.proceso}</span>
+                                                </div>
+                                            </div>
+                                            
+                                            <div className="flex flex-col border-t border-slate-100 pt-3">
+                                                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Responsable del Viaje</span>
+                                                <div className="flex items-center justify-between">
+                                                    <p className="text-sm font-bold text-[#1a73e8] uppercase tracking-wide">{selectedUnit.conductor}</p>
+                                                    <div className="flex items-center gap-1.5 bg-blue-50 px-2 py-1 rounded-lg border border-blue-100 text-[#1a73e8]">
+                                                        <Phone size={12} fill="currentColor" fillOpacity={0.2} />
+                                                        <span className="text-[11px] font-black">{selectedUnit.telefono}</span>
+                                                    </div>
+                                                </div>
                                             </div>
                                         </div>
                                     </div>
@@ -1467,76 +1491,172 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                                 {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && (
                                     <div className="flex gap-2">
-                                        <button onClick={handleEditUnit} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-slate-50 transition-all"><Edit3 size={14} /> Editar Registro</button>
-                                        <button onClick={handleInitiateFinishTrip} className="flex-1 bg-slate-900 hover:bg-black text-white py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all"><Flag size={14} /> Finalizar</button>
-                                        <button onClick={handleCancelTrip} className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 transition-all" title="Cancelar Viaje por Error"><Ban size={14} /></button>
+                                        <button onClick={handleEditUnit} className="flex-1 bg-white border border-slate-300 text-slate-700 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 hover:bg-slate-50 hover:border-slate-400 transition-all shadow-sm"><Edit3 size={14} /> Editar Registro</button>
+                                        <button onClick={handleInitiateFinishTrip} className="flex-1 bg-slate-900 hover:bg-black text-white py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all shadow-lg shadow-slate-200"><Flag size={14} /> Finalizar</button>
+                                        <button onClick={handleCancelTrip} className="bg-red-50 text-red-600 border border-red-200 hover:bg-red-100 px-3 py-2 rounded-xl text-[10px] font-bold uppercase tracking-wider flex items-center justify-center gap-2 transition-all" title="Cancelar Viaje por Error"><Ban size={14} /></button>
                                     </div>
                                 )}
                                 {(selectedUnit.status === UnitStatus.DELIVERED || selectedUnit.status === 'CANCELADO') && (
-                                    <div className="bg-slate-100 p-3 rounded-lg text-center border border-slate-200"><p className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Viaje Cerrado: {selectedUnit.status}</p></div>
+                                    <div className="bg-slate-100 p-3 rounded-xl text-center border border-slate-200"><p className="text-[10px] font-bold text-slate-500 uppercase tracking-wider">Viaje Cerrado: {selectedUnit.status}</p></div>
                                 )}
                             </div>
 
                             <div className="flex border-b border-slate-200 px-2 bg-white shrink-0">
-                                <button onClick={() => setActiveTab('CONTROLES')} className={`flex-1 py-3 text-[10px] font-black uppercase border-b-2 transition-all ${activeTab === 'CONTROLES' ? 'border-[#ff0000] text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Geolocalización</button>
-                                <button onClick={() => setActiveTab('PARADAS')} className={`flex-1 py-3 text-[10px] font-black uppercase border-b-2 transition-all ${activeTab === 'PARADAS' ? 'border-[#ff0000] text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Paradas</button>
-                                <button onClick={() => setActiveTab('DETALLE')} className={`flex-1 py-3 text-[10px] font-black uppercase border-b-2 transition-all ${activeTab === 'DETALLE' ? 'border-[#ff0000] text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Info. Carga</button>
-                                <button onClick={() => setActiveTab('RESUMEN')} className={`flex-1 py-3 text-[10px] font-black uppercase border-b-2 transition-all ${activeTab === 'RESUMEN' ? 'border-[#ff0000] text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Resumen</button>
+                                <button onClick={() => setActiveTab('CONTROLES')} className={`flex-1 py-3.5 text-[11px] font-bold uppercase transition-all border-b-2 ${activeTab === 'CONTROLES' ? 'border-[#1a73e8] text-[#1a73e8]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Geolocalización</button>
+                                <button onClick={() => setActiveTab('PARADAS')} className={`flex-1 py-3.5 text-[11px] font-bold uppercase transition-all border-b-2 ${activeTab === 'PARADAS' ? 'border-[#1a73e8] text-[#1a73e8]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Paradas</button>
+                                <button onClick={() => setActiveTab('DETALLE')} className={`flex-1 py-3.5 text-[11px] font-bold uppercase transition-all border-b-2 ${activeTab === 'DETALLE' ? 'border-[#1a73e8] text-[#1a73e8]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Info. Carga</button>
+                                <button onClick={() => setActiveTab('RESUMEN')} className={`flex-1 py-3.5 text-[11px] font-bold uppercase transition-all border-b-2 ${activeTab === 'RESUMEN' ? 'border-[#1a73e8] text-[#1a73e8]' : 'border-transparent text-slate-400 hover:text-slate-600'}`}>Resumen</button>
                             </div>
 
                             <div className="flex-1 overflow-y-auto p-6 bg-slate-50/50 custom-scrollbar">
                                 {activeTab === 'CONTROLES' && (
                                     <div className="space-y-6">
-                                        <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800">
-                                            <div className="flex items-center justify-between mb-4">
-                                                <h4 className="text-[11px] font-black uppercase tracking-widest flex items-center gap-2"><Locate size={16} className="text-[#ff0000]" /> {editingControlIndex !== null ? `Corrección Control #${editingControlIndex + 1}` : 'Registrar Nuevo Control'}</h4>
-                                                <div className="flex items-center gap-2 text-[9px] text-white/40"><ClipboardCopy size={12} /> Pegar coord. con coma</div>
+                                        <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 shadow-xl">
+                                            <div className="flex items-center justify-between mb-6">
+                                                <h4 className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-2">
+                                                    <Locate size={16} className="text-[#1a73e8]" /> 
+                                                    {editingControlIndex !== null ? `Corrección Control #${editingControlIndex + 1}` : 'Registrar Nuevo Control'}
+                                                </h4>
+                                                <div className="flex items-center gap-1.5 text-[10px] font-medium text-white/30 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
+                                                    <ClipboardCopy size={12} /> Pegar coord.
+                                                </div>
                                             </div>
+
                                             {(selectedUnit.status === 'EN PARADA' || selectedUnit.status === 'INCIDENTE') ? (
-                                                <div className="bg-orange-50 border border-orange-200 p-4 rounded-xl mb-4 flex items-start gap-3">
-                                                    <AlertTriangle className="text-orange-600 shrink-0" size={20} />
+                                                <div className="bg-orange-950/30 border border-orange-500/20 p-4 rounded-xl mb-4 flex items-start gap-3">
+                                                    <AlertTriangle className="text-orange-500 shrink-0" size={20} />
                                                     <div>
-                                                        <h4 className="text-xs font-black text-orange-800 uppercase">Unidad Detenida</h4>
-                                                        <p className="text-[10px] text-orange-700 mt-1">
+                                                        <h4 className="text-xs font-bold text-orange-200 uppercase tracking-wide">Unidad Detenida</h4>
+                                                        <p className="text-[10px] text-orange-200/60 mt-1">
                                                             No se pueden registrar controles de ruta mientras la unidad está en parada activa.
                                                             <br />
                                                             <strong>Por favor, finalice la parada primero.</strong>
                                                         </p>
-                                                        <button onClick={() => setActiveTab('PARADAS')} className="mt-2 text-[9px] font-black underline text-orange-900 uppercase tracking-widest">Ir a Paradas →</button>
+                                                        <button onClick={() => setActiveTab('PARADAS')} className="mt-2 text-[9px] font-bold underline text-orange-400 uppercase tracking-wider hover:text-orange-300">Ir a Paradas →</button>
                                                     </div>
                                                 </div>
                                             ) : (
-                                                <form onSubmit={handleUpdateControl} className="grid grid-cols-1 gap-4">
-                                                    <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Fecha y Hora Reporte</label><input type="datetime-local" required className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none focus:border-[#ff0000] text-white" value={reportForm.reportDateTime} onChange={e => setReportForm({ ...reportForm, reportDateTime: e.target.value })} /></div>
+                                                <form onSubmit={handleUpdateControl} className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-4">
-                                                        <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Latitud</label><input required onPaste={handleCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none focus:border-[#ff0000]" value={reportForm.lat} onChange={e => setReportForm({ ...reportForm, lat: e.target.value })} /></div>
-                                                        <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Longitud</label><input required onPaste={handleCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none focus:border-[#ff0000]" value={reportForm.lng} onChange={e => setReportForm({ ...reportForm, lng: e.target.value })} /></div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                                <Calendar size={12} className="text-white/20" /> Fecha y Hora 
+                                                            </label>
+                                                            <input 
+                                                                type="datetime-local" 
+                                                                required 
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all" 
+                                                                value={reportForm.reportDateTime} 
+                                                                onChange={e => setReportForm({ ...reportForm, reportDateTime: e.target.value })} 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                                <Truck size={12} className="text-white/20" /> Ubicación Actual
+                                                            </label>
+                                                            <input 
+                                                                required 
+                                                                placeholder="EJ: CIUDAD / KM / PEAJE" 
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white outline-none uppercase focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
+                                                                value={reportForm.location} 
+                                                                onChange={e => setReportForm({ ...reportForm, location: e.target.value })} 
+                                                            />
+                                                        </div>
                                                     </div>
-                                                    <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Ubicación Actual</label><input required placeholder="CIUDAD / KM / PEAJE" className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none uppercase focus:border-[#ff0000]" value={reportForm.location} onChange={e => setReportForm({ ...reportForm, location: e.target.value })} /></div>
-                                                    <button type="submit" disabled={isSavingControl} className="w-full py-3 bg-[#ff0000] hover:bg-red-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
-                                                        {isSavingControl ? <Loader2 size={16} className="animate-spin" /> : null}
-                                                        {editingControlIndex !== null ? 'Actualizar' : 'Reportar Ubicación'}
-                                                    </button>
+
+                                                    <div className="grid grid-cols-4 gap-4">
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                                <MapPin size={12} className="text-white/20" /> Latitud
+                                                            </label>
+                                                            <input 
+                                                                required 
+                                                                onPaste={handleCoordPaste} 
+                                                                placeholder="-8.13..." 
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
+                                                                value={reportForm.lat} 
+                                                                onChange={e => setReportForm({ ...reportForm, lat: e.target.value })} 
+                                                            />
+                                                        </div>
+                                                        <div className="space-y-1.5">
+                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                                <MapPin size={12} className="text-white/20" /> Longitud
+                                                            </label>
+                                                            <input 
+                                                                required 
+                                                                onPaste={handleCoordPaste} 
+                                                                placeholder="-79.0..." 
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
+                                                                value={reportForm.lng} 
+                                                                onChange={e => setReportForm({ ...reportForm, lng: e.target.value })} 
+                                                            />
+                                                        </div>
+                                                        <div className="col-span-2 pt-5.5 flex flex-col justify-end">
+                                                            <button 
+                                                                type="submit" 
+                                                                disabled={isSavingControl} 
+                                                                className="w-full py-2.5 bg-[#1a73e8] hover:bg-blue-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                                                            >
+                                                                {isSavingControl && <Loader2 size={14} className="animate-spin" />}
+                                                                {editingControlIndex !== null ? 'Actualizar' : 'Reportar Ubicación'}
+                                                            </button>
+                                                        </div>
+                                                    </div>
                                                 </form>
                                             )}
                                         </div>
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
-                                            <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><Clock size={14} /> Historial de Ruta</h4>
+                                            <h4 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><Clock size={14} /> Historial de Ruta</h4>
                                             {selectedUnit.controles.length === 0 ? (<div className="text-center py-8 text-slate-400 text-xs italic">Aún no se han registrado controles de ruta.</div>) : (
-                                                <div className="space-y-0 pl-2">
-                                                    {selectedUnit.controles.map((cp, idx) => (
-                                                        <div key={idx} className="relative pl-8 pb-8 last:pb-0 border-l border-slate-200 last:border-0 group">
-                                                            <div className="absolute -left-[5px] top-0 w-2.5 h-2.5 rounded-full bg-[#ff0000] border-2 border-white group-hover:scale-125 transition-transform" />
-                                                            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 hover:border-slate-300 transition-colors flex justify-between items-start">
-                                                                <div>
-                                                                    <div className="flex items-center gap-2 mb-1"><span className="text-[9px] font-black bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded">CP-{idx + 1}</span><span className="text-[10px] font-bold text-slate-500">{cp.time}</span></div>
-                                                                    <p className="text-xs font-black text-slate-800 uppercase">{cp.location}</p>
-                                                                    <p className="text-[9px] font-mono text-slate-400 mt-0.5">{cp.coords?.lat}, {cp.coords?.lng}</p>
+                                                <div className="space-y-1.5 pl-1">
+                                                    {selectedUnit.controles.map((cp, idx) => {
+                                                        const dateObj = new Date(cp.time);
+                                                        const isInvalidDate = isNaN(dateObj.getTime());
+                                                        
+                                                        // Fallback para datos antiguos o ISO strings correctos
+                                                        const displayDate = isInvalidDate ? '-' : dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
+                                                        const displayTime = isInvalidDate ? cp.time : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+                                                        return (
+                                                            <div key={idx} className="relative pl-6 pb-4 last:pb-0 border-l-2 border-slate-100 last:border-0 group">
+                                                                <div className="absolute -left-[7px] top-1 w-3 h-3 rounded-full bg-red-600 border-2 border-white shadow-sm ring-2 ring-red-50 group-hover:scale-110 transition-transform" />
+                                                                <div className="bg-white p-2.5 rounded-xl border border-slate-200 hover:border-red-200 hover:shadow-sm transition-all flex justify-between items-center group/card">
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                                            <span className="text-[10px] font-bold text-slate-400">CP-{idx + 1}</span>
+                                                                            <div className="flex items-center gap-1.5 text-slate-600">
+                                                                                <Calendar size={10} className="text-blue-600 opacity-70" />
+                                                                                <span className="text-[10px] font-bold">{displayDate}</span>
+                                                                                <Clock size={10} className="ml-1 text-slate-400 opacity-70" />
+                                                                                <span className="text-[10px] font-bold text-slate-900">{displayTime}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="flex items-center gap-2">
+                                                                            <MapPin size={10} className="text-red-500 shrink-0" />
+                                                                            <p className="text-[11px] font-bold text-slate-800 uppercase truncate">{cp.location}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="flex items-center gap-1 ml-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                                                                        <button 
+                                                                            onClick={() => { 
+                                                                                setEditingControlIndex(idx); 
+                                                                                setReportForm({ 
+                                                                                    ...reportForm, 
+                                                                                    location: cp.location, 
+                                                                                    lat: cp.coords?.lat.toString() || '', 
+                                                                                    lng: cp.coords?.lng.toString() || '', 
+                                                                                    reportDateTime: isInvalidDate ? new Date().toISOString().slice(0, 16) : dateObj.toISOString().slice(0, 16)
+                                                                                }); 
+                                                                            }} 
+                                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                                        >
+                                                                            <Edit2 size={13} />
+                                                                        </button>
+                                                                    </div>
                                                                 </div>
-                                                                <button onClick={() => { setEditingControlIndex(idx); setReportForm({ ...reportForm, location: cp.location, lat: cp.coords?.lat.toString() || '', lng: cp.coords?.lng.toString() || '', reportDateTime: new Date().toISOString().slice(0, 16) }); }} className="p-1.5 text-slate-400 hover:text-[#ff0000] bg-white rounded border border-slate-200"><Edit2 size={12} /></button>
                                                             </div>
-                                                        </div>
-                                                    ))}
+                                                        );
+                                                    })}
                                                 </div>
                                             )}
                                         </div>
@@ -1546,23 +1666,23 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 {activeTab === 'PARADAS' && (
                                     <div className="space-y-6">
                                         <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
-                                            <div className="p-4 border-b border-emerald-100 bg-emerald-50/30 flex justify-between items-center"><h4 className="text-[11px] font-black text-emerald-700 uppercase tracking-widest flex items-center gap-2"><CheckCircle2 size={16} /> Programadas</h4></div>
+                                            <div className="p-4 border-b border-emerald-100 bg-emerald-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2"><CheckCircle2 size={16} /> Programadas</h4></div>
                                             <div className="p-4">
                                                 {!showAddStopProg ? (
-                                                    <button onClick={() => setShowAddStopProg(true)} className="w-full py-3 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-emerald-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Parada</button>
+                                                    <button onClick={() => setShowAddStopProg(true)} className="w-full py-3 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-emerald-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Parada</button>
                                                 ) : (
                                                     <div className="mb-4 bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
-                                                            <div className="space-y-1"><label className="text-[9px] font-black text-emerald-800/60 uppercase tracking-widest">Lugar / Motivo</label><input autoFocus className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold uppercase focus:border-emerald-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Ej: ALMUERZO / GRIFO" /></div>
+                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Lugar / Motivo</label><input autoFocus className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold uppercase focus:border-emerald-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Ej: ALMUERZO / GRIFO" /></div>
 
                                                             <div className="space-y-3">
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-emerald-800/60 uppercase tracking-widest">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
-                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-black text-emerald-800/60 uppercase tracking-widest">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
+                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold focus:border-emerald-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-emerald-800/60 uppercase tracking-widest">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-emerald-800/60 uppercase tracking-widest">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-emerald-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold outline-none focus:border-emerald-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 pt-2">
                                                                     <input type="checkbox" id="activeStopProg" className="w-4 h-4 text-emerald-600" checked={isStopOngoing} onChange={e => setIsStopOngoing(e.target.checked)} />
@@ -1571,7 +1691,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                             </div>
                                                             <div className="flex gap-2 mt-2">
                                                                 <button onClick={() => setShowAddStopProg(false)} className="px-4 py-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                                                                <button onClick={() => handleAddStop('PROG')} className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-black uppercase tracking-widest">Guardar Parada</button>
+                                                                <button onClick={() => handleAddStop('PROG')} className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider">Guardar Parada</button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1581,15 +1701,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     {(selectedUnit.paradasProg || []).map((stop, idx) => (
                                                         <div key={`prog-${idx}`} className={`bg-white p-3 rounded-lg border flex items-center justify-between ${!stop.end ? 'border-emerald-300 bg-emerald-50/30' : 'border-slate-200'}`}>
                                                             <div className="flex items-center gap-4">
-                                                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs border border-emerald-100">{idx + 1}</div>
+                                                                <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-bold text-xs border border-emerald-100">{idx + 1}</div>
                                                                 <div>
-                                                                    <p className="text-xs font-black text-slate-800 uppercase">{stop.location} {!stop.end && <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
+                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} {!stop.end && <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
                                                                     <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && <button onClick={() => initiateFinishStop('PROG', idx)} className="text-[9px] font-black bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1"><PlayCircle size={10} /> FINALIZAR</button>}
+                                                                {!stop.end && <button onClick={() => initiateFinishStop('PROG', idx)} className="text-[9px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1"><PlayCircle size={10} /> FINALIZAR</button>}
                                                                 <button onClick={() => handleDeleteStop('PROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
                                                             </div>
                                                         </div>
@@ -1599,23 +1719,23 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         </div>
 
                                         <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
-                                            <div className="p-4 border-b border-amber-100 bg-amber-50/30 flex justify-between items-center"><h4 className="text-[11px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-2"><AlertTriangle size={16} /> No Programadas (Incidencias)</h4></div>
+                                            <div className="p-4 border-b border-amber-100 bg-amber-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-2"><AlertTriangle size={16} /> No Programadas</h4></div>
                                             <div className="p-4">
                                                 {!showAddStopNoProg ? (
-                                                    <button onClick={() => setShowAddStopNoProg(true)} className="w-full py-3 border-2 border-dashed border-amber-200 text-amber-600 rounded-xl font-black text-[10px] uppercase tracking-widest hover:bg-amber-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Incidencia</button>
+                                                    <button onClick={() => setShowAddStopNoProg(true)} className="w-full py-3 border-2 border-dashed border-amber-200 text-amber-600 rounded-xl font-bold text-[10px] uppercase tracking-wider hover:bg-amber-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Incidencia</button>
                                                 ) : (
                                                     <div className="mb-4 bg-amber-50/50 p-5 rounded-xl border border-amber-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
-                                                            <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Ubicación</label><input autoFocus className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Km / Ref" /></div>
-                                                            <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Causa / Motivo</label><input className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.cause} onChange={e => setNewStopForm({ ...newStopForm, cause: e.target.value })} placeholder="Falla Mecánica / Tráfico" /></div>
+                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Ubicación</label><input autoFocus className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Km / Ref" /></div>
+                                                            <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Causa / Motivo</label><input className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.cause} onChange={e => setNewStopForm({ ...newStopForm, cause: e.target.value })} placeholder="Falla Mecánica / Tráfico" /></div>
                                                             <div className="space-y-3">
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
-                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Inicio</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.start} onChange={e => setNewStopForm({ ...newStopForm, start: e.target.value })} /></div>
+                                                                    {!isStopOngoing && <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Fin</label><input type="datetime-local" className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold focus:border-amber-400 outline-none" value={newStopForm.end} onChange={e => setNewStopForm({ ...newStopForm, end: e.target.value })} /></div>}
                                                                 </div>
                                                                 <div className="grid grid-cols-2 gap-4">
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
-                                                                    <div className="space-y-1"><label className="text-[9px] font-black text-amber-800/60 uppercase tracking-widest">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Latitud</label><input required onPaste={handleStopCoordPaste} placeholder="-8.13..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lat} onChange={e => setNewStopForm({ ...newStopForm, lat: e.target.value })} /></div>
+                                                                    <div className="space-y-1"><label className="text-[9px] font-bold text-amber-800/60 uppercase tracking-wider">Longitud</label><input required onPaste={handleStopCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold outline-none focus:border-amber-400" value={newStopForm.lng} onChange={e => setNewStopForm({ ...newStopForm, lng: e.target.value })} /></div>
                                                                 </div>
                                                                 <div className="flex items-center gap-2 pt-2">
                                                                     <input type="checkbox" id="activeStopNoProg" className="w-4 h-4 text-amber-600" checked={isStopOngoing} onChange={e => setIsStopOngoing(e.target.checked)} />
@@ -1634,15 +1754,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     {(selectedUnit.paradasNoProg || []).map((stop, idx) => (
                                                         <div key={`noprog-${idx}`} className={`bg-white p-3 rounded-lg border flex items-center justify-between ${!stop.end ? 'border-amber-300 bg-amber-50/30' : 'border-slate-200'}`}>
                                                             <div className="flex items-center gap-4">
-                                                                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-black text-xs border border-amber-100">!</div>
+                                                                <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-bold text-xs border border-amber-100">!</div>
                                                                 <div>
-                                                                    <p className="text-xs font-black text-slate-800 uppercase">{stop.location} <span className="text-amber-600">({stop.cause})</span> {!stop.end && <span className="text-[9px] bg-amber-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
+                                                                    <p className="text-xs font-bold text-slate-800 uppercase">{stop.location} <span className="text-amber-600">({stop.cause})</span> {!stop.end && <span className="text-[9px] bg-amber-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
                                                                     <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[9px] font-black bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
+                                                                {!stop.end && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[9px] font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
                                                                 <button onClick={() => handleDeleteStop('NOPROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
                                                             </div>
                                                         </div>
@@ -1656,21 +1776,21 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 {activeTab === 'DETALLE' && (
                                     <div className="space-y-4">
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
-                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Información de Carga</h5>
+                                            <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Información de Carga</h5>
                                             <ul className="space-y-3">
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Operador</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.operadorLogistico}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Booking</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.booking}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Tipo Envío</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.tipoEnvio}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Proceso</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.proceso}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Operador</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.operadorLogistico}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Booking</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.booking}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tipo Envío</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.tipoEnvio}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Proceso</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.proceso}</span></li>
                                             </ul>
                                         </div>
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
-                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4">Unidad de Transporte</h5>
+                                            <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4">Unidad de Transporte</h5>
                                             <ul className="space-y-3">
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Transportista</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.transportista}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Tracto / Carreta</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.plateRemolque} / {selectedUnit.plateSemiRemolque}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Conductor</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.conductor}</span></li>
-                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase">Teléfono</span><span className="text-xs font-black text-slate-900 uppercase">{selectedUnit.telefono}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Transportista</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.transportista}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Tracto / Carreta</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.plateRemolque} / {selectedUnit.plateSemiRemolque}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Conductor</span><span className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.conductor}</span></li>
+                                                <li className="flex justify-between border-b border-slate-200 pb-2"><span className="text-xs font-bold text-slate-500 uppercase tracking-wide">Teléfono</span><span className="text-xs font-bold text-slate-900">{selectedUnit.telefono}</span></li>
                                             </ul>
                                         </div>
                                     </div>
@@ -1680,35 +1800,41 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                     <div className="space-y-6">
                                         <div className="bg-slate-900 text-white p-6 rounded-xl border border-slate-800">
                                             <div className="flex items-center justify-between">
-                                                <div><h4 className="text-xl font-black uppercase tracking-tight">{selectedUnit.plateRemolque}</h4><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{selectedUnit.transportista}</p></div>
-                                                <div className="text-right"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ETA</p><p className="text-sm font-black text-white">{new Date(selectedUnit.fechaEstimadaLlegada).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
+                                                <div><h4 className="text-xl font-bold uppercase tracking-tight">{selectedUnit.plateRemolque}</h4><p className="text-[11px] font-bold text-slate-400 uppercase tracking-wider">{selectedUnit.transportista}</p></div>
+                                                <div className="text-right"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">ETA</p><p className="text-sm font-bold text-white">{new Date(selectedUnit.fechaEstimadaLlegada).toLocaleDateString('es-ES', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })}</p></div>
                                             </div>
                                             <div className="mt-6 flex items-center justify-between gap-4">
-                                                <div className="flex-1 bg-white/10 p-2 rounded-lg"><p className="text-[8px] font-bold text-slate-400 uppercase">Origen</p><p className="text-[10px] font-black uppercase truncate">{selectedUnit.origin}</p></div>
+                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Origen</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.origin}</p></div>
                                                 <div className="text-slate-500">→</div>
-                                                <div className="flex-1 bg-white/10 p-2 rounded-lg text-right"><p className="text-[8px] font-bold text-slate-400 uppercase">Destino</p><p className="text-[10px] font-black uppercase truncate">{selectedUnit.destination}</p></div>
+                                                <div className="flex-1 bg-white/10 p-2.5 rounded-xl text-right"><p className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">Destino</p><p className="text-[11px] font-bold uppercase truncate">{selectedUnit.destination}</p></div>
                                             </div>
                                         </div>
                                         <div className="grid grid-cols-2 gap-4">
-                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Controles</p><p className="text-2xl font-black text-slate-900">{selectedUnit.controles.length}</p></div>
-                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1">Incidencias</p><p className="text-2xl font-black text-amber-500">{selectedUnit.paradasNoProg.length}</p></div>
+                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Controles</p><p className="text-2xl font-bold text-slate-900">{selectedUnit.controles.length}</p></div>
+                                            <div className="bg-white p-4 rounded-xl border border-slate-300 text-center"><p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-1">Incidencias</p><p className="text-2xl font-bold text-amber-500">{selectedUnit.paradasNoProg.length}</p></div>
                                         </div>
                                         <div className="bg-white p-6 rounded-xl border border-slate-300">
-                                            <h5 className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-4 flex items-center gap-2"><LayoutList size={14} /> Bitácora de Viaje</h5>
+                                            <h5 className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-4 flex items-center gap-2"><LayoutList size={14} /> Bitácora de Viaje</h5>
                                             <div className="space-y-4">
                                                 <div className="flex gap-3">
                                                     <div className="flex flex-col items-center"><div className="w-2 h-2 bg-slate-900 rounded-full"></div><div className="w-0.5 flex-1 bg-slate-200 my-1"></div></div>
-                                                    <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{new Date(selectedUnit.fechaSalidaPlanta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p><p className="text-xs font-black text-slate-900 uppercase">Inicio de Viaje</p><p className="text-[10px] text-slate-500 uppercase">{selectedUnit.origin}</p></div>
+                                                    <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{new Date(selectedUnit.fechaSalidaPlanta).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p><p className="text-xs font-bold text-slate-900 uppercase">Inicio de Viaje</p><p className="text-[10px] text-slate-500 uppercase">{selectedUnit.origin}</p></div>
                                                 </div>
-                                                {(selectedUnit.controles || []).map((cp, idx) => (
-                                                    <div key={`ctrl-${idx}`} className="flex gap-3">
-                                                        <div className="flex flex-col items-center"><div className="w-2 h-2 bg-slate-400 rounded-full border border-white"></div><div className="w-0.5 flex-1 bg-slate-200 my-1"></div></div>
-                                                        <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{cp.time}</p><p className="text-xs font-bold text-slate-700 uppercase">{cp.location}</p><p className="text-[9px] text-slate-400">Control de Paso #{idx + 1}</p></div>
-                                                    </div>
-                                                ))}
+                                                {(selectedUnit.controles || []).map((cp, idx) => {
+                                                    const dateObj = new Date(cp.time);
+                                                    const isInvalid = isNaN(dateObj.getTime());
+                                                    const displayDate = isInvalid ? '' : dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit' });
+                                                    const displayTime = isInvalid ? cp.time : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+                                                    return (
+                                                        <div key={`ctrl-${idx}`} className="flex gap-3">
+                                                            <div className="flex flex-col items-center"><div className="w-2 h-2 bg-slate-400 rounded-full border border-white"></div><div className="w-0.5 flex-1 bg-slate-200 my-1"></div></div>
+                                                            <div className="pb-4"><p className="text-[9px] font-bold text-slate-400">{displayDate} {displayTime}</p><p className="text-xs font-bold text-slate-700 uppercase">{cp.location}</p><p className="text-[9px] text-slate-400">Control de Paso #{idx + 1}</p></div>
+                                                        </div>
+                                                    );
+                                                })}
                                                 <div className="flex gap-3">
-                                                    <div className="flex flex-col items-center"><div className="w-2.5 h-2.5 bg-[#ff0000] rounded-full animate-pulse"></div></div>
-                                                    <div><p className="text-[9px] font-bold text-[#ff0000]">ACTUAL</p><p className="text-xs font-black text-slate-900 uppercase">{selectedUnit.ubicacionActual}</p></div>
+                                                    <div className="flex flex-col items-center"><div className="w-2.5 h-2.5 bg-[#1a73e8] rounded-full animate-pulse"></div></div>
+                                                    <div><p className="text-[9px] font-bold text-[#1a73e8]">ACTUAL</p><p className="text-xs font-bold text-slate-900 uppercase">{selectedUnit.ubicacionActual}</p></div>
                                                 </div>
                                             </div>
                                         </div>
