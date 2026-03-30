@@ -1048,9 +1048,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             }
 
             await updateUnit(u.id, {
-                ubicacionActual: reportForm.location.toUpperCase(),
-                lastLocation: reportForm.location.toUpperCase(),
-                lastUpdate: reportDateTime.toISOString(),
                 path: newPath
             });
 
@@ -1102,7 +1099,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             const nLng = newStopForm.lng ? parseFloat(newStopForm.lng) : undefined;
             const coords = (nLat && nLng) ? { lat: nLat, lng: nLng } : undefined;
 
-            const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
+            // Status is now auto-calculated by the store using syncUnitSummary
 
             const stopData = {
                 location: newStopForm.location.toUpperCase(),
@@ -1113,7 +1110,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 coords: coords
             };
 
-            await updateUnit(u.id, { status: newStatus });
             await addEventToDB(u.id, type === 'PROG' ? 'PARADA_PROG' : 'PARADA_NOPROG', stopData);
 
             setNewStopForm({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
@@ -1169,9 +1165,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         try {
             let durationStr = calculateDuration(currentStop.start, endDate);
 
-            await updateUnit(u.id, {
-                status: UnitStatus.TRANSIT, // Back to route
-            });
+            // Status will be auto-synced by updateEventInDB calling syncUnitSummary
+            // await updateUnit(u.id, { status: UnitStatus.TRANSIT }); 
+
 
             if ((currentStop as any).id) {
                 await updateEventInDB((currentStop as any).id, {
@@ -1198,15 +1194,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const list = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
         // If deleting an ongoing stop, revert status if needed
         const stop = list[index];
-        let newStatus = u.status;
-        if (!stop.end) {
-            newStatus = UnitStatus.TRANSIT;
-        }
+        // Status is now auto-calculated by the store using syncUnitSummary
         list.splice(index, 1);
 
-        await updateUnit(u.id, {
-            status: newStatus
-        });
+        // status will be auto-synced by deleteEventFromDB calling syncUnitSummary
+        // await updateUnit(u.id, { status: newStatus });
+
 
         if ((stop as any).id) {
             await deleteEventFromDB((stop as any).id);

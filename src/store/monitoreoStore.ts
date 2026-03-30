@@ -413,7 +413,69 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
     }
 }
 
-// ===== NEW RELATIONAL OPERATIONS =====
+/**
+ * Automatically synchronizes the unit's summary (main table) with the relational events
+ */
+export async function syncUnitSummary(unitId: string) {
+    try {
+        // 1. Get ALL events for this unit
+        const { data: events, error: eError } = await supabase
+            .from(CONTROLES_TABLE)
+            .select('*')
+            .eq('unidad_id', unitId)
+            .order('timestamp_inicio', { ascending: true });
+
+        if (eError) throw eError;
+
+        // 2. Get the unit row (to have access to defaults like origin)
+        const { data: unit, error: uError } = await supabase
+            .from(TABLE_NAME)
+            .select('origin, fecha_salida_planta, status')
+            .eq('id', unitId)
+            .single();
+
+        if (uError) throw uError;
+
+        // 3. Determine latest state
+        const lastEvent = events && events.length > 0 ? events[events.length - 1] : null;
+        
+        let newStatus = unit.status;
+
+        // Only auto-update status if currently in an active state (not arrived/cancelled)
+        const activeStatuses = ['EN RUTA', 'EN PARADA', 'INCIDENTE', 'PENDIENTE'];
+        if (activeStatuses.includes(unit.status)) {
+            if (lastEvent) {
+                if (!lastEvent.timestamp_fin) {
+                    if (lastEvent.tipo === 'PARADA_PROG') newStatus = 'EN PARADA';
+                    else if (lastEvent.tipo === 'PARADA_NOPROG') newStatus = 'INCIDENTE';
+                    else newStatus = 'EN RUTA';
+                } else {
+                    newStatus = 'EN RUTA';
+                }
+            } else {
+                newStatus = 'EN RUTA';
+            }
+        }
+
+        const updates: any = {
+            ubicacion_actual: lastEvent ? lastEvent.ubicacion : (unit.origin || 'PLANTA'),
+            last_location: lastEvent ? lastEvent.ubicacion : (unit.origin || 'PLANTA'),
+            last_update: lastEvent ? lastEvent.timestamp_inicio : (unit.fecha_salida_planta || new Date().toISOString()),
+            status: newStatus
+        };
+
+        // 4. Update main table
+        const { error: syncError } = await supabase
+            .from(TABLE_NAME)
+            .update(updates)
+            .eq('id', unitId);
+
+        if (syncError) throw syncError;
+
+    } catch (err) {
+        console.error("Error syncing unit summary:", err);
+    }
+}
 
 /**
  * Adds a control point, stop or incident to the relational table
@@ -436,6 +498,10 @@ export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PRO
         .insert(payload);
 
     if (error) throw error;
+    
+    // AUTO-SYNC main table summary
+    await syncUnitSummary(unitId);
+    
     // Refresh units after relational insert
     await fetchUnits(true);
 }
@@ -463,6 +529,11 @@ export async function updateEventInDB(eventId: string, updates: any) {
         .eq('id', eventId);
 
     if (error) throw error;
+
+    // We need unitId to sync. Let's get it.
+    const { data: eventData } = await supabase.from(CONTROLES_TABLE).select('unidad_id').eq('id', eventId).single();
+    if (eventData) await syncUnitSummary(eventData.unidad_id);
+
     await fetchUnits(true);
 }
 
@@ -470,11 +541,17 @@ export async function updateEventInDB(eventId: string, updates: any) {
  * Deletes an event
  */
 export async function deleteEventFromDB(eventId: string) {
+    // Get unitId BEFORE deletion to sync summary after
+    const { data: eventData } = await supabase.from(CONTROLES_TABLE).select('unidad_id').eq('id', eventId).single();
+
     const { error } = await supabase
         .from(CONTROLES_TABLE)
         .delete()
         .eq('id', eventId);
 
     if (error) throw error;
+
+    if (eventData) await syncUnitSummary(eventData.unidad_id);
+    
     await fetchUnits(true);
 }
