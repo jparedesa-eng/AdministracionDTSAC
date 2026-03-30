@@ -133,6 +133,7 @@ export function subscribeMonitoreo(cb: () => void): () => void {
 // ===== SUPABASE OPERATIONS =====
 
 const TABLE_NAME = 'monitoreo_unidades';
+const CONTROLES_TABLE = 'monitoreo_unidades_controles';
 
 export async function fetchUnits(force = false): Promise<void> {
     // Basic cache (10 seconds) unless forced
@@ -148,7 +149,10 @@ export async function fetchUnits(force = false): Promise<void> {
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
-            .select('*')
+            .select(`
+                *,
+                ${CONTROLES_TABLE} (*)
+            `)
             .order('last_update', { ascending: false });
 
         if (error) throw error;
@@ -172,11 +176,44 @@ export async function fetchUnits(force = false): Promise<void> {
             fechaEstimadaLlegada: row.fecha_estimada_llegada || '',
             status: row.status as UnitStatusType,
 
-            // JSON fields - ensure they are arrays
-            // Note: DB uses 'path_points', app uses 'path'
-            controles: Array.isArray(row.controles) ? row.controles : [],
-            paradasProg: Array.isArray(row.paradas_prog) ? row.paradas_prog : [],
-            paradasNoProg: Array.isArray(row.paradas_no_prog) ? row.paradas_no_prog : [],
+            // --- RELATIONAL DATA MAPPING ---
+            // Filter joined rows into specialized arrays
+            controles: (row[CONTROLES_TABLE] || [])
+                .filter((e: any) => e.tipo === 'CONTROL')
+                .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
+                .map((e: any) => ({
+                    id: e.id, // Keep DB ID for edits
+                    time: e.timestamp_inicio,
+                    location: e.ubicacion,
+                    coords: { lat: e.lat, lng: e.lng }
+                })),
+            
+            paradasProg: (row[CONTROLES_TABLE] || [])
+                .filter((e: any) => e.tipo === 'PARADA_PROG')
+                .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
+                .map((e: any) => ({
+                    id: e.id,
+                    location: e.ubicacion,
+                    start: e.timestamp_inicio,
+                    end: e.timestamp_fin || '',
+                    time: e.duracion || '',
+                    coords: { lat: e.lat, lng: e.lng }
+                })),
+
+            paradasNoProg: (row[CONTROLES_TABLE] || [])
+                .filter((e: any) => e.tipo === 'PARADA_NOPROG')
+                .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
+                .map((e: any) => ({
+                    id: e.id,
+                    location: e.ubicacion,
+                    start: e.timestamp_inicio,
+                    end: e.timestamp_fin || '',
+                    time: e.duracion || '',
+                    cause: e.causa,
+                    coords: { lat: e.lat, lng: e.lng }
+                })),
+
+            // Note: DB uses 'path_points', app uses 'path' (Still JSONB for efficiency)
             path: Array.isArray(row.path_points) ? row.path_points : [],
 
             almacenDestino1: row.almacen_destino1 || '',
@@ -249,10 +286,7 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
             fecha_estimada_llegada: unit.fechaEstimadaLlegada,
             status: unit.status,
 
-            // JSON fields
-            controles: unit.controles,
-            paradas_prog: unit.paradasProg,
-            paradas_no_prog: unit.paradasNoProg,
+            // JSON fields (Empty for new)
             path_points: unit.path,
 
             almacen_destino1: unit.almacenDestino1,
@@ -311,9 +345,8 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
         if (updates.lastUpdate !== undefined) mappedUpdates.last_update = updates.lastUpdate;
         if (updates.lastLocation !== undefined) mappedUpdates.last_location = updates.lastLocation;
 
-        if (updates.controles !== undefined) mappedUpdates.controles = updates.controles;
-        if (updates.paradasProg !== undefined) mappedUpdates.paradas_prog = updates.paradasProg;
-        if (updates.paradasNoProg !== undefined) mappedUpdates.paradas_no_prog = updates.paradasNoProg;
+        // NOTE: we skip updating 'controles', 'paradas_prog' etc in the main table
+        // as they are now in the relational table.
         if (updates.path !== undefined) mappedUpdates.path_points = updates.path;
 
         if (updates.fechaLlegadaDestino1 !== undefined) mappedUpdates.fecha_llegada_destino1 = updates.fechaLlegadaDestino1;
@@ -369,4 +402,64 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
     }
 }
 
+// ===== NEW RELATIONAL OPERATIONS =====
 
+/**
+ * Adds a control point, stop or incident to the relational table
+ */
+export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PROG' | 'PARADA_NOPROG', data: any) {
+    const payload = {
+        unidad_id: unitId,
+        tipo,
+        ubicacion: data.location || data.ubicacion,
+        timestamp_inicio: data.time || data.start,
+        timestamp_fin: data.end || null,
+        duracion: data.time && tipo !== 'CONTROL' ? data.time : null,
+        causa: data.cause || null,
+        lat: data.coords?.lat,
+        lng: data.coords?.lng
+    };
+
+    const { error } = await supabase
+        .from(CONTROLES_TABLE)
+        .insert(payload);
+
+    if (error) throw error;
+    // Refresh units after relational insert
+    await fetchUnits(true);
+}
+
+/**
+ * Updates a specific event (e.g. finishing a stop)
+ */
+export async function updateEventInDB(eventId: string, updates: any) {
+    const mapped: any = {};
+    if (updates.end !== undefined) mapped.timestamp_fin = updates.end;
+    if (updates.time !== undefined) mapped.duracion = updates.time;
+    if (updates.location !== undefined) mapped.ubicacion = updates.location;
+    if (updates.coords !== undefined) {
+        mapped.lat = updates.coords.lat;
+        mapped.lng = updates.coords.lng;
+    }
+
+    const { error } = await supabase
+        .from(CONTROLES_TABLE)
+        .update(mapped)
+        .eq('id', eventId);
+
+    if (error) throw error;
+    await fetchUnits(true);
+}
+
+/**
+ * Deletes an event
+ */
+export async function deleteEventFromDB(eventId: string) {
+    const { error } = await supabase
+        .from(CONTROLES_TABLE)
+        .delete()
+        .eq('id', eventId);
+
+    if (error) throw error;
+    await fetchUnits(true);
+}

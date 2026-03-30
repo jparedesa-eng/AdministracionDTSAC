@@ -1,7 +1,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createUnit, updateUnit, UnitStatus } from '../../store/monitoreoStore';
-import type { TransportUnit, LatLng, StopPoint } from '../../store/monitoreoStore';
+import { createUnit, updateUnit, UnitStatus, addEventToDB, updateEventInDB, deleteEventFromDB } from '../../store/monitoreoStore';
+import type { TransportUnit, LatLng } from '../../store/monitoreoStore';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
 import { getTransportEntitiesState, fetchAllEntities } from "../../store/transportEntitiesStore";
@@ -21,7 +21,6 @@ import {
     Route as RouteIcon,
     Edit2,
     Clock,
-    ClipboardCopy,
     AlertTriangle,
     CheckCircle2,
     Save,
@@ -145,6 +144,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     const mapRef = useRef<any>(null);
     const mapContainerRef = useRef<HTMLDivElement>(null);
     const unitLayersRef = useRef<Record<string, { polyline: any, marker: any }>>({});
+    const dateInputRef = useRef<HTMLInputElement>(null);
 
     const [toast, setToast] = useState<ToastState>(null);
     const [alertConfig, setAlertConfig] = useState<{ open: boolean; title: string; message: string; variant: "danger" | "warning" | "info" }>({
@@ -551,12 +551,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 fechaLlegadaDestino1: finishDate.toISOString(),
                 ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
                 lastUpdate: finishDate.toISOString(),
-                controles: [...unit.controles, {
-                    time: finishDate.toISOString(),
-                    location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
-                    coords: DESTINATION_GPS
-                }],
-                // Save primary metrics here
                 tiempoTotal1: metrics.tiempoTotal,
                 tiempoNeto1: metrics.tiempoNeto,
                 calificacionTTotal: metrics.score,
@@ -564,6 +558,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             };
 
             await updateUnit(unit.id, updates);
+            // RELATIONAL: Add arrival control
+            await addEventToDB(unit.id, 'CONTROL', {
+                time: finishDate.toISOString(),
+                location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
+                coords: DESTINATION_GPS
+            });
             setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
         }
 
@@ -593,19 +593,18 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 lastUpdate: arriveD2.toISOString(),
                 fechaSalidaDestino1: exitD1.toISOString(),
                 fechaLlegadaDestino2: arriveD2.toISOString(),
-                controles: [...unit.controles, {
-                    time: arriveD2.toISOString(),
-                    location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
-                    coords: DESTINATION_GPS
-                }],
                 path: newPath,
-
-                // Save secondary metrics (Score is NOT updated here per user request)
                 tiempoTotal2: metrics.tiempoTotal,
                 tiempoNeto2: metrics.tiempoNeto
             };
 
             await updateUnit(unit.id, updates);
+            // RELATIONAL: Add arrival control
+            await addEventToDB(unit.id, 'CONTROL', {
+                time: arriveD2.toISOString(),
+                location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
+                coords: DESTINATION_GPS
+            });
             setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
         }
     };
@@ -615,8 +614,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const finishDate = new Date(finishDateStr);
         const finalCoords = DESTINATION_GPS;
 
-        let newControles = [...unit.controles];
-        newControles.push({
+        // RELATIONAL: Add arrival control
+        await addEventToDB(unit.id, 'CONTROL', {
             time: finishDate.toISOString(),
             location: `LLEGADA A ${locationName}`,
             coords: finalCoords
@@ -633,7 +632,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             status: UnitStatus.DELIVERED,
             ubicacionActual: `LLEGADA A ${locationName}`,
             lastUpdate: finishDate.toISOString(),
-            controles: newControles,
+            // controles: newControles, -> handled by addEventToDB
             path: newPath,
             fechaLlegadaDestino1: finishDate.toISOString(), // Standard Single arrival
             tiempoTotal1: metrics.tiempoTotal,
@@ -980,16 +979,17 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const newPoint: LatLng = { lat: nLat, lng: nLng };
         const isoDateTime = reportDateTime.toISOString();
 
-        let newControles = [...u.controles];
         if (editingControlIndex !== null) {
-            newControles[editingControlIndex] = {
-                ...newControles[editingControlIndex],
-                time: isoDateTime,
-                location: reportForm.location.toUpperCase(),
-                coords: newPoint
-            };
+            const control = u.controles[editingControlIndex] as any;
+            if (control.id) {
+                await updateEventInDB(control.id, {
+                    location: reportForm.location.toUpperCase(),
+                    coords: newPoint,
+                    time: isoDateTime
+                });
+            }
         } else {
-            newControles.push({
+            await addEventToDB(u.id, 'CONTROL', {
                 time: isoDateTime,
                 location: reportForm.location.toUpperCase(),
                 coords: newPoint
@@ -999,8 +999,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         // --- OPTIMIZED ROUTING: Segment Routing ---
         let newPath = u.path || [];
         if (editingControlIndex !== null) {
-            // If editing an existing control, we re-route everything for safety
-            const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
+            // Re-route using latest state from store (which is updated by relational calls)
+            const pointsForRouting = [GLOBAL_ORIGIN, ...u.controles.filter((c: any) => c.coords).map((c: any) => c.coords as LatLng)];
             newPath = await fetchRoadRoute(pointsForRouting);
         } else {
             // Sequential addition: Only route from last path point to new control
@@ -1011,7 +1011,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         }
 
         await updateUnit(u.id, {
-            controles: newControles,
+            // controles: newControles, -> handled relacionalmente
             ubicacionActual: reportForm.location.toUpperCase(),
             lastLocation: reportForm.location.toUpperCase(),
             lastUpdate: reportDateTime.toISOString(),
@@ -1061,7 +1061,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
 
-        const newStop: StopPoint = {
+        const stopData = {
             location: newStopForm.location.toUpperCase(),
             start: newStopForm.start, // Store original ISO string
             end: isStopOngoing ? '' : newStopForm.end, // Store original ISO string
@@ -1070,11 +1070,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             coords: coords
         };
 
-        await updateUnit(u.id, {
-            ...u,
-            status: newStatus,
-            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: [...(type === 'PROG' ? u.paradasProg : u.paradasNoProg), newStop]
-        });
+        await updateUnit(u.id, { status: newStatus });
+        await addEventToDB(u.id, type === 'PROG' ? 'PARADA_PROG' : 'PARADA_NOPROG', stopData);
 
         setNewStopForm({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
         setIsStopOngoing(false);
@@ -1119,17 +1116,16 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         }
         let durationStr = calculateDuration(currentStop.start, endDate);
 
-        currentList[index] = {
-            ...currentStop,
-            end: endDate, // Store as ISO string
-            time: durationStr
-        };
-
         await updateUnit(u.id, {
-            ...u,
             status: UnitStatus.TRANSIT, // Back to route
-            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: currentList
         });
+
+        if ((currentStop as any).id) {
+            await updateEventInDB((currentStop as any).id, {
+                end: endDate,
+                time: durationStr
+            });
+        }
 
         setFinishStopModal({ open: false, type: 'PROG', index: null, endDate: '' });
     };
@@ -1149,10 +1145,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         list.splice(index, 1);
 
         await updateUnit(u.id, {
-            ...u,
-            status: newStatus,
-            [type === 'PROG' ? 'paradasProg' : 'paradasNoProg']: list
+            status: newStatus
         });
+
+        if ((stop as any).id) {
+            await deleteEventFromDB((stop as any).id);
+        }
     };
 
     const openDetail = (unitId: string) => {
@@ -1473,7 +1471,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     <span className="text-[10px] font-bold bg-white border border-slate-200 px-2.5 py-1 rounded-lg text-slate-700 uppercase shadow-sm tracking-wide">{selectedUnit.proceso}</span>
                                                 </div>
                                             </div>
-                                            
+
                                             <div className="flex flex-col border-t border-slate-100 pt-3">
                                                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Responsable del Viaje</span>
                                                 <div className="flex items-center justify-between">
@@ -1514,12 +1512,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         <div className="bg-slate-900 text-white p-6 rounded-2xl border border-slate-800 shadow-xl">
                                             <div className="flex items-center justify-between mb-6">
                                                 <h4 className="text-[11px] font-bold uppercase tracking-wider flex items-center gap-2">
-                                                    <Locate size={16} className="text-[#1a73e8]" /> 
+                                                    <Locate size={16} className="text-white" />
                                                     {editingControlIndex !== null ? `Corrección Control #${editingControlIndex + 1}` : 'Registrar Nuevo Control'}
                                                 </h4>
-                                                <div className="flex items-center gap-1.5 text-[10px] font-medium text-white/30 bg-white/5 px-2 py-1 rounded-lg border border-white/5">
-                                                    <ClipboardCopy size={12} /> Pegar coord.
-                                                </div>
                                             </div>
 
                                             {(selectedUnit.status === 'EN PARADA' || selectedUnit.status === 'INCIDENTE') ? (
@@ -1539,62 +1534,87 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                 <form onSubmit={handleUpdateControl} className="space-y-4">
                                                     <div className="grid grid-cols-2 gap-4">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5">
-                                                                <Calendar size={12} className="text-white/20" /> Fecha y Hora 
+                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                                <Calendar size={12} className="text-white" /> Fecha y Hora
                                                             </label>
-                                                            <input 
-                                                                type="datetime-local" 
-                                                                required 
-                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all" 
-                                                                value={reportForm.reportDateTime} 
-                                                                onChange={e => setReportForm({ ...reportForm, reportDateTime: e.target.value })} 
-                                                            />
+                                                            <div className="relative">
+                                                                <input
+                                                                    ref={dateInputRef}
+                                                                    type="datetime-local"
+                                                                    required
+                                                                    className="absolute inset-0 opacity-0 -z-10 pointer-events-none"
+                                                                    value={reportForm.reportDateTime}
+                                                                    onChange={e => setReportForm({ ...reportForm, reportDateTime: e.target.value })}
+                                                                />
+                                                                <div className="flex gap-1">
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => dateInputRef.current?.showPicker()}
+                                                                        className="flex-1 p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none hover:bg-white/10 hover:border-white/20 transition-all flex items-center justify-between group"
+                                                                    >
+                                                                        <span className="truncate">{formatDate(reportForm.reportDateTime)}</span>
+                                                                        <Calendar size={14} className="text-white/40 group-hover:text-white transition-colors" />
+                                                                    </button>
+                                                                    <button
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const now = new Date();
+                                                                            const localIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+                                                                            setReportForm({ ...reportForm, reportDateTime: localIso });
+                                                                        }}
+                                                                        className="px-3 bg-blue-600/20 border border-blue-500/30 rounded-xl text-[9px] font-black text-blue-400 uppercase tracking-tighter hover:bg-blue-600 hover:text-white transition-all shadow-lg shadow-blue-900/20"
+                                                                        title="Establecer Hora Actual"
+                                                                    >
+                                                                        Ahora
+                                                                    </button>
+                                                                </div>
+                                                            </div>
                                                         </div>
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5">
-                                                                <Truck size={12} className="text-white/20" /> Ubicación Actual
+                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5">
+                                                                <Truck size={12} className="text-white" /> Ubicación Actual
                                                             </label>
-                                                            <input 
-                                                                required 
-                                                                placeholder="EJ: CIUDAD / KM / PEAJE" 
-                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white outline-none uppercase focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
-                                                                value={reportForm.location} 
-                                                                onChange={e => setReportForm({ ...reportForm, location: e.target.value })} 
+                                                            <input
+                                                                required
+                                                                placeholder="EJ: CIUDAD / KM / PEAJE"
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-bold text-white outline-none uppercase focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/30"
+                                                                value={reportForm.location}
+                                                                onChange={e => setReportForm({ ...reportForm, location: e.target.value })}
                                                             />
                                                         </div>
                                                     </div>
 
                                                     <div className="grid grid-cols-4 gap-4">
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
-                                                                <MapPin size={12} className="text-white/20" /> Latitud
+                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                                <MapPin size={12} className="text-white" /> Latitud
                                                             </label>
-                                                            <input 
-                                                                required 
-                                                                onPaste={handleCoordPaste} 
-                                                                placeholder="-8.13..." 
-                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
-                                                                value={reportForm.lat} 
-                                                                onChange={e => setReportForm({ ...reportForm, lat: e.target.value })} 
+                                                            <input
+                                                                required
+                                                                onPaste={handleCoordPaste}
+                                                                placeholder="-8.13..."
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/30"
+                                                                value={reportForm.lat}
+                                                                onChange={e => setReportForm({ ...reportForm, lat: e.target.value })}
                                                             />
                                                         </div>
                                                         <div className="space-y-1.5">
-                                                            <label className="text-[10px] font-bold text-white/40 uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
-                                                                <MapPin size={12} className="text-white/20" /> Longitud
+                                                            <label className="text-[10px] font-bold text-white uppercase tracking-wider ml-1 flex items-center gap-1.5 line-clamp-1">
+                                                                <MapPin size={12} className="text-white" /> Longitud
                                                             </label>
-                                                            <input 
-                                                                required 
-                                                                onPaste={handleCoordPaste} 
-                                                                placeholder="-79.0..." 
-                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/10" 
-                                                                value={reportForm.lng} 
-                                                                onChange={e => setReportForm({ ...reportForm, lng: e.target.value })} 
+                                                            <input
+                                                                required
+                                                                onPaste={handleCoordPaste}
+                                                                placeholder="-79.0..."
+                                                                className="w-full p-2.5 bg-white/5 border border-white/10 rounded-xl text-xs font-semibold text-white outline-none focus:border-[#1a73e8] focus:ring-4 focus:ring-blue-900/10 transition-all placeholder:text-white/30"
+                                                                value={reportForm.lng}
+                                                                onChange={e => setReportForm({ ...reportForm, lng: e.target.value })}
                                                             />
                                                         </div>
                                                         <div className="col-span-2 pt-5.5 flex flex-col justify-end">
-                                                            <button 
-                                                                type="submit" 
-                                                                disabled={isSavingControl} 
+                                                            <button
+                                                                type="submit"
+                                                                disabled={isSavingControl}
                                                                 className="w-full py-2.5 bg-[#1a73e8] hover:bg-blue-700 text-white rounded-xl text-[10px] font-bold uppercase tracking-wider shadow-lg shadow-blue-900/20 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                                                             >
                                                                 {isSavingControl && <Loader2 size={14} className="animate-spin" />}
@@ -1612,7 +1632,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     {selectedUnit.controles.map((cp, idx) => {
                                                         const dateObj = new Date(cp.time);
                                                         const isInvalidDate = isNaN(dateObj.getTime());
-                                                        
+
                                                         // Fallback para datos antiguos o ISO strings correctos
                                                         const displayDate = isInvalidDate ? '-' : dateObj.toLocaleDateString('es-ES', { day: '2-digit', month: '2-digit', year: '2-digit' });
                                                         const displayTime = isInvalidDate ? cp.time : dateObj.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
@@ -1637,17 +1657,17 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                         </div>
                                                                     </div>
                                                                     <div className="flex items-center gap-1 ml-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
-                                                                        <button 
-                                                                            onClick={() => { 
-                                                                                setEditingControlIndex(idx); 
-                                                                                setReportForm({ 
-                                                                                    ...reportForm, 
-                                                                                    location: cp.location, 
-                                                                                    lat: cp.coords?.lat.toString() || '', 
-                                                                                    lng: cp.coords?.lng.toString() || '', 
+                                                                        <button
+                                                                            onClick={() => {
+                                                                                setEditingControlIndex(idx);
+                                                                                setReportForm({
+                                                                                    ...reportForm,
+                                                                                    location: cp.location,
+                                                                                    lat: cp.coords?.lat.toString() || '',
+                                                                                    lng: cp.coords?.lng.toString() || '',
                                                                                     reportDateTime: isInvalidDate ? new Date().toISOString().slice(0, 16) : dateObj.toISOString().slice(0, 16)
-                                                                                }); 
-                                                                            }} 
+                                                                                });
+                                                                            }}
                                                                             className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
                                                                         >
                                                                             <Edit2 size={13} />
