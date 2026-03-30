@@ -135,6 +135,8 @@ export function subscribeMonitoreo(cb: () => void): () => void {
 
 const TABLE_NAME = 'monitoreo_unidades';
 const CONTROLES_TABLE = 'monitoreo_unidades_controles';
+let isFetching = false;
+let pendingFetch = false;
 
 export async function fetchUnits(force = false): Promise<void> {
     // Basic cache (10 seconds) unless forced
@@ -142,6 +144,12 @@ export async function fetchUnits(force = false): Promise<void> {
     if (!force && now - state.lastFetch < 10000 && state.units.length > 0) {
         return;
     }
+
+    if (isFetching) {
+        pendingFetch = true;
+        return;
+    }
+    isFetching = true;
 
     state.loading = true;
     state.error = null;
@@ -269,8 +277,13 @@ export async function fetchUnits(force = false): Promise<void> {
         state.error = err.message || 'Error fetching units';
         console.error("MonitoreoStore Fetch Error:", err);
     } finally {
+        isFetching = false;
         state.loading = false;
         notify();
+        if (pendingFetch) {
+            pendingFetch = false;
+            fetchUnits(force);
+        }
     }
 }
 
@@ -443,7 +456,7 @@ export async function syncUnitSummary(unitId: string) {
     }
 }
 
-export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PROG' | 'PARADA_NOPROG', data: any, skipSync = false) {
+export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PROG' | 'PARADA_NOPROG', data: any, skipSync = false, skipFetch = false) {
     const payload = {
         unidad_id: unitId,
         tipo,
@@ -460,7 +473,7 @@ export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PRO
     if (error) throw error;
 
     if (!skipSync) await syncUnitSummary(unitId);
-    await fetchUnits(true);
+    if (!skipFetch) await fetchUnits(true);
 }
 
 export async function updateEventInDB(eventId: string, updates: any, skipSync = false) {
@@ -468,6 +481,7 @@ export async function updateEventInDB(eventId: string, updates: any, skipSync = 
     if (updates.endTime !== undefined) mapped.timestamp_fin = updates.endTime;
     if (updates.duration !== undefined) mapped.duracion = updates.duration;
     if (updates.location !== undefined) mapped.ubicacion = updates.location;
+    if (updates.time !== undefined) mapped.timestamp_inicio = updates.time;
     if (updates.coords !== undefined) {
         mapped.lat = updates.coords.lat;
         mapped.lng = updates.coords.lng;
@@ -535,6 +549,28 @@ export async function finalizeTripInDB(unitId: string, mode: 'SINGLE' | 'DEST1' 
         await fetchUnits(true);
     } catch (err) {
         console.error("Error in finalizeTripInDB:", err);
+        throw err;
+    }
+}
+
+export async function registerControlInDB(unitId: string, eventData: any, newPath: LatLng[]) {
+    try {
+        // 1. Add the control event without fetching (we will fetch at the end)
+        await addEventToDB(unitId, 'CONTROL', eventData, true, true);
+
+        // 2. Update the unit with the new path
+        const { error: pError } = await supabase
+            .from(TABLE_NAME)
+            .update({ path_points: newPath })
+            .eq('id', unitId);
+
+        if (pError) throw pError;
+
+        // 3. Final synchronization and single state refresh
+        await syncUnitSummary(unitId);
+        await fetchUnits(true);
+    } catch (err) {
+        console.error("Error in registerControlInDB:", err);
         throw err;
     }
 }

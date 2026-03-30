@@ -33,7 +33,7 @@ export const Modal: React.FC<ModalProps> = ({
             : "max-w-lg";
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/25 px-4 transition-all duration-200">
+    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/50 px-4 transition-all duration-200">
       <div
         className={`w-full ${maxWidth} transform rounded-2xl bg-white text-left align-middle shadow-xl transition-all relative flex flex-col max-h-[85vh]`}
       >

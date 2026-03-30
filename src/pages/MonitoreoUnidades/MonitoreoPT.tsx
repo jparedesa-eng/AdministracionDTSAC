@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { createUnit, updateUnit, UnitStatus, addEventToDB, updateEventInDB, deleteEventFromDB, finalizeTripInDB, fetchUnits } from '../../store/monitoreoStore';
+import { createUnit, updateUnit, UnitStatus, addEventToDB, updateEventInDB, deleteEventFromDB, finalizeTripInDB, fetchUnits, registerControlInDB } from '../../store/monitoreoStore';
 import type { TransportUnit, LatLng } from '../../store/monitoreoStore';
 import { getTravelTimesState, subscribeTravelTimes, fetchTravelTimes } from '../../store/travelTimesStore';
 import { getDestinationsState, subscribeDestinations, fetchDestinations } from '../../store/destinationStore';
@@ -43,9 +43,9 @@ import {
     Calendar
 } from 'lucide-react';
 
-const GLOBAL_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };
+const FALLBACK_ORIGIN: LatLng = { lat: -8.13038471878842, lng: -79.01637350220241 };
 // Coordenada destino solicitada para finalización
-const DESTINATION_GPS: LatLng = { lat: -11.9462474113332, lng: -77.13176486382004 };
+const FALLBACK_DESTINATION: LatLng = { lat: -11.9462474113332, lng: -77.13176486382004 };
 
 interface TransportTrackerProps {
     units: TransportUnit[];
@@ -139,6 +139,40 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     const [showAddStopProg, setShowAddStopProg] = useState(false);
     const [showAddStopNoProg, setShowAddStopNoProg] = useState(false);
     const [isStopOngoing, setIsStopOngoing] = useState(false);
+
+    // Track last coordinate of selected unit for auto-centering
+    const lastSelectedUnitCoord = useMemo(() => {
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!u || !u.path || u.path.length === 0) return null;
+        return u.path[u.path.length - 1];
+    }, [units, selectedUnitId]);
+
+    // DYNAMIC COORDINATES LOOKUP
+    const unitOriginCoords = useMemo(() => {
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!u) return FALLBACK_ORIGIN;
+        const route = routeMatrix.find(r => 
+            r.id === u.rutaName || 
+            (r.origen === u.origin && r.destino === u.destination && r.proceso === u.proceso)
+        );
+        if (route && route.origen_lat && route.origen_lng) {
+            return { lat: parseFloat(route.origen_lat), lng: parseFloat(route.origen_lng) };
+        }
+        return FALLBACK_ORIGIN;
+    }, [units, selectedUnitId, routeMatrix]);
+
+    const unitDestinationCoords = useMemo(() => {
+        const u = units.find(unit => unit.id === selectedUnitId);
+        if (!u) return FALLBACK_DESTINATION;
+        const route = routeMatrix.find(r => 
+            r.id === u.rutaName || 
+            (r.origen === u.origin && r.destino === u.destination && r.proceso === u.proceso)
+        );
+        if (route && route.destino_lat && route.destino_lng) {
+            return { lat: parseFloat(route.destino_lat), lng: parseFloat(route.destino_lng) };
+        }
+        return FALLBACK_DESTINATION;
+    }, [units, selectedUnitId, routeMatrix]);
 
     const [newStopForm, setNewStopForm] = useState<{ location: string, start: string, end: string, time: string, cause: string, lat: string, lng: string }>({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
     const [formErrors, setFormErrors] = useState<Record<string, string>>({});
@@ -312,11 +346,17 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         if (points.length < 2) return points;
         const coordsString = points.map(p => `${p.lng},${p.lat}`).join(';');
         const url = `https://router.project-osrm.org/route/v1/driving/${coordsString}?overview=full&geometries=geojson`;
+        
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 10000); // 10s timeout
+
         try {
-            const response = await fetch(url);
+            const response = await fetch(url, { signal: controller.signal });
+            clearTimeout(timeoutId);
             const data = await response.json();
             if (data.code === 'Ok' && data.routes.length > 0) {
-                return data.routes[0].geometry.coordinates.map((c: [number, number]) => ({ lat: c[1], lng: c[0] }));
+                const geom = data.routes[0].geometry.coordinates.map((c: [number, number]) => ({ lat: c[1], lng: c[0] }));
+                if (geom.length >= 2) return geom;
             }
         } catch (error) { console.error("OSRM Error:", error); }
         return points;
@@ -328,7 +368,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 zoomControl: false,
                 attributionControl: false,
                 preferCanvas: true
-            }).setView([GLOBAL_ORIGIN.lat, GLOBAL_ORIGIN.lng], 12);
+            }).setView([FALLBACK_ORIGIN.lat, FALLBACK_ORIGIN.lng], 12);
             L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', { maxZoom: 19, crossOrigin: true }).addTo(map);
             L.control.zoom({ position: 'bottomright' }).addTo(map);
             mapRef.current = map;
@@ -452,12 +492,20 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         }
     }, [filteredUnits, selectedUnitId]);
 
+    // Auto-center map when the selected unit moves
+    useEffect(() => {
+        if (selectedUnitId && lastSelectedUnitCoord && mapRef.current) {
+            mapRef.current.flyTo([lastSelectedUnitCoord.lat, lastSelectedUnitCoord.lng], 13);
+        }
+    }, [selectedUnitId, lastSelectedUnitCoord]);
+
     const handleCoordPaste = (e: React.ClipboardEvent) => {
-        const pastedData = e.clipboardData.getData('Text');
-        if (pastedData.includes(',')) {
+        const text = e.clipboardData.getData('text');
+        // Handle several formats: "lat, lng" "lat lng" or just lat if pasting one by one
+        const match = text.match(/(-?\d+\.\d+)[,\s]+(-?\d+\.\d+)/);
+        if (match) {
             e.preventDefault();
-            const parts = pastedData.split(',');
-            if (parts.length >= 2) setReportForm(prev => ({ ...prev, lat: parts[0].trim(), lng: parts[1].trim() }));
+            setReportForm({ ...reportForm, lat: match[1], lng: match[2] });
         }
     };
 
@@ -576,13 +624,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             // --- SCENARIO 1: SINGLE DESTINATION ---
             if (type === 'SINGLE') {
                 const finishDate = new Date(finishTripModal.date);
-                if (!validateDates(finishDate, "La fecha de llegada")) return;
+                if (!validateDates(finishDate, "La fecha de llegada final")) return;
 
                 const metrics = calculateMetrics(finishDate);
                 await finalizeTripInDB(unit.id, 'SINGLE', {
                     arrivalDateTime: finishDate.toISOString(),
-                    locationName: unit.almacenDestino1 || unit.destination,
-                    coords: DESTINATION_GPS,
+                    locationName: unit.destination,
+                    coords: unitDestinationCoords,
                     ...metrics
                 });
                 setFinishTripModal(prev => ({ ...prev, open: false }));
@@ -598,7 +646,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 await finalizeTripInDB(unit.id, 'DEST1', {
                     arrivalDateTime: finishDate.toISOString(),
                     locationName: unit.almacenDestino1,
-                    coords: DESTINATION_GPS,
+                    coords: unitDestinationCoords,
                     ...metrics
                 });
                 setFinishTripModal(prev => ({ ...prev, open: false }));
@@ -624,14 +672,14 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 const deadTimeMs = exitD1.getTime() - arriveD1.getTime();
                 const metrics = calculateMetrics(arriveD2, deadTimeMs);
 
-                const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
-                const segment = await fetchRoadRoute([lastPoint, DESTINATION_GPS]);
+                const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : unitOriginCoords;
+                const segment = await fetchRoadRoute([lastPoint, unitDestinationCoords]);
                 const newPath = [...(unit.path || []), ...segment.slice(1)];
 
                 await finalizeTripInDB(unit.id, 'DEST2', {
                     arrivalDateTime: arriveD2.toISOString(),
                     locationName: unit.almacenDestino2,
-                    coords: DESTINATION_GPS,
+                    coords: unitDestinationCoords,
                     exitD1: exitD1.toISOString(),
                     path: newPath,
                     ...metrics
@@ -794,7 +842,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     area: form.area,
                     lastLocation: 'Origen Planta',
                     lastUpdate: now.toISOString(),
-                    path: [GLOBAL_ORIGIN],
+                    path: [matched && matched.origen_lat && matched.origen_lng 
+                        ? { lat: parseFloat(matched.origen_lat), lng: parseFloat(matched.origen_lng) } 
+                        : FALLBACK_ORIGIN],
                     usuarioCreacionId: profile?.id
                 };
                 await createUnit(newUnit);
@@ -1021,37 +1071,52 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             const newPoint: LatLng = { lat: nLat, lng: nLng };
             const isoDateTime = reportDateTime.toISOString();
 
+            const eventData = {
+                time: isoDateTime,
+                location: reportForm.location.toUpperCase(),
+                coords: newPoint
+            };
+
+            // --- OPTIMIZED ROUTING: BACKGROUND PROCESSING ---
             if (editingControlIndex !== null) {
+                // Editing: Update event instantly
                 const control = u.controles[editingControlIndex] as any;
                 if (control.id) {
                     await updateEventInDB(control.id, {
                         location: reportForm.location.toUpperCase(),
                         coords: newPoint,
                         time: isoDateTime
-                    });
+                    }, false); // Set skipSync to false so UI updates instantly
+                    
+                    // Recalculate full path silently in background
+                    const pointsForRouting = [unitOriginCoords, ...u.controles.map((c: any, idx: number) => 
+                        idx === editingControlIndex ? newPoint : (c.coords as LatLng)
+                    ).filter(c => c !== null)];
+                    
+                    fetchRoadRoute(pointsForRouting).then(newPath => {
+                        if (newPath && newPath.length >= 2) {
+                            updateUnit(u.id, { path: newPath }).catch(console.error);
+                        }
+                    }).catch(console.error);
                 }
             } else {
-                await addEventToDB(u.id, 'CONTROL', {
-                    time: isoDateTime,
-                    location: reportForm.location.toUpperCase(),
-                    coords: newPoint
-                });
-            }
+                // Adding: Create event instantly with straight-line fallback to ensure map marker moves immediately
+                const lastPathPoint = (u.path && u.path.length > 0) ? u.path[u.path.length - 1] : unitOriginCoords;
+                const fallbackPath = [...(u.path || []), newPoint];
+                
+                await registerControlInDB(u.id, eventData, fallbackPath);
 
-            // --- OPTIMIZED ROUTING: Segment Routing ---
-            let newPath = u.path || [];
-            if (editingControlIndex !== null) {
-                const pointsForRouting = [GLOBAL_ORIGIN, ...u.controles.filter((c: any) => c.coords).map((c: any) => c.coords as LatLng)];
-                newPath = await fetchRoadRoute(pointsForRouting);
-            } else {
-                const lastPathPoint = (u.path && u.path.length > 0) ? u.path[u.path.length - 1] : GLOBAL_ORIGIN;
-                const segment = await fetchRoadRoute([lastPathPoint, newPoint]);
-                newPath = [...(u.path || []), ...segment.slice(1)];
+                // Calculate OSRM curved segment silently in background
+                fetchRoadRoute([lastPathPoint, newPoint]).then(segment => {
+                    if (segment.length >= 2) {
+                        const newPath = (u.path && u.path.length > 0) 
+                            ? [...u.path, ...segment.slice(1)] 
+                            : segment;
+                        
+                        updateUnit(u.id, { path: newPath }).catch(console.error);
+                    }
+                }).catch(console.error);
             }
-
-            await updateUnit(u.id, {
-                path: newPath
-            });
 
             resetReportForm();
             setEditingControlIndex(null);
@@ -1586,7 +1651,17 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                 </h4>
                                             </div>
 
-                                            {(selectedUnit.status === 'EN PARADA' || selectedUnit.status === 'INCIDENTE') ? (
+                                            {selectedUnit.status === UnitStatus.DELIVERED || selectedUnit.status === 'CANCELADO' ? (
+                                                <div className="bg-slate-800/50 border border-slate-700 p-4 rounded-xl mb-4 flex items-start gap-3">
+                                                    <CheckCircle2 className="text-emerald-500 shrink-0" size={20} />
+                                                    <div>
+                                                        <h4 className="text-xs font-bold text-white uppercase tracking-wide">Viaje Finalizado</h4>
+                                                        <p className="text-xs text-slate-400 mt-1">
+                                                            Este viaje ha sido marcado como {selectedUnit.status}. No se permiten registros adicionales de ubicación.
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ) : (selectedUnit.status === 'EN PARADA' || selectedUnit.status === 'INCIDENTE') ? (
                                                 <div className="bg-orange-950/30 border border-orange-500/20 p-4 rounded-xl mb-4 flex items-start gap-3">
                                                     <AlertTriangle className="text-orange-500 shrink-0" size={20} />
                                                     <div>
@@ -1725,23 +1800,25 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                             <p className="text-[11px] font-bold text-slate-800 uppercase truncate">{cp.location}</p>
                                                                         </div>
                                                                     </div>
-                                                                    <div className="flex items-center gap-1 ml-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
-                                                                        <button
-                                                                            onClick={() => {
-                                                                                setEditingControlIndex(idx);
-                                                                                setReportForm({
-                                                                                    ...reportForm,
-                                                                                    location: cp.location,
-                                                                                    lat: cp.coords?.lat.toString() || '',
-                                                                                    lng: cp.coords?.lng.toString() || '',
-                                                                                    reportDateTime: isInvalidDate ? new Date().toISOString().slice(0, 16) : dateObj.toISOString().slice(0, 16)
-                                                                                });
-                                                                            }}
-                                                                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
-                                                                        >
-                                                                            <Edit2 size={13} />
-                                                                        </button>
-                                                                    </div>
+                                                                    {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && (
+                                                                        <div className="flex items-center gap-1 ml-2 opacity-0 group-hover/card:opacity-100 transition-opacity">
+                                                                            <button
+                                                                                onClick={() => {
+                                                                                    setEditingControlIndex(idx);
+                                                                                    setReportForm({
+                                                                                        ...reportForm,
+                                                                                        location: cp.location,
+                                                                                        lat: cp.coords?.lat.toString() || '',
+                                                                                        lng: cp.coords?.lng.toString() || '',
+                                                                                        reportDateTime: isInvalidDate ? new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16) : new Date(dateObj.getTime() - (dateObj.getTimezoneOffset() * 60000)).toISOString().slice(0, 16)
+                                                                                    });
+                                                                                }}
+                                                                                className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors border border-transparent hover:border-red-100"
+                                                                            >
+                                                                                <Edit2 size={13} />
+                                                                            </button>
+                                                                        </div>
+                                                                    )}
                                                                 </div>
                                                             </div>
                                                         );
@@ -1757,9 +1834,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         <div className="bg-white rounded-xl border border-emerald-200 overflow-hidden">
                                             <div className="p-4 border-b border-emerald-100 bg-emerald-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-emerald-700 uppercase tracking-wider flex items-center gap-2"><CheckCircle2 size={16} /> Programadas</h4></div>
                                             <div className="p-4">
-                                                {!showAddStopProg ? (
+                                                {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && !showAddStopProg && (
                                                     <button onClick={() => setShowAddStopProg(true)} className="w-full py-3 border-2 border-dashed border-emerald-200 text-emerald-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-emerald-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Parada</button>
-                                                ) : (
+                                                )}
+                                                {selectedUnit.status === UnitStatus.DELIVERED && !showAddStopProg && (
+                                                    <p className="text-center text-xs text-slate-400 italic py-4 border border-dashed border-slate-200 rounded-xl mb-4">No se permiten nuevas paradas en viajes finalizados.</p>
+                                                )}
+                                                {showAddStopProg && (
                                                     <div className="mb-4 bg-emerald-50/50 p-5 rounded-xl border border-emerald-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
                                                             <div className="space-y-1"><label className="text-[11px] font-bold text-emerald-800/60 uppercase tracking-wider">Lugar / Motivo</label><input autoFocus className="w-full p-3 bg-white border border-emerald-200 rounded-lg text-xs font-bold uppercase focus:border-emerald-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Ej: ALMUERZO / GRIFO" /></div>
@@ -1805,7 +1886,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && (
+                                                                {!stop.end && selectedUnit.status !== UnitStatus.DELIVERED && (
                                                                     <button
                                                                         onClick={() => initiateFinishStop('PROG', idx)}
                                                                         disabled={isSavingStop}
@@ -1815,7 +1896,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                         FINALIZAR
                                                                     </button>
                                                                 )}
-                                                                <button onClick={() => handleDeleteStop('PROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
+                                                                {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && (
+                                                                    <button onClick={() => handleDeleteStop('PROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
@@ -1826,9 +1909,13 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                         <div className="bg-white rounded-xl border border-amber-200 overflow-hidden">
                                             <div className="p-4 border-b border-amber-100 bg-amber-50/30 flex justify-between items-center"><h4 className="text-[11px] font-bold text-amber-700 uppercase tracking-wider flex items-center gap-2"><AlertTriangle size={16} /> No Programadas</h4></div>
                                             <div className="p-4">
-                                                {!showAddStopNoProg ? (
+                                                {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && !showAddStopNoProg && (
                                                     <button onClick={() => setShowAddStopNoProg(true)} className="w-full py-3 border-2 border-dashed border-amber-200 text-amber-600 rounded-xl font-bold text-xs uppercase tracking-wider hover:bg-amber-50 transition-colors mb-4 flex items-center justify-center gap-2"><PlusCircle size={14} /> Registrar Incidencia</button>
-                                                ) : (
+                                                )}
+                                                {selectedUnit.status === UnitStatus.DELIVERED && !showAddStopNoProg && (
+                                                    <p className="text-center text-xs text-slate-400 italic py-4 border border-dashed border-slate-200 rounded-xl mb-4">No se permiten nuevas incidencias en viajes finalizados.</p>
+                                                )}
+                                                {showAddStopNoProg && (
                                                     <div className="mb-4 bg-amber-50/50 p-5 rounded-xl border border-amber-100 animate-in fade-in">
                                                         <div className="grid grid-cols-1 gap-4">
                                                             <div className="space-y-1"><label className="text-[11px] font-bold text-amber-800/60 uppercase tracking-wider">Ubicación</label><input autoFocus className="w-full p-3 bg-white border border-amber-200 rounded-lg text-xs font-bold uppercase focus:border-amber-400 outline-none" value={newStopForm.location} onChange={e => setNewStopForm({ ...newStopForm, location: e.target.value })} placeholder="Km / Ref" /></div>
@@ -1874,8 +1961,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[11px] font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
-                                                                <button onClick={() => handleDeleteStop('NOPROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
+                                                                {!stop.end && selectedUnit.status !== UnitStatus.DELIVERED && <button onClick={() => initiateFinishStop('NOPROG', idx)} className="text-[11px] font-bold bg-amber-600 text-white px-3 py-1.5 rounded hover:bg-amber-700 transition flex items-center gap-1"><PlayCircle size={10} /> RESOLVER</button>}
+                                                                {selectedUnit.status !== UnitStatus.DELIVERED && selectedUnit.status !== 'CANCELADO' && (
+                                                                    <button onClick={() => handleDeleteStop('NOPROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
+                                                                )}
                                                             </div>
                                                         </div>
                                                     ))}
