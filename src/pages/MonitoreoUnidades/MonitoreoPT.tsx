@@ -8,6 +8,7 @@ import { getTransportEntitiesState, fetchAllEntities } from "../../store/transpo
 import type { LogisticOperator, TransportProvider, TransportUnitCatalog, TransportDriver } from "../../store/transportEntitiesStore";
 import { Toast } from '../../components/ui/Toast';
 import type { ToastState } from '../../components/ui/Toast';
+import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import html2pdf from 'html2pdf.js';
@@ -144,7 +145,19 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     const unitLayersRef = useRef<Record<string, { polyline: any, marker: any }>>({});
 
     const [toast, setToast] = useState<ToastState>(null);
+    const [alertConfig, setAlertConfig] = useState<{ open: boolean; title: string; message: string; variant: "danger" | "warning" | "info" }>({
+        open: false,
+        title: '',
+        message: '',
+        variant: 'danger'
+    });
+
+    const showAlert = (title: string, message: string, variant: "danger" | "warning" | "info" = 'danger') => {
+        setAlertConfig({ open: true, title, message, variant });
+    };
+
     const [isExporting, setIsExporting] = useState(false);
+    const [isSavingControl, setIsSavingControl] = useState(false);
 
     const [form, setForm] = useState({
         unitName: '',
@@ -200,10 +213,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         return units.filter(u => {
             const searchLower = searchTerm.toLowerCase();
             const matchesSearch =
-                u.plateRemolque.toLowerCase().includes(searchLower) ||
-                u.conductor.toLowerCase().includes(searchLower) ||
-                u.transportista.toLowerCase().includes(searchLower) ||
-                u.proceso.toLowerCase().includes(searchLower);
+                (u.plateRemolque || '').toLowerCase().includes(searchLower) ||
+                (u.conductor || '').toLowerCase().includes(searchLower) ||
+                (u.transportista || '').toLowerCase().includes(searchLower) ||
+                (u.proceso || '').toLowerCase().includes(searchLower);
 
             if (!matchesSearch) return false;
 
@@ -568,6 +581,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             // Calculate Metrics for D2 (Deducting Dead Time)
             const metrics = calculateMetrics(arriveD2, deadTimeMs);
 
+            const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
+            const segment = await fetchRoadRoute([lastPoint, DESTINATION_GPS]);
+            const newPath = [...(unit.path || []), ...segment.slice(1)];
+
             let updates: any = {
                 status: UnitStatus.DELIVERED,
                 ubicacionActual: `LLEGADA A ${unit.almacenDestino2}`,
@@ -579,7 +596,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
                     coords: DESTINATION_GPS
                 }],
-                path: await fetchRoadRoute([GLOBAL_ORIGIN, ...unit.controles.filter(c => c.coords).map(c => c.coords as LatLng)]),
+                path: newPath,
 
                 // Save secondary metrics (Score is NOT updated here per user request)
                 tiempoTotal2: metrics.tiempoTotal,
@@ -604,9 +621,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             coords: finalCoords
         });
 
-        // Update Path
-        const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
-        const newPath = await fetchRoadRoute(pointsForRouting);
+        // Update Path with Segment Routing
+        const lastPathPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
+        const segment = await fetchRoadRoute([lastPathPoint, finalCoords]);
+        const newPath = [...(unit.path || []), ...segment.slice(1)];
 
 
 
@@ -781,7 +799,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             }
         } catch (error) {
             console.error("Error saving unit:", error);
-            alert("Error al guardar la unidad. Por favor intente nuevamente.");
+            showAlert("Error", "Error al guardar la unidad. Por favor intente nuevamente.", "danger");
         }
     };
 
@@ -928,14 +946,14 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         // VALIDATION: Prevent adding control if unit is stopped
         if (u.status === 'EN PARADA' || u.status === 'INCIDENTE') {
-            alert("⚠️ ACCIÓN REQUERIDA:\n\nLa unidad se encuentra en estado de DETENCIÓN (Parada/Incidente).\n\nDebe registrar el FIN DE PARADA en la pestaña 'Paradas' antes de reportar una nueva ubicación de ruta.");
+            showAlert("Acción Requerida", "La unidad se encuentra en estado de DETENCIÓN (Parada/Incidente). Debe registrar el FIN DE PARADA en la pestaña 'Paradas' antes de reportar una nueva ubicación de ruta.", "warning");
             setActiveTab('PARADAS');
             return;
         }
 
         const nLat = parseFloat(reportForm.lat);
         const nLng = parseFloat(reportForm.lng);
-        if (isNaN(nLat) || isNaN(nLng)) { alert("Coordenadas inválidas"); return; }
+        if (isNaN(nLat) || isNaN(nLng)) { showAlert("Error", "Coordenadas inválidas", "danger"); return; }
 
         const reportDateTime = new Date(reportForm.reportDateTime);
         const now = new Date();
@@ -943,20 +961,21 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const lastUpdateDate = new Date(u.lastUpdate);
 
         // DATE VALIDATION FOR CONTROLS
-        if (reportDateTime > now) { alert("ERROR: La fecha del control no puede ser futura."); return; }
+        if (reportDateTime > now) { showAlert("Error de Validación", "La fecha del control no puede ser futura.", "danger"); return; }
 
         if (u.controles.length === 0) {
             // First control: Cannot be before departure
-            if (reportDateTime < departureDate) { alert("ERROR: La fecha del control no puede ser anterior a la salida de planta."); return; }
+            if (reportDateTime < departureDate) { showAlert("Error de Validación", "La fecha del control no puede ser anterior a la salida de planta.", "danger"); return; }
         } else {
             // Subsequent controls: Cannot be before last update
             // We use lastUpdate because it tracks the timestamp of the latest event
             if (reportDateTime < lastUpdateDate && editingControlIndex === null) {
-                alert("ERROR: La fecha del nuevo control no puede ser anterior al último reporte registrado (Secuencialidad).");
+                showAlert("Error de Secuencialidad", "La fecha del nuevo control no puede ser anterior al último reporte registrado.", "danger");
                 return;
             }
         }
 
+        setIsSavingControl(true);
         const newPoint: LatLng = { lat: nLat, lng: nLng };
         const formattedTime = reportDateTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 
@@ -974,17 +993,30 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 coords: newPoint
             });
         }
-        const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
-        const newPath = await fetchRoadRoute(pointsForRouting);
+
+        // --- OPTIMIZED ROUTING: Segment Routing ---
+        let newPath = u.path || [];
+        if (editingControlIndex !== null) {
+            // If editing an existing control, we re-route everything for safety
+            const pointsForRouting = [GLOBAL_ORIGIN, ...newControles.filter(c => c.coords).map(c => c.coords as LatLng)];
+            newPath = await fetchRoadRoute(pointsForRouting);
+        } else {
+            // Sequential addition: Only route from last path point to new control
+            const lastPathPoint = (u.path && u.path.length > 0) ? u.path[u.path.length - 1] : GLOBAL_ORIGIN;
+            const segment = await fetchRoadRoute([lastPathPoint, newPoint]);
+            // Avoid duplicates and append
+            newPath = [...(u.path || []), ...segment.slice(1)];
+        }
 
         await updateUnit(u.id, {
-            ...u,
             controles: newControles,
             ubicacionActual: reportForm.location.toUpperCase(),
             lastLocation: reportForm.location.toUpperCase(),
             lastUpdate: reportDateTime.toISOString(),
             path: newPath
         });
+
+        setIsSavingControl(false);
 
         resetReportForm();
         setEditingControlIndex(null);
@@ -1011,21 +1043,15 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const now = new Date();
 
         // VALIDATION FOR STOP START
-        if (startTime < departureTime) { alert("ERROR: El inicio de la parada no puede ser anterior a la salida de planta."); return; }
-        if (startTime > now) { alert("ERROR: El inicio de la parada no puede ser una fecha futura."); return; }
+        if (startTime < departureTime) { showAlert("Error de Validación", "El inicio de la parada no puede ser anterior a la salida de planta.", "danger"); return; }
+        if (startTime > now) { showAlert("Error de Validación", "El inicio de la parada no puede ser una fecha futura.", "danger"); return; }
 
         // VALIDATION FOR STOP END (IF NOT ONGOING)
         if (!isStopOngoing) {
             const endTime = new Date(newStopForm.end);
-            if (endTime < startTime) { alert("ERROR: La hora de fin debe ser mayor a la hora de inicio."); return; }
-            if (endTime > now) { alert("ERROR: La hora de fin no puede ser futura."); return; }
+            if (endTime < startTime) { showAlert("Error de Validación", "La hora de fin debe ser mayor a la hora de inicio.", "danger"); return; }
+            if (endTime > now) { showAlert("Error de Validación", "La hora de fin no puede ser futura.", "danger"); return; }
         }
-
-        const formatTime = (iso: string) => {
-            if (!iso) return '';
-            const d = new Date(iso);
-            return `${d.getDate()}/${d.getMonth() + 1} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
-        };
 
         const nLat = newStopForm.lat ? parseFloat(newStopForm.lat) : undefined;
         const nLng = newStopForm.lng ? parseFloat(newStopForm.lng) : undefined;
@@ -1035,8 +1061,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
         const newStop: StopPoint = {
             location: newStopForm.location.toUpperCase(),
-            start: formatTime(newStopForm.start),
-            end: isStopOngoing ? '' : formatTime(newStopForm.end),
+            start: newStopForm.start, // Store original ISO string
+            end: isStopOngoing ? '' : newStopForm.end, // Store original ISO string
             time: isStopOngoing ? 'En Curso' : calculateDuration(newStopForm.start, newStopForm.end),
             cause: type === 'NOPROG' ? newStopForm.cause?.toUpperCase() : undefined,
             coords: coords
@@ -1079,34 +1105,21 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         if (!u) return;
 
         // VALIDATION FOR FINISHING STOP
-        if (endDateObj > now) { alert("ERROR: La fecha de fin no puede ser futura."); return; }
-
-        // Re-format end date for display
-        const formatTimeDisplay = (d: Date) => `${d.getDate()}/${d.getMonth() + 1} ${d.getHours().toString().padStart(2, '0')}:${d.getMinutes().toString().padStart(2, '0')}`;
+        if (endDateObj > now) { showAlert("Error de Validación", "La fecha de fin no puede ser futura.", "danger"); return; }
 
         const currentList = type === 'PROG' ? [...u.paradasProg] : [...u.paradasNoProg];
-        let durationStr = 'Finalizado';
-        try {
-            const [datePart, timePart] = currentList[index].start.split(' ');
-            const [day, month] = datePart.split('/').map(Number);
-            const [hour, min] = timePart.split(':').map(Number);
-            const startObj = new Date(new Date().getFullYear(), month - 1, day, hour, min);
+        const currentStop = currentList[index];
+        const startObj = new Date(currentStop.start);
 
-            if (endDateObj < startObj) {
-                alert("ADVERTENCIA: La fecha de fin parece ser anterior al inicio. Verifique.");
-            }
-
-            let diff = (endDateObj.getTime() - startObj.getTime()) / 60000;
-            if (diff > 0) {
-                const h = Math.floor(diff / 60);
-                const m = Math.floor(diff % 60);
-                durationStr = `${h}h ${m}m`;
-            }
-        } catch (e) { }
+        if (endDateObj < startObj) {
+            showAlert("Error de Validación", "La fecha de fin no puede ser anterior al inicio de la parada.", "danger");
+            return;
+        }
+        let durationStr = calculateDuration(currentStop.start, endDate);
 
         currentList[index] = {
-            ...currentList[index],
-            end: formatTimeDisplay(endDateObj),
+            ...currentStop,
+            end: endDate, // Store as ISO string
             time: durationStr
         };
 
@@ -1154,27 +1167,36 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     };
 
     return (
-        <div className="flex flex-col h-[calc(100vh-140px)] gap-4 animate-in fade-in duration-200">
+        <div className="flex flex-col h-[calc(100vh-110px)] gap-2 animate-in fade-in duration-200">
 
-            {/* HEADER */}
+            {/* HEADER COMPACTO - TRANSPARENTE */}
             <div className="flex justify-between items-center px-4 py-3 shrink-0">
-                <div className="px-1 flex items-center gap-4">
-                    <div className="h-14 w-14 bg-white border border-slate-200 rounded-xl flex items-center justify-center text-gray-400 shrink-0">
-                        <Monitor size={30} className="stroke-bold" />
+                <div className="flex items-center gap-4">
+                    <div className="h-12 w-12 bg-white text-slate-900 border border-slate-200 rounded-xl flex items-center justify-center shrink-0 shadow-sm">
+                        <Monitor size={24} className="stroke-bold" />
                     </div>
                     <div>
-                        <h1 className="text-2xl font-bold tracking-tight text-gray-900">Terminal de Monitoreo SOC</h1>
-                        <p className="text-sm text-gray-500 mt-1">Seguimiento de Flota en Ruta</p>
+                        <h1 className="text-2xl font-bold text-gray-900 leading-tight">Terminal de Monitoreo</h1>
+                        <p className="text-sm text-gray-500 font-medium">Seguimiento de Flota en Ruta</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
-                    <button onClick={handleExportReport} disabled={isExporting} className="bg-indigo-600 text-white px-4 py-2.5 rounded-lg flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-indigo-700 transition-all disabled:opacity-50 disabled:cursor-not-allowed">
-                        {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                        {isExporting ? 'Generando...' : 'Reporte Ruta'}
-                    </button>
-                    <button onClick={() => { setIsEditMode(false); setForm({ ...form, plateRemolque: '' }); setIsAddModalOpen(true); }} className="bg-[#ff0000] text-white px-5 py-2.5 rounded-lg flex items-center gap-2 font-black text-[10px] uppercase tracking-widest hover:bg-red-700 transition-all">
-                        <Plus size={16} /> Nueva Apertura
-                    </button>
+                <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
+                        <button onClick={() => setStatusFilter('TRANSIT')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>En Ruta</button>
+                        <button onClick={() => setStatusFilter('ALL')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'ALL' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Todos</button>
+                        <button onClick={() => setStatusFilter('ARRIVED')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'ARRIVED' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Llegados</button>
+                        <button onClick={() => setStatusFilter('CANCELLED')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'CANCELLED' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cancelados</button>
+                    </div>
+                    <div className="h-8 w-[1px] bg-slate-200" />
+                    <div className="flex gap-2">
+                        <button onClick={handleExportReport} disabled={isExporting} className="bg-white border border-gray-300 text-gray-700 px-4 py-2 rounded-lg flex items-center gap-2 font-medium text-sm hover:bg-gray-50 transition-all disabled:opacity-50 shadow-sm">
+                            {isExporting ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                            {isExporting ? 'Generando...' : 'Reporte'}
+                        </button>
+                        <button onClick={() => { setIsEditMode(false); setForm({ ...form, plateRemolque: '' }); setIsAddModalOpen(true); }} className="bg-blue-600 text-white px-5 py-2 rounded-lg flex items-center gap-2 font-medium text-sm hover:bg-blue-700 transition-all shadow-sm">
+                            <Plus size={16} /> Nueva Apertura
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1182,33 +1204,24 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             <div className="flex flex-1 min-h-0 gap-4 overflow-hidden">
 
                 {/* LISTA TARJETAS (HORIZONTAL) */}
-                <div className="w-[65%] flex flex-col gap-3">
-                    <div className="bg-white p-2 rounded-xl border border-slate-300 flex flex-col md:flex-row items-center justify-between gap-4">
-                        <div className="flex bg-slate-100 p-1 rounded-lg overflow-x-auto custom-scrollbar border border-slate-200">
-                            <button onClick={() => setStatusFilter('TRANSIT')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>En Ruta</button>
-                            <button onClick={() => setStatusFilter('ALL')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'ALL' ? 'bg-white text-slate-900 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Todos</button>
-                            <button onClick={() => setStatusFilter('ARRIVED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'ARRIVED' ? 'bg-white text-emerald-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Llegados</button>
-                            <button onClick={() => setStatusFilter('CANCELLED')} className={`whitespace-nowrap px-4 py-1.5 rounded-md text-[10px] font-black uppercase outline-none transition-colors ${statusFilter === 'CANCELLED' ? 'bg-white text-rose-600 border border-slate-200' : 'text-slate-500 hover:text-slate-700 border border-transparent'}`}>Cancelados</button>
+                <div className="w-[60%] flex flex-col gap-2">
+                    <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center gap-3 shrink-0">
+                        <div className="flex-1 relative">
+                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
+                            <input type="text" placeholder="Buscar placa, conductor, booking..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-1.5 bg-slate-50 border border-slate-100 rounded-lg text-[11px] font-bold outline-none focus:bg-white focus:border-slate-300 transition-all" />
                         </div>
 
                         {(statusFilter === 'ALL' || statusFilter === 'ARRIVED' || statusFilter === 'CANCELLED') && (
-                            <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 p-1 rounded-lg">
-                                <div className="flex items-center gap-1 px-2 text-slate-400">
-                                    <CalendarRange size={14} />
-                                </div>
-                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-600 outline-none w-24" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
+                            <div className="flex items-center gap-1 bg-slate-50 border border-slate-100 p-0.5 rounded-lg px-2">
+                                <CalendarRange size={12} className="text-slate-400" />
+                                <input type="date" className="bg-transparent text-[9px] font-bold text-slate-600 outline-none w-24" value={dateRange.start} onChange={e => setDateRange({ ...dateRange, start: e.target.value })} />
                                 <span className="text-slate-300">-</span>
-                                <input type="date" className="bg-transparent text-[10px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
+                                <input type="date" className="bg-transparent text-[9px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
                             </div>
                         )}
-
-                        <div className="flex-1 relative w-full md:w-auto">
-                            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
-                            <input type="text" placeholder="Buscar placa, conductor, booking..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-9 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-xs font-bold outline-none focus:bg-white focus:border-slate-400 transition-all" />
-                        </div>
                     </div>
 
-                    <div className="bg-slate-100/50 rounded-xl overflow-y-auto custom-scrollbar p-2 space-y-3 flex-1 border border-slate-200">
+                    <div className="bg-white rounded-xl overflow-y-auto custom-scrollbar p-2 space-y-2 flex-1 border border-slate-200">
                         {(filteredUnits || []).map(unit => {
                             const needsAlert = checkMonitoringAlert(unit.lastUpdate);
                             const isArrived = unit.status === UnitStatus.DELIVERED;
@@ -1217,8 +1230,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             const isStopped = unit.status === 'EN PARADA' || unit.status === 'INCIDENTE';
 
                             const cardClasses = `
-                        bg-white rounded-lg p-4 cursor-pointer transition-all duration-200 relative group overflow-hidden flex flex-col justify-between
-                        ${isSelected ? 'border-l-[6px] border-l-[#1a73e8] border border-slate-300 z-10' : 'border border-slate-300 border-l-[6px] border-l-transparent hover:border-slate-400'}
+                        bg-white rounded-lg p-3 cursor-pointer transition-all duration-200 relative group overflow-hidden flex flex-col justify-between
+                        ${isSelected ? 'border-l-[6px] border-l-[#1a73e8] border border-slate-300 z-10 shadow-md ring-1 ring-[#1a73e8]/20' : 'border border-slate-200 border-l-[6px] border-l-transparent hover:border-slate-300 hover:shadow-sm'}
                     `;
 
                             return (
@@ -1320,9 +1333,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     </div>
                 </div>
 
-                <div className="w-[35%] bg-white rounded-xl border border-slate-300 overflow-hidden relative min-h-0">
+                <div className="w-[40%] bg-white rounded-xl border border-slate-300 overflow-hidden relative min-h-0 shadow-inner">
                     <div ref={mapContainerRef} className="w-full h-full z-0" />
-                    <div className="absolute top-4 left-4 z-[1] bg-white/95 px-3 py-2 rounded-lg border border-slate-300 pointer-events-none">
+                    <div className="absolute top-4 left-4 z-[1] bg-white/95 px-3 py-2 rounded-lg border border-slate-200 pointer-events-none">
                         <div className="flex items-center gap-2">
                             <div className="w-2 h-2 bg-[#ff0000] rounded-full animate-pulse" />
                             <span className="text-[8px] font-medium uppercase text-slate-900">Mapa Monitoreo</span>
@@ -1500,7 +1513,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                         <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Longitud</label><input required onPaste={handleCoordPaste} placeholder="-79.0..." className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none focus:border-[#ff0000]" value={reportForm.lng} onChange={e => setReportForm({ ...reportForm, lng: e.target.value })} /></div>
                                                     </div>
                                                     <div className="space-y-1"><label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Ubicación Actual</label><input required placeholder="CIUDAD / KM / PEAJE" className="w-full p-3 bg-white/5 border border-white/10 rounded-lg text-xs font-bold outline-none uppercase focus:border-[#ff0000]" value={reportForm.location} onChange={e => setReportForm({ ...reportForm, location: e.target.value })} /></div>
-                                                    <button type="submit" className="w-full py-3 bg-[#ff0000] hover:bg-red-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all">{editingControlIndex !== null ? 'Actualizar' : 'Reportar Ubicación'}</button>
+                                                    <button type="submit" disabled={isSavingControl} className="w-full py-3 bg-[#ff0000] hover:bg-red-700 text-white rounded-lg text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+                                                        {isSavingControl ? <Loader2 size={16} className="animate-spin" /> : null}
+                                                        {editingControlIndex !== null ? 'Actualizar' : 'Reportar Ubicación'}
+                                                    </button>
                                                 </form>
                                             )}
                                         </div>
@@ -1568,7 +1584,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 <div className="w-8 h-8 rounded-full bg-emerald-50 flex items-center justify-center text-emerald-600 font-black text-xs border border-emerald-100">{idx + 1}</div>
                                                                 <div>
                                                                     <p className="text-xs font-black text-slate-800 uppercase">{stop.location} {!stop.end && <span className="text-[9px] bg-emerald-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
-                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{stop.start} - {stop.end || 'EN CURSO'}</p>
+                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
@@ -1621,7 +1637,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 <div className="w-8 h-8 rounded-full bg-amber-50 flex items-center justify-center text-amber-600 font-black text-xs border border-amber-100">!</div>
                                                                 <div>
                                                                     <p className="text-xs font-black text-slate-800 uppercase">{stop.location} <span className="text-amber-600">({stop.cause})</span> {!stop.end && <span className="text-[9px] bg-amber-600 text-white px-2 py-0.5 rounded-full ml-2 animate-pulse">ACTIVA</span>}</p>
-                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{stop.start} - {stop.end || 'EN CURSO'}</p>
+                                                                    <p className="text-[10px] text-slate-500 font-bold uppercase">{formatDate(stop.start)} - {stop.end ? formatDate(stop.end) : 'EN CURSO'}</p>
                                                                     {stop.coords && <p className="text-[8px] font-mono text-slate-400">{stop.coords.lat}, {stop.coords.lng}</p>}
                                                                 </div>
                                                             </div>
@@ -1929,6 +1945,25 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
             <style>{`.custom-scrollbar::-webkit-scrollbar { width: 4px; height: 4px; } .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 4px; } .leaflet-container { font-family: 'Inter', sans-serif; background: #f8fafc !important; } .custom-leaflet-tooltip { background: transparent; border: none; box-shadow: none; padding: 0; }`}</style>
             <Toast toast={toast} onClose={() => setToast(null)} />
+
+            <ConfirmationModal
+                open={alertConfig.open}
+                onClose={() => setAlertConfig({ ...alertConfig, open: false })}
+                onConfirm={() => setAlertConfig({ ...alertConfig, open: false })}
+                title={alertConfig.title}
+                variant={alertConfig.variant}
+                confirmText="Entendido"
+                cancelText=""
+            >
+                <div className="flex flex-col items-center gap-4 py-2">
+                    <div className={`w-16 h-16 rounded-full flex items-center justify-center ${alertConfig.variant === 'danger' ? 'bg-red-50 text-red-500' : alertConfig.variant === 'warning' ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500'}`}>
+                        {alertConfig.variant === 'danger' ? <X size={32} /> : alertConfig.variant === 'warning' ? <AlertTriangle size={32} /> : <CheckCircle2 size={32} />}
+                    </div>
+                    <p className="text-sm font-bold text-slate-600 text-center leading-relaxed">
+                        {alertConfig.message}
+                    </p>
+                </div>
+            </ConfirmationModal>
         </div>
     );
 };

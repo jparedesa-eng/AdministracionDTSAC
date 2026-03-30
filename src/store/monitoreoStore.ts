@@ -153,72 +153,68 @@ export async function fetchUnits(force = false): Promise<void> {
 
         if (error) throw error;
 
-        // Map Supabase rows (snake_case) to TransportUnit (camelCase)
-        state.units = (data || []).map((row: any) => ({
+        // Map Supabase rows (snake_case) to TransportUnit (camelCase)        state.units = (data || []).map((row: any) => ({
             id: row.id.toString(),
-            unitName: row.unit_name,
-            proceso: row.proceso,
-            fechaIngresoPlanta: row.fecha_ingreso_planta,
-            fechaSalidaPlanta: row.fecha_salida_planta,
-            tipoEnvio: row.tipo_envio,
-            operadorLogistico: row.operador_logistico,
-            booking: row.booking,
-            conductor: row.conductor,
-            plateRemolque: row.plate_remolque,
-            plateSemiRemolque: row.plate_semi_remolque,
-            transportistaEstandar: row.transportista, // Mapping to same if missing
-            transportista: row.transportista,
-            telefono: row.telefono,
-            ubicacionActual: row.ubicacion_actual,
-            fechaEstimadaLlegada: row.fecha_estimada_llegada,
+            unitName: row.unit_name || '',
+            proceso: row.proceso || '',
+            fechaIngresoPlanta: row.fecha_ingreso_planta || '',
+            fechaSalidaPlanta: row.fecha_salida_planta || '',
+            tipoEnvio: row.tipo_envio || '',
+            operadorLogistico: row.operador_logistico || '',
+            booking: row.booking || '',
+            conductor: row.conductor || '',
+            plateRemolque: row.plate_remolque || '',
+            plateSemiRemolque: row.plate_semi_remolque || '',
+            transportistaEstandar: row.transportista || '', // Mapping to same if missing
+            transportista: row.transportista || '',
+            telefono: row.telefono || '',
+            ubicacionActual: row.ubicacion_actual || '',
+            fechaEstimadaLlegada: row.fecha_estimada_llegada || '',
             status: row.status as UnitStatusType,
 
             // JSON fields - ensure they are arrays
             // Note: DB uses 'path_points', app uses 'path'
-            // DB might be missing 'controles', 'paradas_prog', 'paradas_no_prog' in provided SQL
-            // We map what we expect, defaulting to empty array if column missing
             controles: Array.isArray(row.controles) ? row.controles : [],
             paradasProg: Array.isArray(row.paradas_prog) ? row.paradas_prog : [],
             paradasNoProg: Array.isArray(row.paradas_no_prog) ? row.paradas_no_prog : [],
             path: Array.isArray(row.path_points) ? row.path_points : [],
 
-            almacenDestino1: row.almacen_destino1,
-            fechaLlegadaDestino1: row.fecha_llegada_destino1,
-            tiempoTotal1: row.tiempo_total1, // Assuming column matches or needs addition
-            tiempoNeto1: row.tiempo_neto1,   // Assuming column matches or needs addition
-            almacenDestino2: row.almacen_destino2,
-            fechaLlegadaDestino2: row.fecha_llegada_destino2,
-            tiempoTotal2: row.tiempo_total2, // Assuming column matches
-            tiempoNeto2: row.tiempo_neto2, // New
+            almacenDestino1: row.almacen_destino1 || '',
+            fechaLlegadaDestino1: row.fecha_llegada_destino1 || '',
+            tiempoTotal1: row.tiempo_total1 || '',
+            tiempoNeto1: row.tiempo_neto1 || '',
+            almacenDestino2: row.almacen_destino2 || '',
+            fechaLlegadaDestino2: row.fecha_llegada_destino2 || '',
+            tiempoTotal2: row.tiempo_total2 || '',
+            tiempoNeto2: row.tiempo_neto2 || '',
 
+            fechaSalidaDestino1: row.fecha_salida_destino1 || '',
+            fechaSalidaDestino2: row.fecha_salida_destino2 || '',
 
-            fechaSalidaDestino1: row.fecha_salida_destino1,
-            fechaSalidaDestino2: row.fecha_salida_destino2,
+            origin: row.origin || '',
+            destination: row.destination || '',
+            calificacionTNeto: row.calificacion_t_neto || '',
+            calificacionTTotal: row.calificacion_t_total || '',
+            incidente: row.incidente || '',
+            detalleIncidente: row.detalle_incidente || '',
+            rutaName: row.ruta_name || '',
+            tiempoTransitoMin: row.tiempo_transito_min || '',
+            tiempoTransitoMax: row.tiempo_transito_max || '',
 
-            origin: row.origin,
-            destination: row.destination,
-            calificacionTNeto: row.calificacion_t_neto,
-            calificacionTTotal: row.calificacion_t_total,
-            incidente: row.incidente,
-            detalleIncidente: row.detalle_incidente,
-            rutaName: row.ruta_name,
-            tiempoTransitoMin: row.tiempo_transito_min,
-            tiempoTransitoMax: row.tiempo_transito_max,
-
-            año: new Date(row.created_at).getFullYear(), // Fallback if distinct column
+            año: row.created_at ? new Date(row.created_at).getFullYear() : new Date().getFullYear(),
             mes: row.mes || '',
             fecha: row.fecha || '',
-            tipoViaje: row.tipo_viaje,
-            unidadEstandar: row.unidad_estandar,
-            area: row.area,
+            tipoViaje: row.tipo_viaje || '',
+            unidadEstandar: row.unidad_estandar || '',
+            area: row.area || '',
 
-            lastLocation: row.last_location,
-            lastUpdate: row.last_update,
-            maxTravelHours: row.max_travel_hours,
+            lastLocation: row.last_location || '',
+            lastUpdate: row.last_update || '',
+            maxTravelHours: row.max_travel_hours || 0,
 
-            solicitudId: row.solicitud_id,
-
+            solicitudId: row.solicitud_id || '',
         }));
+
 
         state.lastFetch = Date.now();
     } catch (err: any) {
@@ -281,11 +277,22 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
             .select()
             .single();
 
-        if (error) throw error;
+        if (error) {
+            // Revert optimistic update if necessary (for simplicity we just clear loading for now)
+            state.loading = false;
+            notify();
+            throw error;
+        }
 
-        await fetchUnits(true); // Refresh local state
+        // Finalize state with the DB record
+        const realUnit = { ...unit, id: data.id.toString() } as TransportUnit;
+        state.units = state.units.map(u => u.id === 'PREVIEW' ? realUnit : u);
+        state.loading = false;
+        notify();
+
         return data.id.toString();
     } catch (err: any) {
+        state.units = state.units.filter(u => u.id !== 'PREVIEW');
         state.error = err.message;
         state.loading = false;
         notify();
@@ -297,6 +304,7 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
     try {
         // Map updates to snake_case
         const mappedUpdates: any = {};
+        // Mapping logic... (omitted for brevity in thinking, will use full content)
         if (updates.proceso !== undefined) mappedUpdates.proceso = updates.proceso;
         if (updates.status !== undefined) mappedUpdates.status = updates.status;
         if (updates.ubicacionActual !== undefined) mappedUpdates.ubicacion_actual = updates.ubicacionActual;
@@ -321,7 +329,6 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
         if (updates.calificacionTNeto !== undefined) mappedUpdates.calificacion_t_neto = updates.calificacionTNeto;
         if (updates.fechaEstimadaLlegada !== undefined) mappedUpdates.fecha_estimada_llegada = updates.fechaEstimadaLlegada;
 
-        // Missing fields added:
         if (updates.unitName !== undefined) mappedUpdates.unit_name = updates.unitName;
         if (updates.fechaIngresoPlanta !== undefined) mappedUpdates.fecha_ingreso_planta = updates.fechaIngresoPlanta;
         if (updates.fechaSalidaPlanta !== undefined) mappedUpdates.fecha_salida_planta = updates.fechaSalidaPlanta;
@@ -339,18 +346,23 @@ export async function updateUnit(id: string, updates: Partial<TransportUnit>): P
         if (updates.almacenDestino1 !== undefined) mappedUpdates.almacen_destino1 = updates.almacenDestino1;
         if (updates.almacenDestino2 !== undefined) mappedUpdates.almacen_destino2 = updates.almacenDestino2;
 
-        // Pass through any other fields if necessary, but manual mapping is safer for snake_case conversion
+        // TRUE OPTIMISTIC: Update local state BEFORE Supabase call
+        const originalUnits = [...state.units];
+        state.units = state.units.map(u => u.id === id ? { ...u, ...updates } : u);
+        notify();
 
         const { error } = await supabase
             .from(TABLE_NAME)
             .update(mappedUpdates)
             .eq('id', id);
 
-        if (error) throw error;
-
-        // Optimistic update or refresh
-        // For simplicity and correctness with large objects, we refresh
-        await fetchUnits(true);
+        if (error) {
+            // REVERT if failed
+            state.units = originalUnits;
+            state.error = error.message;
+            notify();
+            throw error;
+        }
     } catch (err: any) {
         console.error("MonitoreoStore Update Error:", err);
         throw err;
