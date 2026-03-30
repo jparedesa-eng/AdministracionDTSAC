@@ -93,6 +93,7 @@ export interface TransportUnit {
 
     path: LatLng[];
     solicitudId?: string;
+    usuarioCreacionId?: string;
 }
 
 
@@ -157,38 +158,20 @@ export async function fetchUnits(force = false): Promise<void> {
 
         if (error) throw error;
 
-        // Map Supabase rows (snake_case) to TransportUnit (camelCase)        state.units = (data || []).map((row: any) => ({
-            id: row.id.toString(),
-            unitName: row.unit_name || '',
-            proceso: row.proceso || '',
-            fechaIngresoPlanta: row.fecha_ingreso_planta || '',
-            fechaSalidaPlanta: row.fecha_salida_planta || '',
-            tipoEnvio: row.tipo_envio || '',
-            operadorLogistico: row.operador_logistico || '',
-            booking: row.booking || '',
-            conductor: row.conductor || '',
-            plateRemolque: row.plate_remolque || '',
-            plateSemiRemolque: row.plate_semi_remolque || '',
-            transportistaEstandar: row.transportista || '', // Mapping to same if missing
-            transportista: row.transportista || '',
-            telefono: row.telefono || '',
-            ubicacionActual: row.ubicacion_actual || '',
-            fechaEstimadaLlegada: row.fecha_estimada_llegada || '',
-            status: row.status as UnitStatusType,
-
-            // --- RELATIONAL DATA MAPPING ---
-            // Filter joined rows into specialized arrays
-            controles: (row[CONTROLES_TABLE] || [])
+        // Map Supabase rows (snake_case) to TransportUnit (camelCase)        state.units = (data || []).map((row: any) => {
+            // Mapping the relational controls and stops
+            const rawEvents = (row[CONTROLES_TABLE] || []);
+            const controles = rawEvents
                 .filter((e: any) => e.tipo === 'CONTROL')
                 .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
                 .map((e: any) => ({
-                    id: e.id, // Keep DB ID for edits
+                    id: e.id,
                     time: e.timestamp_inicio,
                     location: e.ubicacion,
                     coords: { lat: e.lat, lng: e.lng }
-                })),
-            
-            paradasProg: (row[CONTROLES_TABLE] || [])
+                }));
+
+            const paradasProg = rawEvents
                 .filter((e: any) => e.tipo === 'PARADA_PROG')
                 .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
                 .map((e: any) => ({
@@ -198,9 +181,9 @@ export async function fetchUnits(force = false): Promise<void> {
                     end: e.timestamp_fin || '',
                     time: e.duracion || '',
                     coords: { lat: e.lat, lng: e.lng }
-                })),
+                }));
 
-            paradasNoProg: (row[CONTROLES_TABLE] || [])
+            const paradasNoProg = rawEvents
                 .filter((e: any) => e.tipo === 'PARADA_NOPROG')
                 .sort((a: any, b: any) => new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime())
                 .map((e: any) => ({
@@ -211,46 +194,73 @@ export async function fetchUnits(force = false): Promise<void> {
                     time: e.duracion || '',
                     cause: e.causa,
                     coords: { lat: e.lat, lng: e.lng }
-                })),
+                }));
 
-            // Note: DB uses 'path_points', app uses 'path' (Still JSONB for efficiency)
-            path: Array.isArray(row.path_points) ? row.path_points : [],
+            // --- DYNAMICALLY DERIVED PROPERTIES ---
+            // We get the LAST event overall (control or stop) to define current state
+            const allEvents = [...rawEvents].sort((a: any, b: any) => 
+                new Date(a.timestamp_inicio).getTime() - new Date(b.timestamp_inicio).getTime()
+            );
+            const lastEvent = allEvents[allEvents.length - 1];
 
-            almacenDestino1: row.almacen_destino1 || '',
-            fechaLlegadaDestino1: row.fecha_llegada_destino1 || '',
-            tiempoTotal1: row.tiempo_total1 || '',
-            tiempoNeto1: row.tiempo_neto1 || '',
-            almacenDestino2: row.almacen_destino2 || '',
-            fechaLlegadaDestino2: row.fecha_llegada_destino2 || '',
-            tiempoTotal2: row.tiempo_total2 || '',
-            tiempoNeto2: row.tiempo_neto2 || '',
+            return {
+                id: row.id.toString(),
+                unitName: row.unit_name || '',
+                proceso: row.proceso || '',
+                fechaIngresoPlanta: row.fecha_ingreso_planta || '',
+                fechaSalidaPlanta: row.fecha_salida_planta || '',
+                tipoEnvio: row.tipo_envio || '',
+                operadorLogistico: row.operador_logistico || '',
+                booking: row.booking || '',
+                conductor: row.conductor || '',
+                plateRemolque: row.plate_remolque || '',
+                plateSemiRemolque: row.plate_semi_remolque || '',
+                transportista: row.transportista || '',
+                transportistaEstandar: row.transportista || '',
+                telefono: row.telefono || '',
+                status: row.status as UnitStatusType,
 
-            fechaSalidaDestino1: row.fecha_salida_destino1 || '',
-            fechaSalidaDestino2: row.fecha_salida_destino2 || '',
+                controles,
+                paradasProg,
+                paradasNoProg,
 
-            origin: row.origin || '',
-            destination: row.destination || '',
-            calificacionTNeto: row.calificacion_t_neto || '',
-            calificacionTTotal: row.calificacion_t_total || '',
-            incidente: row.incidente || '',
-            detalleIncidente: row.detalle_incidente || '',
-            rutaName: row.ruta_name || '',
-            tiempoTransitoMin: row.tiempo_transito_min || '',
-            tiempoTransitoMax: row.tiempo_transito_max || '',
+                // DYNAMIC SOURCES: sourced from controls table if available
+                ubicacionActual: lastEvent ? lastEvent.ubicacion : (row.ubicacion_actual || row.origin || 'PLANTA'),
+                lastLocation: lastEvent ? lastEvent.ubicacion : (row.last_location || row.origin || 'PLANTA'),
+                lastUpdate: lastEvent ? lastEvent.timestamp_inicio : (row.last_update || row.fecha_salida_planta || ''),
 
-            año: row.created_at ? new Date(row.created_at).getFullYear() : new Date().getFullYear(),
-            mes: row.mes || '',
-            fecha: row.fecha || '',
-            tipoViaje: row.tipo_viaje || '',
-            unidadEstandar: row.unidad_estandar || '',
-            area: row.area || '',
-
-            lastLocation: row.last_location || '',
-            lastUpdate: row.last_update || '',
-            maxTravelHours: row.max_travel_hours || 0,
-
-            solicitudId: row.solicitud_id || '',
-        }));
+                path: Array.isArray(row.path_points) ? row.path_points : [],
+                almacenDestino1: row.almacen_destino1 || '',
+                fechaLlegadaDestino1: row.fecha_llegada_destino1 || '',
+                tiempoTotal1: row.tiempo_total1 || '',
+                tiempoNeto1: row.tiempo_neto1 || '',
+                almacenDestino2: row.almacen_destino2 || '',
+                fechaLlegadaDestino2: row.fecha_llegada_destino2 || '',
+                tiempoTotal2: row.tiempo_total2 || '',
+                tiempoNeto2: row.tiempo_neto2 || '',
+                fechaSalidaDestino1: row.fecha_salida_destino1 || '',
+                fechaSalidaDestino2: row.fecha_salida_destino2 || '',
+                origin: row.origin || '',
+                destination: row.destination || '',
+                calificacionTNeto: row.calificacion_t_neto || '',
+                calificacionTTotal: row.calificacion_t_total || '',
+                incidente: row.incidente || '',
+                detalleIncidente: row.detalle_incidente || '',
+                rutaName: row.ruta_name || '',
+                tiempoTransitoMin: row.tiempo_transito_min || '',
+                tiempoTransitoMax: row.tiempo_transito_max || '',
+                año: row.created_at ? new Date(row.created_at).getFullYear() : new Date().getFullYear(),
+                mes: row.mes || '',
+                fecha: row.fecha || '',
+                tipoViaje: row.tipo_viaje || '',
+                unidadEstandar: row.unidad_estandar || '',
+                area: row.area || '',
+                maxTravelHours: row.max_travel_hours || 0,
+                solicitudId: row.solicitud_id || '',
+                usuarioCreacionId: row.usuario_creacion_id || '',
+                fechaEstimadaLlegada: row.fecha_estimada_llegada || '',
+            };
+        });
 
 
         state.lastFetch = Date.now();
@@ -302,7 +312,8 @@ export async function createUnit(unit: Omit<TransportUnit, 'id'>): Promise<strin
 
             // Add other fields as they become relevant or defined in the UI
             tiempo_transito_min: unit.tiempoTransitoMin,
-            tiempo_transito_max: unit.tiempoTransitoMax
+            tiempo_transito_max: unit.tiempoTransitoMax,
+            usuario_creacion_id: unit.usuarioCreacionId
         };
 
         const { data, error } = await supabase
@@ -412,9 +423,9 @@ export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PRO
         unidad_id: unitId,
         tipo,
         ubicacion: data.location || data.ubicacion,
-        timestamp_inicio: data.time || data.start,
-        timestamp_fin: data.end || null,
-        duracion: data.time && tipo !== 'CONTROL' ? data.time : null,
+        timestamp_inicio: data.startTime || data.time || data.start,
+        timestamp_fin: data.endTime || data.end || null,
+        duracion: tipo !== 'CONTROL' ? (data.duration || data.time || null) : null,
         causa: data.cause || null,
         lat: data.coords?.lat,
         lng: data.coords?.lng
@@ -434,8 +445,12 @@ export async function addEventToDB(unitId: string, tipo: 'CONTROL' | 'PARADA_PRO
  */
 export async function updateEventInDB(eventId: string, updates: any) {
     const mapped: any = {};
-    if (updates.end !== undefined) mapped.timestamp_fin = updates.end;
-    if (updates.time !== undefined) mapped.duracion = updates.time;
+    if (updates.endTime !== undefined || updates.end !== undefined) {
+        mapped.timestamp_fin = updates.endTime || updates.end;
+    }
+    if (updates.duration !== undefined || updates.time !== undefined) {
+        mapped.duracion = updates.duration || updates.time;
+    }
     if (updates.location !== undefined) mapped.ubicacion = updates.location;
     if (updates.coords !== undefined) {
         mapped.lat = updates.coords.lat;

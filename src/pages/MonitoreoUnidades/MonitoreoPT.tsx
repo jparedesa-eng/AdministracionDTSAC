@@ -9,6 +9,7 @@ import type { LogisticOperator, TransportProvider, TransportUnitCatalog, Transpo
 import { Toast } from '../../components/ui/Toast';
 import type { ToastState } from '../../components/ui/Toast';
 import { ConfirmationModal } from '../../components/ui/ConfirmationModal';
+import { useAuth } from '../../auth/AuthContext';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import html2pdf from 'html2pdf.js';
@@ -54,6 +55,7 @@ type TabType = 'CONTROLES' | 'PARADAS' | 'DETALLE' | 'RESUMEN';
 type FilterStatus = 'ALL' | 'TRANSIT' | 'ARRIVED' | 'CANCELLED';
 
 export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => {
+    const { profile } = useAuth();
     // Travel Times Store Integration
     const [routeMatrix, setRouteMatrix] = useState(getTravelTimesState().travelTimes);
 
@@ -160,6 +162,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const [isExporting, setIsExporting] = useState(false);
     const [isSavingControl, setIsSavingControl] = useState(false);
+    const [isFinishingTrip, setIsFinishingTrip] = useState(false);
+    const [isSavingStop, setIsSavingStop] = useState(false);
+    const [isFinishingStop, setIsFinishingStop] = useState(false);
+    const [currentTime, setCurrentTime] = useState(new Date()); // To trigger re-renders for alerts
 
     const [form, setForm] = useState({
         unitName: '',
@@ -241,12 +247,34 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const selectedUnit = useMemo(() => units.find(u => u.id === selectedUnitId) || null, [units, selectedUnitId]);
 
+    // Periodic timer to update "now" for alerts and durations
+    useEffect(() => {
+        const interval = setInterval(() => {
+            setCurrentTime(new Date());
+        }, 30000); // 30 seconds
+        return () => clearInterval(interval);
+    }, []);
+
     const checkMonitoringAlert = (lastUpdate: string) => {
         if (!lastUpdate) return false;
-        const last = new Date(lastUpdate);
-        const now = new Date();
-        const diffHours = (now.getTime() - last.getTime()) / (1000 * 60 * 60);
-        return diffHours >= 3;
+
+        try {
+            // Force interpret ISO-like strings without offset as local if needed, 
+            // but toISOString() usually handles it.
+            const last = new Date(lastUpdate);
+            const now = currentTime;
+
+            if (isNaN(last.getTime())) return false;
+
+            const diffMs = now.getTime() - last.getTime();
+            const diffHours = diffMs / (1000 * 60 * 60);
+
+            // LOGIC: If the update is from the future (due to clock skew) or very recent, no alert.
+            // A report is "delayed" only if more than 3 hours have passed.
+            return diffHours >= 3;
+        } catch (e) {
+            return false;
+        }
     };
 
     useEffect(() => {
@@ -462,7 +490,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     };
 
     const handleConfirmFinishTrip = async () => {
-        if (!selectedUnitId) return;
+        if (!selectedUnitId || isFinishingTrip) return;
 
         const unit = units.find(u => u.id === selectedUnitId);
         if (!unit) return;
@@ -472,8 +500,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const lastUpdateDate = new Date(unit.lastUpdate);
 
         const type = finishTripModal.type;
-
-
 
         // --- HELPER: Calculate Metrics ---
         // Calculates Time/Score based on Arrival Date relative to Departure
@@ -525,89 +551,100 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             return { tiempoTotal, tiempoNeto, score };
         };
 
-        // --- SCENARIO 1: SINGLE DESTINATION ---
-        if (type === 'SINGLE') {
-            const finishDate = new Date(finishTripModal.date);
-            if (finishDate < departureDate) { alert("ERROR: La fecha de llegada no puede ser anterior a la salida de planta."); return; }
-            if (finishDate < lastUpdateDate) { alert("ERROR: La fecha de llegada no puede ser anterior al último reporte."); return; }
-            if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
+        setIsFinishingTrip(true);
+        try {
+            // --- SCENARIO 1: SINGLE DESTINATION ---
+            if (type === 'SINGLE') {
+                const finishDate = new Date(finishTripModal.date);
+                if (finishDate < departureDate) { showAlert("Error", "La fecha de llegada no puede ser anterior a la salida de planta."); return; }
+                if (finishDate < lastUpdateDate) { showAlert("Error", "La fecha de llegada no puede ser anterior al último reporte."); return; }
+                if (finishDate > now) { showAlert("Error", "La fecha de llegada no puede ser futura."); return; }
 
-            // Calculate everything based on Single/D1 logic
-            const metrics = calculateMetrics(finishDate);
-            await finalizeTrip(unit, finishDate.toISOString(), unit.almacenDestino1 || unit.destination, metrics);
-        }
+                // Calculate everything based on Single/D1 logic
+                const metrics = calculateMetrics(finishDate);
+                await finalizeTrip(unit, finishDate.toISOString(), unit.almacenDestino1 || unit.destination, metrics);
+            }
 
-        // --- SCENARIO 2: ARRIVAL AT DESTINATION 1 (INTERMEDIATE) ---
-        else if (type === 'DEST1') {
-            const finishDate = new Date(finishTripModal.date);
-            if (finishDate < departureDate) { alert("ERROR: La fecha de llegada no puede ser anterior a la salida de planta."); return; }
-            if (finishDate < lastUpdateDate) { alert("ERROR: La fecha de llegada no puede ser anterior al último reporte."); return; }
-            if (finishDate > now) { alert("ERROR: La fecha de llegada no puede ser futura."); return; }
+            // --- SCENARIO 2: ARRIVAL AT DESTINATION 1 (INTERMEDIATE) ---
+            else if (type === 'DEST1') {
+                const finishDate = new Date(finishTripModal.date);
+                if (finishDate < departureDate) { showAlert("Error", "La fecha de llegada no puede ser anterior a la salida de planta."); return; }
+                if (finishDate < lastUpdateDate) { showAlert("Error", "La fecha de llegada no puede ser anterior al último reporte."); return; }
+                if (finishDate > now) { showAlert("Error", "La fecha de llegada no puede ser futura."); return; }
 
-            // Always calc metrics for DEST1 (Base calculation)
-            const metrics = calculateMetrics(finishDate);
+                // Always calc metrics for DEST1 (Base calculation)
+                const metrics = calculateMetrics(finishDate);
 
-            let updates: any = {
-                fechaLlegadaDestino1: finishDate.toISOString(),
-                ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
-                lastUpdate: finishDate.toISOString(),
-                tiempoTotal1: metrics.tiempoTotal,
-                tiempoNeto1: metrics.tiempoNeto,
-                calificacionTTotal: metrics.score,
-                calificacionTNeto: metrics.score
-            };
+                let updates: any = {
+                    fechaLlegadaDestino1: finishDate.toISOString(),
+                    ubicacionActual: `EN DESTINO 1: ${unit.almacenDestino1}`,
+                    lastUpdate: finishDate.toISOString(),
+                    tiempoTotal1: metrics.tiempoTotal,
+                    tiempoNeto1: metrics.tiempoNeto,
+                    calificacionTTotal: metrics.score,
+                    calificacionTNeto: metrics.score
+                };
 
-            await updateUnit(unit.id, updates);
-            // RELATIONAL: Add arrival control
-            await addEventToDB(unit.id, 'CONTROL', {
-                time: finishDate.toISOString(),
-                location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
-                coords: DESTINATION_GPS
-            });
-            setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
-        }
+                await updateUnit(unit.id, updates);
+                // RELATIONAL: Add arrival control
+                await addEventToDB(unit.id, 'CONTROL', {
+                    time: finishDate.toISOString(),
+                    location: `LLEGADA A PUNTO 1 (${unit.almacenDestino1})`,
+                    coords: DESTINATION_GPS
+                });
+                setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+                setToast({ type: 'success', message: 'Llegada a Punto 1 registrada' });
+            }
 
-        // --- SCENARIO 3: DEPARTURE D1 & ARRIVAL D2 (FINAL) ---
-        else if (type === 'DEST2') {
-            const exitD1 = new Date(finishTripModal.dateExitD1);
-            const arriveD2 = new Date(finishTripModal.dateArriveD2);
-            const arriveD1 = unit.fechaLlegadaDestino1 ? new Date(unit.fechaLlegadaDestino1) : departureDate;
+            // --- SCENARIO 3: DEPARTURE D1 & ARRIVAL D2 (FINAL) ---
+            else if (type === 'DEST2') {
+                const exitD1 = new Date(finishTripModal.dateExitD1);
+                const arriveD2 = new Date(finishTripModal.dateArriveD2);
+                const arriveD1 = unit.fechaLlegadaDestino1 ? new Date(unit.fechaLlegadaDestino1) : departureDate;
 
-            if (exitD1 < arriveD1) { alert("ERROR: La salida del Punto 1 no puede ser antes de haber llegado."); return; }
-            if (arriveD2 < exitD1) { alert("ERROR: La llegada al Punto 2 no puede ser antes de salir del Punto 1."); return; }
-            if (arriveD2 > now) { alert("ERROR: La llegada final no puede ser futura."); return; }
+                if (exitD1 < arriveD1) { showAlert("Error", "La salida del Punto 1 no puede ser antes de haber llegado."); return; }
+                if (arriveD2 < exitD1) { showAlert("Error", "La llegada al Punto 2 no puede ser antes de salir del Punto 1."); return; }
+                if (arriveD2 > now) { showAlert("Error", "La llegada final no puede ser futura."); return; }
 
-            // Dead Time at D1 = Exit D1 - Arrival D1
-            const deadTimeMs = exitD1.getTime() - arriveD1.getTime();
+                // Dead Time at D1 = Exit D1 - Arrival D1
+                const deadTimeMs = exitD1.getTime() - arriveD1.getTime();
 
-            // Calculate Metrics for D2 (Deducting Dead Time)
-            const metrics = calculateMetrics(arriveD2, deadTimeMs);
+                // Calculate Metrics for D2 (Deducting Dead Time)
+                const metrics = calculateMetrics(arriveD2, deadTimeMs);
 
-            const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
-            const segment = await fetchRoadRoute([lastPoint, DESTINATION_GPS]);
-            const newPath = [...(unit.path || []), ...segment.slice(1)];
+                const lastPoint = (unit.path && unit.path.length > 0) ? unit.path[unit.path.length - 1] : GLOBAL_ORIGIN;
+                const segment = await fetchRoadRoute([lastPoint, DESTINATION_GPS]);
+                const newPath = [...(unit.path || []), ...segment.slice(1)];
 
-            let updates: any = {
-                status: UnitStatus.DELIVERED,
-                ubicacionActual: `LLEGADA A ${unit.almacenDestino2}`,
-                lastUpdate: arriveD2.toISOString(),
-                fechaSalidaDestino1: exitD1.toISOString(),
-                fechaLlegadaDestino2: arriveD2.toISOString(),
-                path: newPath,
-                tiempoTotal2: metrics.tiempoTotal,
-                tiempoNeto2: metrics.tiempoNeto
-            };
+                let updates: any = {
+                    status: UnitStatus.DELIVERED,
+                    ubicacionActual: `LLEGADA A ${unit.almacenDestino2}`,
+                    lastUpdate: arriveD2.toISOString(),
+                    fechaSalidaDestino1: exitD1.toISOString(),
+                    fechaLlegadaDestino2: arriveD2.toISOString(),
+                    path: newPath,
+                    tiempoTotal2: metrics.tiempoTotal,
+                    tiempoNeto2: metrics.tiempoNeto
+                };
 
-            await updateUnit(unit.id, updates);
-            // RELATIONAL: Add arrival control
-            await addEventToDB(unit.id, 'CONTROL', {
-                time: arriveD2.toISOString(),
-                location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
-                coords: DESTINATION_GPS
-            });
-            setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+                await updateUnit(unit.id, updates);
+                // RELATIONAL: Add arrival control
+                await addEventToDB(unit.id, 'CONTROL', {
+                    time: arriveD2.toISOString(),
+                    location: `LLEGADA A PUNTO 2 (${unit.almacenDestino2})`,
+                    coords: DESTINATION_GPS
+                });
+                setFinishTripModal(prev => ({ ...prev, open: false, date: '' }));
+                setToast({ type: 'success', message: 'Viaje finalizado correctamente' });
+            }
+        } catch (error) {
+            console.error("Error finishing trip:", error);
+            showAlert("Error", "No se pudo finalizar el viaje. Intente nuevamente.");
+        } finally {
+            setIsFinishingTrip(false);
         }
     };
+    ;
 
     // Helper for Single Finish
     const finalizeTrip = async (unit: TransportUnit, finishDateStr: string, locationName: string, metrics: { tiempoTotal: string; tiempoNeto: string; score: string }) => {
@@ -789,7 +826,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     area: form.area,
                     lastLocation: 'Origen Planta',
                     lastUpdate: now.toISOString(),
-                    path: [GLOBAL_ORIGIN]
+                    path: [GLOBAL_ORIGIN],
+                    usuarioCreacionId: profile?.id
                 };
                 await createUnit(newUnit);
                 setIsAddModalOpen(false);
@@ -941,6 +979,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
     const handleUpdateControl = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (isSavingControl) return;
+
         const u = units.find(unit => unit.id === selectedUnitId);
         if (!selectedUnitId || !u) return;
 
@@ -968,7 +1008,6 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             if (reportDateTime < departureDate) { showAlert("Error de Validación", "La fecha del control no puede ser anterior a la salida de planta.", "danger"); return; }
         } else {
             // Subsequent controls: Cannot be before last update
-            // We use lastUpdate because it tracks the timestamp of the latest event
             if (reportDateTime < lastUpdateDate && editingControlIndex === null) {
                 showAlert("Error de Secuencialidad", "La fecha del nuevo control no puede ser anterior al último reporte registrado.", "danger");
                 return;
@@ -976,52 +1015,54 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         }
 
         setIsSavingControl(true);
-        const newPoint: LatLng = { lat: nLat, lng: nLng };
-        const isoDateTime = reportDateTime.toISOString();
+        try {
+            const newPoint: LatLng = { lat: nLat, lng: nLng };
+            const isoDateTime = reportDateTime.toISOString();
 
-        if (editingControlIndex !== null) {
-            const control = u.controles[editingControlIndex] as any;
-            if (control.id) {
-                await updateEventInDB(control.id, {
+            if (editingControlIndex !== null) {
+                const control = u.controles[editingControlIndex] as any;
+                if (control.id) {
+                    await updateEventInDB(control.id, {
+                        location: reportForm.location.toUpperCase(),
+                        coords: newPoint,
+                        time: isoDateTime
+                    });
+                }
+            } else {
+                await addEventToDB(u.id, 'CONTROL', {
+                    time: isoDateTime,
                     location: reportForm.location.toUpperCase(),
-                    coords: newPoint,
-                    time: isoDateTime
+                    coords: newPoint
                 });
             }
-        } else {
-            await addEventToDB(u.id, 'CONTROL', {
-                time: isoDateTime,
-                location: reportForm.location.toUpperCase(),
-                coords: newPoint
+
+            // --- OPTIMIZED ROUTING: Segment Routing ---
+            let newPath = u.path || [];
+            if (editingControlIndex !== null) {
+                const pointsForRouting = [GLOBAL_ORIGIN, ...u.controles.filter((c: any) => c.coords).map((c: any) => c.coords as LatLng)];
+                newPath = await fetchRoadRoute(pointsForRouting);
+            } else {
+                const lastPathPoint = (u.path && u.path.length > 0) ? u.path[u.path.length - 1] : GLOBAL_ORIGIN;
+                const segment = await fetchRoadRoute([lastPathPoint, newPoint]);
+                newPath = [...(u.path || []), ...segment.slice(1)];
+            }
+
+            await updateUnit(u.id, {
+                ubicacionActual: reportForm.location.toUpperCase(),
+                lastLocation: reportForm.location.toUpperCase(),
+                lastUpdate: reportDateTime.toISOString(),
+                path: newPath
             });
+
+            resetReportForm();
+            setEditingControlIndex(null);
+            setToast({ type: 'success', message: 'Ubicación reportada correctamente' });
+        } catch (error) {
+            console.error("Error updating control:", error);
+            showAlert("Error", "No se pudo reportar la ubicación. Intente nuevamente.", "danger");
+        } finally {
+            setIsSavingControl(false);
         }
-
-        // --- OPTIMIZED ROUTING: Segment Routing ---
-        let newPath = u.path || [];
-        if (editingControlIndex !== null) {
-            // Re-route using latest state from store (which is updated by relational calls)
-            const pointsForRouting = [GLOBAL_ORIGIN, ...u.controles.filter((c: any) => c.coords).map((c: any) => c.coords as LatLng)];
-            newPath = await fetchRoadRoute(pointsForRouting);
-        } else {
-            // Sequential addition: Only route from last path point to new control
-            const lastPathPoint = (u.path && u.path.length > 0) ? u.path[u.path.length - 1] : GLOBAL_ORIGIN;
-            const segment = await fetchRoadRoute([lastPathPoint, newPoint]);
-            // Avoid duplicates and append
-            newPath = [...(u.path || []), ...segment.slice(1)];
-        }
-
-        await updateUnit(u.id, {
-            // controles: newControles, -> handled relacionalmente
-            ubicacionActual: reportForm.location.toUpperCase(),
-            lastLocation: reportForm.location.toUpperCase(),
-            lastUpdate: reportDateTime.toISOString(),
-            path: newPath
-        });
-
-        setIsSavingControl(false);
-
-        resetReportForm();
-        setEditingControlIndex(null);
     };
 
     const calculateDuration = (start: string, end: string) => {
@@ -1036,7 +1077,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     };
 
     const handleAddStop = async (type: 'PROG' | 'NOPROG') => {
-        if (!selectedUnitId) return;
+        if (!selectedUnitId || isSavingStop) return;
         const u = units.find(unit => unit.id === selectedUnitId);
         if (!u) return;
 
@@ -1055,28 +1096,37 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             if (endTime > now) { showAlert("Error de Validación", "La hora de fin no puede ser futura.", "danger"); return; }
         }
 
-        const nLat = newStopForm.lat ? parseFloat(newStopForm.lat) : undefined;
-        const nLng = newStopForm.lng ? parseFloat(newStopForm.lng) : undefined;
-        const coords = (nLat && nLng) ? { lat: nLat, lng: nLng } : undefined;
+        setIsSavingStop(true);
+        try {
+            const nLat = newStopForm.lat ? parseFloat(newStopForm.lat) : undefined;
+            const nLng = newStopForm.lng ? parseFloat(newStopForm.lng) : undefined;
+            const coords = (nLat && nLng) ? { lat: nLat, lng: nLng } : undefined;
 
-        const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
+            const newStatus = isStopOngoing ? (type === 'PROG' ? 'EN PARADA' : 'INCIDENTE') : u.status;
 
-        const stopData = {
-            location: newStopForm.location.toUpperCase(),
-            start: newStopForm.start, // Store original ISO string
-            end: isStopOngoing ? '' : newStopForm.end, // Store original ISO string
-            time: isStopOngoing ? 'En Curso' : calculateDuration(newStopForm.start, newStopForm.end),
-            cause: type === 'NOPROG' ? newStopForm.cause?.toUpperCase() : undefined,
-            coords: coords
-        };
+            const stopData = {
+                location: newStopForm.location.toUpperCase(),
+                startTime: new Date(newStopForm.start).toISOString(),
+                endTime: isStopOngoing ? null : new Date(newStopForm.end).toISOString(),
+                duration: isStopOngoing ? 'En Curso' : calculateDuration(newStopForm.start, newStopForm.end),
+                cause: type === 'NOPROG' ? newStopForm.cause?.toUpperCase() : undefined,
+                coords: coords
+            };
 
-        await updateUnit(u.id, { status: newStatus });
-        await addEventToDB(u.id, type === 'PROG' ? 'PARADA_PROG' : 'PARADA_NOPROG', stopData);
+            await updateUnit(u.id, { status: newStatus });
+            await addEventToDB(u.id, type === 'PROG' ? 'PARADA_PROG' : 'PARADA_NOPROG', stopData);
 
-        setNewStopForm({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
-        setIsStopOngoing(false);
-        if (type === 'PROG') setShowAddStopProg(false);
-        else setShowAddStopNoProg(false);
+            setNewStopForm({ location: '', start: '', end: '', time: '', cause: '', lat: '', lng: '' });
+            setIsStopOngoing(false);
+            if (type === 'PROG') setShowAddStopProg(false);
+            else setShowAddStopNoProg(false);
+            setToast({ type: 'success', message: 'Parada registrada correctamente' });
+        } catch (error) {
+            console.error("Error adding stop:", error);
+            showAlert("Error", "No se pudo registrar la parada. Intente nuevamente.");
+        } finally {
+            setIsSavingStop(false);
+        }
     };
 
     const initiateFinishStop = (type: 'PROG' | 'NOPROG', index: number) => {
@@ -1094,7 +1144,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     };
 
     const handleConfirmFinishStop = async () => {
-        if (!selectedUnitId || !finishStopModal.type || finishStopModal.index === null) return;
+        if (!selectedUnitId || !finishStopModal.type || finishStopModal.index === null || isFinishingStop) return;
 
         const { type, index, endDate } = finishStopModal;
         const endDateObj = new Date(endDate);
@@ -1114,20 +1164,30 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             showAlert("Error de Validación", "La fecha de fin no puede ser anterior al inicio de la parada.", "danger");
             return;
         }
-        let durationStr = calculateDuration(currentStop.start, endDate);
 
-        await updateUnit(u.id, {
-            status: UnitStatus.TRANSIT, // Back to route
-        });
+        setIsFinishingStop(true);
+        try {
+            let durationStr = calculateDuration(currentStop.start, endDate);
 
-        if ((currentStop as any).id) {
-            await updateEventInDB((currentStop as any).id, {
-                end: endDate,
-                time: durationStr
+            await updateUnit(u.id, {
+                status: UnitStatus.TRANSIT, // Back to route
             });
-        }
 
-        setFinishStopModal({ open: false, type: 'PROG', index: null, endDate: '' });
+            if ((currentStop as any).id) {
+                await updateEventInDB((currentStop as any).id, {
+                    endTime: new Date(endDate).toISOString(),
+                    duration: durationStr
+                });
+            }
+
+            setFinishStopModal({ open: false, type: 'PROG', index: null, endDate: '' });
+            setToast({ type: 'success', message: 'Parada finalizada correctamente' });
+        } catch (error) {
+            console.error("Error finishing stop:", error);
+            showAlert("Error", "No se pudo finalizar la parada. Intente nuevamente.");
+        } finally {
+            setIsFinishingStop(false);
+        }
     };
 
     const handleDeleteStop = async (type: 'PROG' | 'NOPROG', index: number) => {
@@ -1204,7 +1264,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
             <div className="flex flex-1 min-h-0 gap-4 overflow-hidden">
 
                 {/* LISTA TARJETAS (HORIZONTAL) */}
-                <div className="w-[60%] flex flex-col gap-2">
+                <div className="w-[65%] flex flex-col gap-2">
                     <div className="bg-white p-1.5 rounded-xl border border-slate-200 flex items-center gap-3 shrink-0">
                         <div className="flex-1 relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={14} />
@@ -1251,7 +1311,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                     <span className="text-xs font-medium text-gray-400">/ {unit.plateSemiRemolque}</span>
                                                 )}
                                             </div>
-                                            <p className="text-[11px] font-medium text-gray-400 truncate max-w-[140px]">{unit.transportista}</p>
+                                            <p className="text-[11px] font-medium text-gray-400 line-clamp-2 leading-tight">{unit.transportista}</p>
                                             <div className="flex gap-1 mt-1">
                                                 <span className="inline-block px-1.5 py-0.5 bg-gray-100 text-gray-600 rounded text-[9px] font-bold">{unit.proceso}</span>
                                                 <span className={`inline-block px-1.5 py-0.5 rounded text-[9px] font-bold ${unit.status === UnitStatus.TRANSIT ? 'bg-blue-100 text-blue-700' : isStopped ? 'bg-red-100 text-red-700 animate-pulse' : unit.status === UnitStatus.DELIVERED ? 'bg-emerald-100 text-emerald-700' : isCancelled ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-700'}`}>
@@ -1305,10 +1365,12 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                             </div>
                                         </div>
 
-                                        <div className="min-w-[140px] flex flex-col justify-center gap-2 text-right">
+                                        <div className="min-w-[180px] flex flex-col justify-center gap-2 text-right">
                                             <div className="bg-gray-50 p-1.5 rounded border border-gray-200">
-                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block mb-0.5 tracking-wider">Ubicación ({formatDate(unit.lastUpdate).split(' ')[1] || ''})</span>
-                                                <span className="text-xs font-bold text-gray-900 uppercase leading-tight block truncate max-w-[130px] ml-auto">{unit.ubicacionActual}</span>
+                                                <span className="text-[9px] font-semibold text-gray-400 uppercase block mb-0.5 tracking-wider">
+                                                    Ubicación {unit.lastUpdate ? `(${formatDate(unit.lastUpdate)})` : '(-)'}
+                                                </span>
+                                                <span className="text-xs font-bold text-gray-900 uppercase leading-tight block truncate max-w-[170px] ml-auto">{unit.ubicacionActual}</span>
                                             </div>
                                             <div className="bg-blue-50 p-1.5 rounded border border-blue-100">
                                                 <span className="text-[9px] font-semibold text-blue-400 uppercase block mb-0.5 tracking-wider">Estimado Llegada</span>
@@ -1333,7 +1395,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                     </div>
                 </div>
 
-                <div className="w-[40%] bg-white rounded-xl border border-slate-300 overflow-hidden relative min-h-0 shadow-inner">
+                <div className="w-[35%] bg-white rounded-xl border border-slate-300 overflow-hidden relative min-h-0 shadow-inner">
                     <div ref={mapContainerRef} className="w-full h-full z-0" />
                     <div className="absolute top-4 left-4 z-[1] bg-white/95 px-3 py-2 rounded-lg border border-slate-200 pointer-events-none">
                         <div className="flex items-center gap-2">
@@ -1402,8 +1464,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
                             <button
                                 onClick={handleConfirmFinishTrip}
-                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                                disabled={isFinishingTrip}
+                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
+                                {isFinishingTrip && <Loader2 size={12} className="animate-spin" />}
                                 {finishTripModal.type === 'DEST1' ? 'Confirmar Llegada (1er Punto)' : 'Confirmar Cierre de Viaje'}
                             </button>
                         </div>
@@ -1435,8 +1499,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                             <p className="text-[9px] text-slate-400 italic">La unidad pasará automáticamente a estado "EN RUTA".</p>
                             <button
                                 onClick={handleConfirmFinishStop}
-                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all"
+                                disabled={isFinishingStop}
+                                className="w-full py-3 bg-slate-900 text-white rounded-lg text-[10px] font-black uppercase tracking-widest hover:bg-black transition-all disabled:opacity-50 flex items-center justify-center gap-2"
                             >
+                                {isFinishingStop && <Loader2 size={12} className="animate-spin" />}
                                 Confirmar Fin
                             </button>
                         </div>
@@ -1709,9 +1775,16 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                     <label htmlFor="activeStopProg" className="text-[10px] font-bold text-emerald-700 cursor-pointer">Parada en curso (Unidad Detenida)</label>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-2 mt-2">
-                                                                <button onClick={() => setShowAddStopProg(false)} className="px-4 py-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                                                                <button onClick={() => handleAddStop('PROG')} className="flex-1 px-4 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold uppercase tracking-wider">Guardar Parada</button>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => setShowAddStopProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
+                                                                <button
+                                                                    onClick={() => handleAddStop('PROG')}
+                                                                    disabled={isSavingStop}
+                                                                    className="flex-[2] py-3 bg-emerald-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-emerald-700 transition-colors shadow-lg shadow-emerald-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                                                                >
+                                                                    {isSavingStop && <Loader2 size={12} className="animate-spin" />}
+                                                                    Confirmar Parada
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -1729,7 +1802,16 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                 </div>
                                                             </div>
                                                             <div className="flex items-center gap-2">
-                                                                {!stop.end && <button onClick={() => initiateFinishStop('PROG', idx)} className="text-[9px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1"><PlayCircle size={10} /> FINALIZAR</button>}
+                                                                {!stop.end && (
+                                                                    <button
+                                                                        onClick={() => initiateFinishStop('PROG', idx)}
+                                                                        disabled={isSavingStop}
+                                                                        className="text-[9px] font-bold bg-emerald-600 text-white px-3 py-1.5 rounded hover:bg-emerald-700 transition flex items-center gap-1 disabled:opacity-50"
+                                                                    >
+                                                                        {isSavingStop ? <Loader2 size={10} className="animate-spin" /> : <PlayCircle size={10} />}
+                                                                        FINALIZAR
+                                                                    </button>
+                                                                )}
                                                                 <button onClick={() => handleDeleteStop('PROG', idx)} className="text-slate-300 hover:text-red-500 transition p-2"><Trash2 size={14} /></button>
                                                             </div>
                                                         </div>
@@ -1762,9 +1844,16 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                                                     <label htmlFor="activeStopNoProg" className="text-[10px] font-bold text-amber-700 cursor-pointer">Incidente en curso (Unidad Detenida)</label>
                                                                 </div>
                                                             </div>
-                                                            <div className="flex gap-2 mt-2">
-                                                                <button onClick={() => setShowAddStopNoProg(false)} className="px-4 py-3 bg-white border border-slate-200 rounded-lg text-xs font-bold text-slate-500 hover:bg-slate-50">Cancelar</button>
-                                                                <button onClick={() => handleAddStop('NOPROG')} className="flex-1 px-4 py-3 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-xs font-black uppercase tracking-widest">Guardar Incidencia</button>
+                                                            <div className="flex gap-2">
+                                                                <button onClick={() => setShowAddStopNoProg(false)} className="flex-1 py-3 bg-slate-100 text-slate-600 rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-slate-200 transition-colors">Cancelar</button>
+                                                                <button
+                                                                    onClick={() => handleAddStop('NOPROG')}
+                                                                    disabled={isSavingStop}
+                                                                    className="flex-[2] py-3 bg-rose-600 text-white rounded-lg text-[10px] font-bold uppercase tracking-wider hover:bg-rose-700 transition-colors shadow-lg shadow-rose-900/10 disabled:opacity-50 flex items-center justify-center gap-2"
+                                                                >
+                                                                    {isSavingStop && <Loader2 size={12} className="animate-spin" />}
+                                                                    Reportar Incidente
+                                                                </button>
                                                             </div>
                                                         </div>
                                                     </div>
