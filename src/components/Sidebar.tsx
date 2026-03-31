@@ -33,6 +33,7 @@ import {
   TabletSmartphone,
   Car,
   Key,
+  Clock,
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
@@ -143,6 +144,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const canSeeSeg_MonitoreoPT = hasAccess("/monitoreo-unidades/monitoreo-pt");
   const canSeeSeg_Destinos = hasAccess("/monitoreo-unidades/destinos");
   const canSeeSeg_TiemposViaje = hasAccess("/monitoreo-unidades/tiempos-viaje");
+  const canSeeSeg_MonitoreoMMPP = hasAccess("/monitoreo-unidades/mmpp");
+  const canSeeSeg_MMPPTiempos = hasAccess("/monitoreo-unidades/mmpp-tiempos");
+  const canSeeSeg_MMPPTransportistas = hasAccess("/monitoreo-unidades/mmpp-transportistas");
   const canSeeSeg_ReportingManager = hasAccess("/seguimiento-agentes/reporting-manager");
   const canSeeSeg_AgentReport = hasAccess("/seguimiento-agentes/agent-report");
   const canSeeSeg_RISP = hasAccess("/risp/historial"); // New permission check
@@ -275,7 +279,17 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
       seguridadItems.push({ id: 'seg-risp', label: 'RISP', icon: ShieldCheck, subItems: rispSubItems });
     }
 
-    // 6. Terceros
+    // 6. Monitoreo MMPP
+    const mmppSubItems: NavItem[] = [];
+    if (canSeeSeg_MonitoreoMMPP) mmppSubItems.push({ id: 'seg-mmpp-main', label: 'Seguimiento MMPP', path: '/monitoreo-unidades/mmpp', icon: Truck });
+    if (canSeeSeg_MMPPTiempos) mmppSubItems.push({ id: 'seg-mmpp-times', label: 'Tiempos de Ruta', path: '/monitoreo-unidades/mmpp-tiempos', icon: Clock });
+    if (canSeeSeg_MMPPTransportistas) mmppSubItems.push({ id: 'seg-mmpp-transp', label: 'Transportistas', path: '/monitoreo-unidades/mmpp-transportistas', icon: Users });
+
+    if (mmppSubItems.length > 0) {
+      seguridadItems.push({ id: 'seg-mmpp-group', label: 'Monitoreo de MMPP', icon: Layers, subItems: mmppSubItems });
+    }
+
+    // 7. Terceros
     if (canSeeSeg_Terceros) {
       seguridadItems.push({ id: 'seg-terceros', label: 'Seguridad Terceros', path: '/seguridad/terceros', icon: Users });
     }

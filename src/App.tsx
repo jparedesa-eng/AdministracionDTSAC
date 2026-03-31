@@ -83,6 +83,11 @@ import { DestinationsTable } from "./pages/MonitoreoUnidades/DestinationsTable";
 import { TravelTimesTable } from "./pages/MonitoreoUnidades/TravelTimesTable";
 import GestionEntidades from "./pages/MonitoreoUnidades/GestionEntidades";
 
+/* Monitoreo MMPP */
+import { MonitoreoMMPP } from "./pages/monitoreommpp/MonitoreoMMPP.tsx";
+import { TiemposRutaMMPP } from "./pages/monitoreommpp/TiemposRutaMMPP.tsx";
+import { TransportistasMMPP } from "./pages/monitoreommpp/TransportistasMMPP.tsx";
+
 /* Seguimiento Agentes */
 import { ReportingManager } from "./pages/SeguimientoAgentes/ReportingManager";
 import { AgentReportView } from "./pages/SeguimientoAgentes/AgentReportView";
@@ -667,6 +672,32 @@ export default function App() {
             element={
               <ProtectedRoute path="/monitoreo-unidades/entidades">
                 <GestionEntidades />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* Monitoreo MMPP */}
+          <Route
+            path="/monitoreo-unidades/mmpp"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/mmpp">
+                <MonitoreoMMPP />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/mmpp-tiempos"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/mmpp-tiempos">
+                <TiemposRutaMMPP />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/monitoreo-unidades/mmpp-transportistas"
+            element={
+              <ProtectedRoute path="/monitoreo-unidades/mmpp-transportistas">
+                <TransportistasMMPP />
               </ProtectedRoute>
             }
           />
