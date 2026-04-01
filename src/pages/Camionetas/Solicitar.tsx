@@ -88,7 +88,7 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
 
   // disponibilidad
   const [checking, setChecking] = React.useState(false);
-  const [selectedPlaca, setSelectedPlaca] = React.useState<string>("");  const [submitting, setSubmitting] = React.useState(false);
+  const [selectedPlaca, setSelectedPlaca] = React.useState<string>(""); const [submitting, setSubmitting] = React.useState(false);
   const [msg, setMsg] = React.useState<{
     type: "ok" | "err";
     text: string;
@@ -652,7 +652,7 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
                       Ocupación para {selectedPlaca}
                     </p>
                     <p className="text-xs text-gray-500 font-medium">
-                      {usoInicioLocal.slice(0, 10) === usoFinLocal.slice(0, 10) 
+                      {usoInicioLocal.slice(0, 10) === usoFinLocal.slice(0, 10)
                         ? usoInicioLocal.slice(0, 10).split('-').reverse().join('/')
                         : `${usoInicioLocal.slice(0, 10).split('-').reverse().join('/')} al ${usoFinLocal.slice(0, 10).split('-').reverse().join('/')}`
                       }
@@ -725,7 +725,7 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
                   const diffDays = Math.round((new Date(fDateStr).getTime() - new Date(iDateStr).getTime()) / (1000 * 60 * 60 * 24));
                   const totalDays = Math.max(1, diffDays + 1);
                   const totalHours = totalDays * 24;
-                  
+
                   const step = totalDays > 3 ? 12 : (totalDays > 1 ? 6 : 1);
 
                   return Array.from({ length: totalHours + 1 }).map((_, i) => {
@@ -787,8 +787,8 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
                         >
                           {width > (400 / totalHours) && (
                             <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
-                              {totalDays > 1 
-                                ? `${s.usoInicio.slice(5,10)} a ${s.usoFin.slice(5,10)}` 
+                              {totalDays > 1
+                                ? `${s.usoInicio.slice(5, 10)} a ${s.usoFin.slice(5, 10)}`
                                 : `${s.usoInicio.slice(11, 16)} - ${s.usoFin.slice(11, 16)}`}
                             </span>
                           )}
@@ -845,12 +845,12 @@ export default function Solicitar({ isPopup = false }: { isPopup?: boolean }) {
                   const diffDays = Math.round((new Date(fDateStr).getTime() - baseTime) / (1000 * 60 * 60 * 24));
                   const totalDays = Math.max(1, diffDays + 1);
                   const totalHours = totalDays * 24;
-                  
+
                   const step = totalDays > 3 ? 24 : (totalDays > 1 ? 12 : 4);
 
                   return Array.from({ length: totalHours + 1 }).map((_, i) => {
                     if (i % step !== 0 && i !== totalHours) return null;
-                    
+
                     // if it's a multiple of 24, show the date or "00:00"
                     let label = `${(i % 24).toString().padStart(2, '0')}:00`;
                     if (totalDays > 1 && i % 24 === 0) {

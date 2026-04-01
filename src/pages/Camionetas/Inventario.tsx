@@ -66,7 +66,7 @@ type Vehiculo = {
   volante: VolanteTipo;
   volanteInicio?: string | null;
   volanteFin?: string | null;
-  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | null;
+  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | "Piura" | "Dominus" | null;
 };
 
 /* Mapas DB <-> UI */
@@ -852,7 +852,7 @@ export default function Inventario() {
         fechaFin: assignDraft.fechaFin ? new Date(assignDraft.fechaFin).toISOString() : null,
         tipoAsignacion: assignDraft.tipoAsignacion,
         observacion: assignDraft.observacion,
-        zona: assignDraft.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa",
+        zona: assignDraft.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | "Piura" | "Dominus",
       });
 
       setToast({ type: "success", message: "Responsable asignado correctamente." });
@@ -1059,6 +1059,8 @@ export default function Inventario() {
             <option value="Olmos">Olmos</option>
             <option value="Lima">Lima</option>
             <option value="Venturosa">Venturosa</option>
+            <option value="Piura">Piura</option>
+            <option value="Dominus">Dominus</option>
           </select>
 
           {/* Filtro de Categoría */}
@@ -1478,6 +1480,8 @@ export default function Inventario() {
                   <option value="Olmos">Olmos</option>
                   <option value="Lima">Lima</option>
                   <option value="Venturosa">Venturosa</option>
+                  <option value="Piura">Piura</option>
+                  <option value="Dominus">Dominus</option>
                 </select>
               </div>
               <div>
@@ -1857,6 +1861,8 @@ export default function Inventario() {
                 <option value="Olmos">Olmos</option>
                 <option value="Lima">Lima</option>
                 <option value="Venturosa">Venturosa</option>
+                <option value="Piura">Piura</option>
+                <option value="Dominus">Dominus</option>
               </select>
             </div>
             <div>
@@ -2159,6 +2165,8 @@ export default function Inventario() {
                 <option value="Olmos">Olmos</option>
                 <option value="Lima">Lima</option>
                 <option value="Venturosa">Venturosa</option>
+                <option value="Piura">Piura</option>
+                <option value="Dominus">Dominus</option>
               </select>
             </div>
           </div>

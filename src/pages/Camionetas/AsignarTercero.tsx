@@ -705,8 +705,8 @@ export default function AsignarTercero() {
                         >
                           {width > (400 / totalHours) && (
                             <span className="text-[10px] font-bold text-white truncate px-1 drop-shadow-md">
-                              {totalDays > 1 
-                                ? `${s.usoInicio.slice(5, 10)} a ${s.usoFin.slice(5, 10)}` 
+                              {totalDays > 1
+                                ? `${s.usoInicio.slice(5, 10)} a ${s.usoFin.slice(5, 10)}`
                                 : `${s.usoInicio.slice(11, 16)} - ${s.usoFin.slice(11, 16)}`}
                             </span>
                           )}

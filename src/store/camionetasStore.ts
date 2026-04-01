@@ -41,7 +41,7 @@ export interface Vehiculo {
   volante?: "Si" | "No";
   volanteInicio?: string | null;
   volanteFin?: string | null;
-  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null;
+  zona?: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Piura" | "Dominus" | null;
   estado: EstadoVehiculo;
   createdAt?: string | null;
   updatedAt?: string | null;
@@ -122,7 +122,7 @@ function vFromRow(r: VehiculoRow): Vehiculo {
     volante: (r.volante as "Si" | "No" | null) ?? "No",
     volanteInicio: r.volante_inicio,
     volanteFin: r.volante_fin,
-    zona: r.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | null,
+    zona: r.zona as "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Piura" | "Dominus" | null,
     estado: r.estado,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
@@ -778,7 +778,7 @@ export const camionetasStore = {
     fechaFin?: string | null;
     tipoAsignacion: "Indefinida" | "Rango";
     observacion?: string;
-    zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa";
+    zona: "Arequipa" | "Trujillo" | "Olmos" | "Lima" | "Venturosa" | "Piura" | "Dominus";
   }): Promise<void> {
     if (payload.dniResponsable) {
       const { data: existing, error: errExist } = await supabase
