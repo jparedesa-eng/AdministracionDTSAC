@@ -1,160 +1,258 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Edit2, Trash2, Plus, Search, Loader2, X, Save, Truck, User, Smartphone, CreditCard } from 'lucide-react';
-import type { MMPPTransportista } from '../../store/monitoreoMMPPStore';
-import { getMMPPState, subscribeMMPP, fetchMMPPTransportistas, saveMMPPTransportista, deleteMMPPTransportista } from '../../store/monitoreoMMPPStore';
+import { Edit2, Trash2, Plus, Search, Loader2, X, Save, Truck, User, Smartphone, Building2 } from 'lucide-react';
+import type { MMPPEmpresa, MMPPVehiculo, MMPPConductor } from '../../store/monitoreoMMPPStore';
+import { getMMPPState, subscribeMMPP, fetchMMPPCatalogs, saveMMPPEmpresa, deleteMMPPEmpresa, saveMMPPVehiculo, deleteMMPPVehiculo, saveMMPPConductor, deleteMMPPConductor } from '../../store/monitoreoMMPPStore';
 
 export const TransportistasMMPP: React.FC = () => {
     const [mmppState, setMmppState] = useState(getMMPPState());
     const [searchTerm, setSearchTerm] = useState('');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingTransportista, setEditingTransportista] = useState<Partial<MMPPTransportista> | null>(null);
+    const [activeTab, setActiveTab] = useState<'empresas' | 'vehiculos' | 'conductores'>('empresas');
+
+    // Modals state
+    const [isEmpresaModalOpen, setIsEmpresaModalOpen] = useState(false);
+    const [editingEmpresa, setEditingEmpresa] = useState<Partial<MMPPEmpresa> | null>(null);
+
+    const [isVehiculoModalOpen, setIsVehiculoModalOpen] = useState(false);
+    const [editingVehiculo, setEditingVehiculo] = useState<Partial<MMPPVehiculo> | null>(null);
+
+    const [isConductorModalOpen, setIsConductorModalOpen] = useState(false);
+    const [editingConductor, setEditingConductor] = useState<Partial<MMPPConductor> | null>(null);
+
     const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         const unsubscribe = subscribeMMPP(() => setMmppState({ ...getMMPPState() }));
-        fetchMMPPTransportistas();
+        fetchMMPPCatalogs();
         return () => unsubscribe();
     }, []);
 
-    const filteredTransportistas = useMemo(() => {
-        return mmppState.transportistas.filter(t => 
-            t.nombre.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.placa.toLowerCase().includes(searchTerm.toLowerCase()) ||
-            t.conductor.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [mmppState.transportistas, searchTerm]);
+    // Derived Lookups
+    const getEmpresaNombre = (id: string) => mmppState.empresas.find(e => e.id === id)?.nombre || 'Desconocida';
 
-    const handleOpenModal = (t?: MMPPTransportista) => {
-        setEditingTransportista(t || { nombre: '', placa: '', conductor: '', celular: '' });
-        setIsModalOpen(true);
-    };
+    // Filters
+    const filteredEmpresas = useMemo(() => {
+        return mmppState.empresas.filter(e => e.nombre.toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [mmppState.empresas, searchTerm]);
 
-    const handleSave = async (e: React.FormEvent) => {
+    const filteredVehiculos = useMemo(() => {
+        return mmppState.vehiculos.filter(v => v.placa.toLowerCase().includes(searchTerm.toLowerCase()) || getEmpresaNombre(v.empresa_id).toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [mmppState.vehiculos, mmppState.empresas, searchTerm]);
+
+    const filteredConductores = useMemo(() => {
+        return mmppState.conductores.filter(c => c.nombre.toLowerCase().includes(searchTerm.toLowerCase()) || c.celular.includes(searchTerm) || getEmpresaNombre(c.empresa_id).toLowerCase().includes(searchTerm.toLowerCase()));
+    }, [mmppState.conductores, mmppState.empresas, searchTerm]);
+
+    // Handlers
+    const handleSaveEmpresa = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!editingTransportista) return;
+        if (!editingEmpresa) return;
         setIsSaving(true);
         try {
-            await saveMMPPTransportista(editingTransportista as MMPPTransportista);
-            setIsModalOpen(false);
-        } catch (error) {
-            console.error("Error saving transportista:", error);
-            alert("Error al guardar transportista");
-        } finally {
-            setIsSaving(false);
-        }
+            await saveMMPPEmpresa(editingEmpresa);
+            setIsEmpresaModalOpen(false);
+        } catch (error) { alert("Error al guardar empresa"); } 
+        finally { setIsSaving(false); }
     };
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('¿Está seguro de eliminar este transportista?')) return;
+    const handleSaveVehiculo = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingVehiculo) return;
+        setIsSaving(true);
         try {
-            await deleteMMPPTransportista(id);
+            await saveMMPPVehiculo(editingVehiculo);
+            setIsVehiculoModalOpen(false);
+        } catch (error) { alert("Error al guardar vehiculo"); } 
+        finally { setIsSaving(false); }
+    };
+
+    const handleSaveConductor = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!editingConductor) return;
+        setIsSaving(true);
+        try {
+            await saveMMPPConductor(editingConductor);
+            setIsConductorModalOpen(false);
+        } catch (error) { alert("Error al guardar conductor"); } 
+        finally { setIsSaving(false); }
+    };
+
+    const handleDelete = async (id: string, type: 'empresa' | 'vehiculo' | 'conductor') => {
+        if (!confirm(`¿Está seguro de eliminar este registro?`)) return;
+        try {
+            if (type === 'empresa') await deleteMMPPEmpresa(id);
+            if (type === 'vehiculo') await deleteMMPPVehiculo(id);
+            if (type === 'conductor') await deleteMMPPConductor(id);
         } catch (error) {
-            console.error("Error deleting transportista:", error);
-            alert("Error al eliminar transportista");
+            alert("Error al eliminar. Verifique que no esté siendo usado en otros lugares.");
         }
     };
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50/50">
-            {/* Header Section */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 mt-2">
-                <div className="space-y-1">
-                    <h1 className="text-2xl font-black text-slate-800 tracking-tight">Catálogo de Transportistas</h1>
-                    <p className="text-xs font-medium text-slate-500 uppercase tracking-widest">Mantenimiento de Vehículos y Conductores MMPP</p>
-                </div>
-                
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative group">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 focus-within:text-[#ff0000] transition-colors" />
-                        <input 
-                            type="text"
-                            placeholder="Buscar transportista, placa..."
-                            className="pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm focus:ring-4 focus:ring-red-500/10 focus:border-red-500 outline-none w-full sm:w-80 transition-all shadow-sm"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                        />
+        <div className="p-8 min-h-screen bg-gray-50/50 space-y-6">
+            {/* HEADER */}
+            <div>
+                <h1 className="text-2xl font-bold tracking-tight text-gray-900">Catálogo de Transportistas</h1>
+                <p className="mt-1 text-sm text-gray-500">Mantenimiento de Empresas, Vehículos y Conductores MMPP</p>
+            </div>
+
+            {/* TABS */}
+            <div className="border-b border-gray-200">
+                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                    {(['empresas', 'vehiculos', 'conductores'] as const).map(tab => (
+                        <button
+                            key={tab}
+                            onClick={() => setActiveTab(tab)}
+                            className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2 transition-all capitalize ${
+                                activeTab === tab 
+                                    ? 'border-red-500 text-red-600' 
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                            }`}
+                        >
+                            {tab === 'empresas' && <Building2 className="h-5 w-5" />}
+                            {tab === 'vehiculos' && <Truck className="h-5 w-5" />}
+                            {tab === 'conductores' && <User className="h-5 w-5" />}
+                            {tab}
+                        </button>
+                    ))}
+                </nav>
+            </div>
+
+            {/* TOOLBAR */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="relative w-full sm:max-w-xs shrink-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder={`Buscar ${activeTab}...`}
+                        className="w-full rounded-lg border border-gray-300 py-2.5 pl-10 pr-20 text-sm focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all bg-white"
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                    />
+                    <div className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] text-gray-400 font-bold pointer-events-none uppercase">
+                        {activeTab === 'empresas' ? filteredEmpresas.length : activeTab === 'vehiculos' ? filteredVehiculos.length : filteredConductores.length} Res.
                     </div>
-                    <button 
-                        onClick={() => handleOpenModal()}
-                        className="flex items-center justify-center gap-2 px-4 py-2.5 bg-[#ff0000] text-white rounded-xl hover:bg-red-700 transition-all font-bold text-sm shadow-lg shadow-red-500/20 active:scale-95"
-                    >
-                        <Plus className="w-4 h-4" />
-                        Nuevo Transportista
-                    </button>
                 </div>
+
+                <button
+                    onClick={() => {
+                        if (activeTab === 'empresas') { setEditingEmpresa({ nombre: '' }); setIsEmpresaModalOpen(true); }
+                        if (activeTab === 'vehiculos') { setEditingVehiculo({ placa: '', empresa_id: mmppState.empresas[0]?.id || '' }); setIsVehiculoModalOpen(true); }
+                        if (activeTab === 'conductores') { setEditingConductor({ nombre: '', celular: '', empresa_id: mmppState.empresas[0]?.id || '' }); setIsConductorModalOpen(true); }
+                    }}
+                    className="shrink-0 inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-red-700 transition-colors w-full sm:w-auto justify-center shadow-sm active:scale-95"
+                >
+                    <Plus className="h-4 w-4" />
+                    Añadir {activeTab === 'empresas' ? 'Empresa' : activeTab === 'vehiculos' ? 'Vehículo' : 'Conductor'}
+                </button>
             </div>
 
             {/* Table Section */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden shadow-sm">
                 <div className="overflow-x-auto">
-                    <table className="w-full text-left border-collapse">
+                    <table className="w-full text-left border-collapse text-sm">
                         <thead>
-                            <tr className="bg-gray-50 border-b border-slate-200">
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Transportista</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Vehículo / Placa</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest">Conductor</th>
-                                <th className="px-6 py-4 text-[10px] font-black text-gray-500 uppercase tracking-widest text-right">Acciones</th>
+                            <tr className="bg-gray-50 border-b border-gray-200">
+                                {activeTab === 'empresas' && (
+                                    <>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Nombre de Empresa</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider text-right">Acciones</th>
+                                    </>
+                                )}
+                                {activeTab === 'vehiculos' && (
+                                    <>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Placa</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Empresa Asignada</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider text-right">Acciones</th>
+                                    </>
+                                )}
+                                {activeTab === 'conductores' && (
+                                    <>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Conductor</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Celular</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider">Empresa Asignada</th>
+                                        <th className="px-6 py-3 font-medium text-gray-500 uppercase tracking-wider text-right">Acciones</th>
+                                    </>
+                                )}
                             </tr>
                         </thead>
-                        <tbody className="divide-y divide-slate-100">
-                            {filteredTransportistas.length > 0 ? (
-                                filteredTransportistas.map((t) => (
-                                    <tr key={t.id} className="hover:bg-slate-50/50 transition-colors group">
-                                        <td className="px-6 py-4 font-bold text-slate-700 uppercase">{t.nombre}</td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex items-center gap-2">
-                                                <CreditCard className="w-4 h-4 text-slate-400" />
-                                                <span className="font-mono text-sm font-bold bg-slate-100 px-2 py-0.5 rounded text-slate-600 tracking-wider">
-                                                    {t.placa}
-                                                </span>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4">
-                                            <div className="flex flex-col">
-                                                <div className="flex items-center gap-2">
-                                                    <User className="w-3 h-3 text-slate-400" />
-                                                    <span className="text-sm font-bold text-slate-700 uppercase leading-tight">{t.conductor}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <Smartphone className="w-3 h-3 text-green-500/60" />
-                                                    <span className="text-[10px] font-black text-slate-400 tracking-wider">{t.celular}</span>
-                                                </div>
-                                            </div>
-                                        </td>
-                                        <td className="px-6 py-4 text-right">
-                                            <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <button 
-                                                    onClick={() => handleOpenModal(t)}
-                                                    className="p-2 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                                    title="Editar"
-                                                >
-                                                    <Edit2 className="w-4 h-4" />
-                                                </button>
-                                                <button 
-                                                    onClick={() => handleDelete(t.id)}
-                                                    className="p-2 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                                    title="Eliminar"
-                                                >
-                                                    <Trash2 className="w-4 h-4" />
-                                                </button>
-                                            </div>
-                                        </td>
-                                    </tr>
-                                ))
-                            ) : (
+                        <tbody className="divide-y divide-gray-200">
+                            {/* EMPRESAS TAB */}
+                            {activeTab === 'empresas' && filteredEmpresas.map((t) => (
+                                <tr key={t.id} className="hover:bg-gray-50 transition-colors group">
+                                    <td className="px-6 py-4 font-semibold text-gray-900 uppercase">
+                                        <div className="flex items-center gap-2">
+                                            <Building2 className="w-4 h-4 text-gray-400" />
+                                            {t.nombre}
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => { setEditingEmpresa(t); setIsEmpresaModalOpen(true); }} className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDelete(t.id, 'empresa')} className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+
+                            {/* VEHICULOS TAB */}
+                            {activeTab === 'vehiculos' && filteredVehiculos.map((v) => (
+                                <tr key={v.id} className="hover:bg-gray-50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <span className="font-mono font-bold bg-gray-100 px-2 py-1 rounded text-gray-700 tracking-wider">
+                                            {v.placa}
+                                        </span>
+                                    </td>
+                                    <td className="px-6 py-4 font-medium text-gray-600 uppercase">
+                                        {getEmpresaNombre(v.empresa_id)}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => { setEditingVehiculo(v); setIsVehiculoModalOpen(true); }} className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDelete(v.id, 'vehiculo')} className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+
+                            {/* CONDUCTORES TAB */}
+                            {activeTab === 'conductores' && filteredConductores.map((c) => (
+                                <tr key={c.id} className="hover:bg-gray-50 transition-colors group">
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <User className="w-4 h-4 text-gray-400" />
+                                            <span className="font-semibold text-gray-900 uppercase">{c.nombre}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4">
+                                        <div className="flex items-center gap-2">
+                                            <Smartphone className="w-4 h-4 text-emerald-500" />
+                                            <span className="font-medium text-gray-600">{c.celular}</span>
+                                        </div>
+                                    </td>
+                                    <td className="px-6 py-4 font-medium text-gray-600 uppercase">
+                                        {getEmpresaNombre(c.empresa_id)}
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <div className="flex justify-end gap-2">
+                                            <button onClick={() => { setEditingConductor(c); setIsConductorModalOpen(true); }} className="p-1.5 rounded-md text-gray-400 hover:text-blue-600 hover:bg-blue-50 transition-colors"><Edit2 className="w-4 h-4" /></button>
+                                            <button onClick={() => handleDelete(c.id, 'conductor')} className="p-1.5 rounded-md text-gray-400 hover:text-red-600 hover:bg-red-50 transition-colors"><Trash2 className="w-4 h-4" /></button>
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+
+                            {/* Empty State */}
+                            {((activeTab === 'empresas' && filteredEmpresas.length === 0) || 
+                              (activeTab === 'vehiculos' && filteredVehiculos.length === 0) || 
+                              (activeTab === 'conductores' && filteredConductores.length === 0)) && (
                                 <tr>
-                                    <td colSpan={4} className="px-6 py-12 text-center text-slate-400 bg-white">
-                                        {mmppState.loading ? (
-                                            <div className="flex flex-col items-center gap-3">
-                                                <Loader2 className="w-8 h-8 animate-spin text-red-500" />
-                                                <span className="text-sm font-medium">Cargando transportistas...</span>
+                                    <td colSpan={4} className="px-6 py-12 text-center text-gray-400 bg-white">
+                                        <div className="flex flex-col items-center gap-3">
+                                            <div className="p-4 bg-gray-50 rounded-full">
+                                                <Truck className="w-10 h-10 text-gray-200" />
                                             </div>
-                                        ) : (
-                                            <div className="flex flex-col items-center gap-3">
-                                                <Truck className="w-12 h-12 text-slate-200" />
-                                                <span className="text-sm uppercase tracking-wider">No se encontraron transportistas</span>
-                                            </div>
-                                        )}
+                                            <span className="text-sm font-medium uppercase tracking-wider">No se encontraron registros</span>
+                                        </div>
                                     </td>
                                 </tr>
                             )}
@@ -163,80 +261,96 @@ export const TransportistasMMPP: React.FC = () => {
                 </div>
             </div>
 
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
-                    <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg overflow-hidden border border-slate-200 animate-in fade-in zoom-in duration-200">
-                        <div className="flex items-center justify-between p-5 border-b border-slate-100 bg-slate-50">
-                            <h2 className="text-sm font-black text-slate-800 uppercase tracking-widest leading-none">
-                                {editingTransportista?.id ? 'Editar Transportista' : 'Nuevo Transportista'}
+            {/* Modals from before (Keep them consistent) */}
+            {/* Modal: EMPRESAS */}
+            {isEmpresaModalOpen && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-200 shadow-2xl">
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50">
+                            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                                {editingEmpresa?.id ? 'Editar Empresa' : 'Nueva Empresa'}
                             </h2>
-                            <button onClick={() => setIsModalOpen(false)} className="p-1.5 hover:bg-slate-200 rounded-full transition-colors">
-                                <X className="w-5 h-5 text-slate-500" />
-                            </button>
+                            <button onClick={() => setIsEmpresaModalOpen(false)} className="p-1.5 hover:bg-gray-200 rounded-full transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
                         </div>
-
-                        <form onSubmit={handleSave} className="p-6 space-y-4">
-                            <div className="grid grid-cols-1 gap-4">
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest leading-none">Nombre del Transportista (Empresa)</label>
-                                    <input 
-                                        type="text" 
-                                        required
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-bold text-sm"
-                                        value={editingTransportista?.nombre || ''}
-                                        onChange={(e) => setEditingTransportista({...editingTransportista!, nombre: e.target.value.toUpperCase()})}
-                                    />
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest leading-none">Placa de Vehículo</label>
-                                        <input 
-                                            type="text" 
-                                            required
-                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-bold text-sm"
-                                            value={editingTransportista?.placa || ''}
-                                            onChange={(e) => setEditingTransportista({...editingTransportista!, placa: e.target.value.toUpperCase()})}
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest leading-none">Celular del Conductor</label>
-                                        <input 
-                                            type="text" 
-                                            required
-                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-bold text-sm"
-                                            value={editingTransportista?.celular || ''}
-                                            onChange={(e) => setEditingTransportista({...editingTransportista!, celular: e.target.value})}
-                                        />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="block text-[10px] font-black text-slate-500 uppercase mb-1.5 tracking-widest leading-none">Nombre del Conductor</label>
-                                    <input 
-                                        type="text" 
-                                        required
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-bold text-sm"
-                                        value={editingTransportista?.conductor || ''}
-                                        onChange={(e) => setEditingTransportista({...editingTransportista!, conductor: e.target.value.toUpperCase()})}
-                                    />
-                                </div>
+                        <form onSubmit={handleSaveEmpresa} className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Nombre de la Empresa</label>
+                                <input type="text" required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm" value={editingEmpresa?.nombre || ''} onChange={(e) => setEditingEmpresa({ ...editingEmpresa!, nombre: e.target.value.toUpperCase() })} />
                             </div>
-
-                            <div className="flex justify-end gap-3 mt-8 pt-4 border-t border-slate-100">
-                                <button 
-                                    type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 text-xs font-black text-slate-500 hover:bg-slate-50 rounded-xl transition-colors uppercase tracking-widest"
-                                >
-                                    Cancelar
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                                <button type="button" onClick={() => setIsEmpresaModalOpen(false)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 rounded-xl transition-colors uppercase">Cancelar</button>
+                                <button type="submit" disabled={isSaving} className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-bold text-sm border border-red-700 disabled:opacity-50">
+                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
                                 </button>
-                                <button 
-                                    type="submit"
-                                    disabled={isSaving}
-                                    className="flex items-center gap-2 px-6 py-2 bg-[#ff0000] text-white rounded-xl hover:bg-red-700 transition-all font-bold text-sm shadow-lg shadow-red-500/20 disabled:opacity-50"
-                                >
-                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    Guardar Transportista
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: VEHICULO */}
+            {isVehiculoModalOpen && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-200 shadow-2xl">
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50">
+                            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                                {editingVehiculo?.id ? 'Editar Vehículo' : 'Nuevo Vehículo'}
+                            </h2>
+                            <button onClick={() => setIsVehiculoModalOpen(false)} className="p-1.5 hover:bg-gray-200 rounded-full transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+                        </div>
+                        <form onSubmit={handleSaveVehiculo} className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Placa</label>
+                                <input type="text" required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm" value={editingVehiculo?.placa || ''} onChange={(e) => setEditingVehiculo({ ...editingVehiculo!, placa: e.target.value.toUpperCase() })} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Empresa</label>
+                                <select required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm" value={editingVehiculo?.empresa_id || ''} onChange={(e) => setEditingVehiculo({ ...editingVehiculo!, empresa_id: e.target.value })}>
+                                    <option value="" disabled>SELECCIONAR EMPRESA...</option>
+                                    {mmppState.empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                                <button type="button" onClick={() => setIsVehiculoModalOpen(false)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 rounded-xl transition-colors uppercase">Cancelar</button>
+                                <button type="submit" disabled={isSaving} className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-bold text-sm border border-red-700 disabled:opacity-50">
+                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Modal: CONDUCTOR */}
+            {isConductorModalOpen && (
+                <div className="fixed inset-0 z-[10000] flex items-center justify-center bg-black/50 p-4">
+                    <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden border border-gray-200 animate-in fade-in zoom-in duration-200 shadow-2xl">
+                        <div className="flex items-center justify-between p-5 border-b border-gray-100 bg-gray-50">
+                            <h2 className="text-sm font-bold text-gray-800 uppercase tracking-wide">
+                                {editingConductor?.id ? 'Editar Conductor' : 'Nuevo Conductor'}
+                            </h2>
+                            <button onClick={() => setIsConductorModalOpen(false)} className="p-1.5 hover:bg-gray-200 rounded-full transition-colors"><X className="w-5 h-5 text-gray-500" /></button>
+                        </div>
+                        <form onSubmit={handleSaveConductor} className="p-5 space-y-4">
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Nombre (Nombre Apellidos)</label>
+                                <input type="text" required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm" value={editingConductor?.nombre || ''} onChange={(e) => setEditingConductor({ ...editingConductor!, nombre: e.target.value.toUpperCase() })} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Celular</label>
+                                <input type="text" required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm" value={editingConductor?.celular || ''} onChange={(e) => setEditingConductor({ ...editingConductor!, celular: e.target.value })} />
+                            </div>
+                            <div>
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase mb-1.5 tracking-wide">Empresa</label>
+                                <select required className="w-full px-3 py-2 bg-white border border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm" value={editingConductor?.empresa_id || ''} onChange={(e) => setEditingConductor({ ...editingConductor!, empresa_id: e.target.value })}>
+                                    <option value="" disabled>SELECCIONAR EMPRESA...</option>
+                                    {mmppState.empresas.map(emp => <option key={emp.id} value={emp.id}>{emp.nombre}</option>)}
+                                </select>
+                            </div>
+                            <div className="flex justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
+                                <button type="button" onClick={() => setIsConductorModalOpen(false)} className="px-4 py-2 text-xs font-bold text-gray-500 hover:bg-gray-50 rounded-xl transition-colors uppercase">Cancelar</button>
+                                <button type="submit" disabled={isSaving} className="flex items-center gap-2 px-6 py-2 bg-red-600 text-white rounded-xl hover:bg-red-700 transition-all font-bold text-sm border border-red-700 disabled:opacity-50">
+                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Guardar
                                 </button>
                             </div>
                         </form>
