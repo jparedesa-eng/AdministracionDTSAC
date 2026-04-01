@@ -2,9 +2,11 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Edit2, Trash2, Plus, Search, Loader2, X, Save, Clock } from 'lucide-react';
 import type { MMPPRouteTime } from '../../store/monitoreoMMPPStore';
 import { getMMPPState, subscribeMMPP, fetchMMPPRouteTimes, saveMMPPRouteTime, deleteMMPPRouteTime } from '../../store/monitoreoMMPPStore';
+import { getSedesState, subscribeSedes } from '../../store/sedesStore';
 
 export const TiemposRutaMMPP: React.FC = () => {
     const [state, setState] = useState(getMMPPState());
+    const [sedesState, setSedesState] = useState(getSedesState());
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingRoute, setEditingRoute] = useState<Partial<MMPPRouteTime> | null>(null);
     const [searchTerm, setSearchTerm] = useState('');
@@ -12,8 +14,12 @@ export const TiemposRutaMMPP: React.FC = () => {
 
     useEffect(() => {
         const unsubscribe = subscribeMMPP(() => setState({ ...getMMPPState() }));
+        const unsubscribeSedes = subscribeSedes(() => setSedesState({ ...getSedesState() }));
         fetchMMPPRouteTimes();
-        return () => unsubscribe();
+        return () => {
+            unsubscribe();
+            unsubscribeSedes();
+        };
     }, []);
 
     const filteredRoutes = useMemo(() => {
@@ -31,7 +37,7 @@ export const TiemposRutaMMPP: React.FC = () => {
             destino: '',
             tiempo_min: 0,
             tiempo_max: 0,
-            tipo_ruta: 'CAMPO'
+            tipo_ruta: 'ACTIVO'
         });
         setIsModalOpen(true);
     };
@@ -187,13 +193,15 @@ export const TiemposRutaMMPP: React.FC = () => {
                             <div className="grid grid-cols-1 gap-4">
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Empresa</label>
-                                    <input
-                                        type="text"
+                                    <select
                                         required
-                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm"
-                                        value={editingRoute?.empresa || ''}
-                                        onChange={(e) => setEditingRoute({ ...editingRoute!, empresa: e.target.value.toUpperCase() })}
-                                    />
+                                        className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm cursor-pointer"
+                                        value={editingRoute?.empresa || 'DANPER'}
+                                        onChange={(e) => setEditingRoute({ ...editingRoute!, empresa: e.target.value })}
+                                    >
+                                        <option value="DANPER">DANPER</option>
+                                        <option value="ESCOSAC">ESCOSAC</option>
+                                    </select>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
                                     <div>
@@ -208,13 +216,17 @@ export const TiemposRutaMMPP: React.FC = () => {
                                     </div>
                                     <div>
                                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Destino</label>
-                                        <input
-                                            type="text"
+                                        <select
                                             required
-                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm cursor-pointer z-10"
                                             value={editingRoute?.destino || ''}
-                                            onChange={(e) => setEditingRoute({ ...editingRoute!, destino: e.target.value.toUpperCase() })}
-                                        />
+                                            onChange={(e) => setEditingRoute({ ...editingRoute!, destino: e.target.value })}
+                                        >
+                                            <option value="">SELECCIONE...</option>
+                                            {sedesState.sedes.sort((a,b) => a.nombre.localeCompare(b.nombre)).map(s => (
+                                                <option key={s.id} value={s.nombre}>{s.nombre}</option>
+                                            ))}
+                                        </select>
                                     </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-4">
@@ -222,13 +234,12 @@ export const TiemposRutaMMPP: React.FC = () => {
                                         <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Estado Ruta</label>
                                         <select
                                             required
-                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm"
+                                            className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm cursor-pointer"
                                             value={editingRoute?.tipo_ruta || ''}
                                             onChange={(e) => setEditingRoute({ ...editingRoute!, tipo_ruta: e.target.value })}
                                         >
-                                            <option value="CAMPO">CAMPO</option>
-                                            <option value="TALLER">TALLER</option>
-                                            <option value="ADMINISTRATIVA">ADMINISTRATIVA</option>
+                                            <option value="ACTIVO">ACTIVO</option>
+                                            <option value="INACTIVO">INACTIVO</option>
                                         </select>
                                     </div>
                                     <div className="grid grid-cols-2 gap-2">

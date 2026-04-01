@@ -72,6 +72,11 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
   const navigate = useNavigate();
   const { profile } = useAuth();
 
+  const isPathActive = (path?: string) => {
+    if (!path) return false;
+    return location.pathname === path || location.pathname.startsWith(path + '/');
+  };
+
   // NOTE: If logout is not in useAuth based on previous code (it wasn't used), we can't add it yet.
   // The previous code didn't have logout in the Sidebar. I will stick to what was there or check AuthContext if I could.
   // For now I will omit logout action if not present in previous usage, but add the button UI.
@@ -351,10 +356,10 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
       group.items.forEach(item => {
         if (item.subItems) {
           // Check if any subitem matches current path
-          if (item.subItems.some(sub => location.pathname.startsWith(sub.path || '###'))) {
+          if (item.subItems.some(sub => isPathActive(sub.path))) {
             activePaths.add(item.id);
           }
-        } else if (item.path && location.pathname.startsWith(item.path)) {
+        } else if (isPathActive(item.path)) {
           // Single item, no strict expansion needed usually but good to know
         }
       });
@@ -406,9 +411,9 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
 
   // Active item check
   const isItemActive = (item: NavItem) => {
-    if (item.path && location.pathname.startsWith(item.path)) return true;
+    if (isPathActive(item.path)) return true;
     if (item.subItems) {
-      return item.subItems.some(sub => sub.path && location.pathname.startsWith(sub.path));
+      return item.subItems.some(sub => isPathActive(sub.path));
     }
     return false;
   };
@@ -510,29 +515,31 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
                             <div className="pl-4 mt-1 space-y-0.5 relative">
                               <div className="absolute left-[22px] top-0 bottom-2 w-px bg-slate-200" />
                               {item.subItems?.map(sub => {
+                                const isActiveMatch = isPathActive(sub.path);
                                 return <NavLink
                                   key={sub.id}
                                   to={sub.path!}
                                   onClick={onClose}
+                                  end
                                   className={({ isActive }) => clsx(
                                     "group flex items-center gap-3 px-3 py-2 rounded-lg text-sm relative z-10 ml-2 transition-colors",
-                                    isActive
+                                    (isActive || isActiveMatch)
                                       ? "text-red-700 bg-red-50/50 font-medium"
                                       : "text-slate-500 hover:text-slate-900 hover:bg-slate-50"
                                   )}
                                 >
-                                  {({ isActive }) => (
+                                  {() => (
                                     <>
                                       {/* Replaced dot with Icon */}
                                       {sub.icon ? (
                                         <sub.icon className={clsx(
                                           "h-4 w-4 transition-colors",
-                                          isActive ? "text-red-600" : "text-slate-400"
+                                          isActiveMatch ? "text-red-600" : "text-slate-400"
                                         )} />
                                       ) : (
                                         <div className={clsx(
                                           "w-1.5 h-1.5 rounded-full transition-colors",
-                                          isActive ? "bg-red-600 ring-2 ring-red-100" : "bg-slate-300 group-hover:bg-slate-400"
+                                          isActiveMatch ? "bg-red-600 ring-2 ring-red-100" : "bg-slate-300 group-hover:bg-slate-400"
                                         )} />
                                       )}
                                       <span className="truncate">{sub.label}</span>
@@ -608,12 +615,13 @@ export default function Sidebar({ open, onClose, collapsed = false, onToggle }: 
           </div>
           <div className="flex flex-col p-1">
             {activePopupItem.subItems?.map(sub => {
-              const isSubActive = sub.path && location.pathname.startsWith(sub.path);
+              const isSubActive = isPathActive(sub.path);
               return (
                 <NavLink
                   key={sub.id}
                   to={sub.path!}
                   onClick={() => setHoveredItem(null)}
+                  end
                   className={clsx(
                     "text-left px-3 py-2 rounded-lg text-sm transition-colors flex items-center gap-2",
                     isSubActive

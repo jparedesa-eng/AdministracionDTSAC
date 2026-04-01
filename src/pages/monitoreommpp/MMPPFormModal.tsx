@@ -105,7 +105,7 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
 
     const availableConductores = useMemo(() => {
         if (!selectedEmpresaId) return [];
-        return mmppState.conductores.filter(c => c.empresa_id === selectedEmpresaId).sort((a,b) => a.nombre.localeCompare(b.nombre));
+        return mmppState.conductores.filter(c => c.empresa_id === selectedEmpresaId).sort((a, b) => a.nombre.localeCompare(b.nombre));
     }, [selectedEmpresaId, mmppState.conductores]);
 
     const handleTransportistaChange = (nombre: string) => {
@@ -131,7 +131,7 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        
+
         if (form.resguardo && !form.nombre_resguardo.trim()) {
             if (onShowToast) {
                 onShowToast('error', 'Por favor, ingrese el nombre del resguardo.');
@@ -194,10 +194,10 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Operador CCTV</label>
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 value={form.operador_cctv}
-                                onChange={(e) => setForm({...form, operador_cctv: e.target.value.toUpperCase()})}
+                                onChange={(e) => setForm({ ...form, operador_cctv: e.target.value.toUpperCase() })}
                                 className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm text-slate-700 transition-all"
                                 placeholder="..."
                                 required
@@ -206,9 +206,9 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Empresa</label>
-                            <select 
+                            <select
                                 value={form.empresa}
-                                onChange={(e) => setForm({...form, empresa: e.target.value, origen: '', destino: ''})}
+                                onChange={(e) => setForm({ ...form, empresa: e.target.value, origen: '', destino: '' })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer"
                             >
                                 <option value="DANPER">DANPER</option>
@@ -217,9 +217,9 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Materia Prima</label>
-                            <select 
+                            <select
                                 value={form.materia_prima}
-                                onChange={(e) => setForm({...form, materia_prima: e.target.value})}
+                                onChange={(e) => setForm({ ...form, materia_prima: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer"
                                 required
                             >
@@ -228,14 +228,16 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                                 <option value="PIMIENTO">PIMIENTO</option>
                                 <option value="UVA">UVA</option>
                                 <option value="ESPARRAGO">ESPARRAGO</option>
+                                <option value="PIÑA">PIÑA</option>
+                                <option value="ALCACHOFA">ALCACHOFA</option>
                             </select>
                         </div>
 
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Origen</label>
-                            <select 
+                            <select
                                 value={form.origen}
-                                onChange={(e) => setForm({...form, origen: e.target.value, destino: ''})}
+                                onChange={(e) => setForm({ ...form, origen: e.target.value, destino: '' })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer uppercase"
                                 required
                             >
@@ -245,9 +247,9 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Destino</label>
-                            <select 
+                            <select
                                 value={form.destino}
-                                onChange={(e) => setForm({...form, destino: e.target.value})}
+                                onChange={(e) => setForm({ ...form, destino: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer uppercase"
                                 required
                             >
@@ -257,9 +259,9 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Frecuencia</label>
-                            <select 
+                            <select
                                 value={form.frecuencia}
-                                onChange={(e) => setForm({...form, frecuencia: e.target.value})}
+                                onChange={(e) => setForm({ ...form, frecuencia: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer"
                             >
                                 <option value="EN LINEA">EN LINEA</option>
@@ -269,27 +271,27 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
 
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Fecha/Hora Origen</label>
-                            <input 
-                                type="datetime-local" 
+                            <input
+                                type="datetime-local"
                                 value={form.fecha_hora_origen}
-                                onChange={(e) => setForm({...form, fecha_hora_origen: e.target.value})}
+                                onChange={(e) => setForm({ ...form, fecha_hora_origen: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all"
                                 required
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Inicio Monitoreo</label>
-                            <input 
-                                type="datetime-local" 
+                            <input
+                                type="datetime-local"
                                 value={form.inicio_monitoreo}
-                                onChange={(e) => setForm({...form, inicio_monitoreo: e.target.value})}
+                                onChange={(e) => setForm({ ...form, inicio_monitoreo: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all"
                                 required
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Transportista</label>
-                            <select 
+                            <select
                                 value={form.transportista}
                                 onChange={(e) => handleTransportistaChange(e.target.value)}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all cursor-pointer uppercase"
@@ -302,9 +304,9 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
 
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Placa</label>
-                            <select 
+                            <select
                                 value={form.placa}
-                                onChange={(e) => setForm({...form, placa: e.target.value})}
+                                onChange={(e) => setForm({ ...form, placa: e.target.value })}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm text-slate-700 transition-all cursor-pointer"
                                 required
                             >
@@ -314,7 +316,7 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Conductor</label>
-                            <select 
+                            <select
                                 value={form.conductor}
                                 onChange={(e) => handleConductorChange(e.target.value)}
                                 className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm text-slate-700 transition-all cursor-pointer"
@@ -326,8 +328,8 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Celular Conductor</label>
-                            <input 
-                                type="text" 
+                            <input
+                                type="text"
                                 value={form.celular_conductor}
                                 className="w-full px-3 py-2.5 bg-slate-100 border border-slate-200 rounded-xl outline-none font-semibold text-sm text-slate-500 transition-all"
                                 readOnly
@@ -336,54 +338,77 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
 
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Parihuelas / Pallets</label>
-                            <input 
-                                type="number" 
-                                value={form.parihuelas_pallets}
-                                onChange={(e) => setForm({...form, parihuelas_pallets: parseInt(e.target.value) || 0})}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all"
+                            <input
+                                type="number"
+                                min="0"
+                                value={form.parihuelas_pallets === 0 ? '' : form.parihuelas_pallets}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    setForm({ ...form, parihuelas_pallets: isNaN(val) || val < 0 ? 0 : val });
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === '-' || e.key === 'e') e.preventDefault();
+                                }}
+                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all placeholder-slate-300"
+                                placeholder="0"
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Jabas / Bines</label>
-                            <input 
-                                type="number" 
-                                value={form.jabas_bines}
-                                onChange={(e) => setForm({...form, jabas_bines: parseInt(e.target.value) || 0})}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all"
+                            <input
+                                type="number"
+                                min="0"
+                                value={form.jabas_bines === 0 ? '' : form.jabas_bines}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    setForm({ ...form, jabas_bines: isNaN(val) || val < 0 ? 0 : val });
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === '-' || e.key === 'e') e.preventDefault();
+                                }}
+                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all placeholder-slate-300"
+                                placeholder="0"
                             />
                         </div>
                         <div>
                             <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Peso Neto/Bruto (KG)</label>
-                            <input 
-                                type="number" 
-                                value={form.peso_neto_bruto}
-                                onChange={(e) => setForm({...form, peso_neto_bruto: parseFloat(e.target.value) || 0})}
-                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all"
+                            <input
+                                type="number"
+                                min="0"
+                                step="any"
+                                value={form.peso_neto_bruto === 0 ? '' : form.peso_neto_bruto}
+                                onChange={(e) => {
+                                    const val = parseFloat(e.target.value);
+                                    setForm({ ...form, peso_neto_bruto: isNaN(val) || val < 0 ? 0 : val });
+                                }}
+                                onKeyDown={(e) => {
+                                    if (e.key === '-') e.preventDefault();
+                                }}
+                                className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm text-slate-700 transition-all placeholder-slate-300"
+                                placeholder="0"
                             />
                         </div>
 
                         <div className="flex flex-col gap-1.5">
                             <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wide">Resguardo (SI/NO)</label>
                             <div className="grid grid-cols-2 gap-2 h-[42px]">
-                                <button 
+                                <button
                                     type="button"
-                                    onClick={() => setForm({...form, resguardo: true})}
-                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${
-                                        form.resguardo 
-                                            ? 'bg-red-600 text-white border-red-700' 
-                                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                                    }`}
+                                    onClick={() => setForm({ ...form, resguardo: true })}
+                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${form.resguardo
+                                        ? 'bg-red-500 text-white border-red-700'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                                        }`}
                                 >
                                     SÍ
                                 </button>
-                                <button 
+                                <button
                                     type="button"
-                                    onClick={() => setForm({...form, resguardo: false})}
-                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${
-                                        !form.resguardo 
-                                            ? 'bg-slate-800 text-white border-slate-900' 
-                                            : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
-                                    }`}
+                                    onClick={() => setForm({ ...form, resguardo: false })}
+                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${!form.resguardo
+                                        ? 'bg-red-500 text-white border-red-700'
+                                        : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
+                                        }`}
                                 >
                                     NO
                                 </button>
@@ -393,13 +418,13 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                         {form.resguardo && (
                             <div className="md:col-span-2 animate-in fade-in slide-in-from-left-2 duration-200">
                                 <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Nombre Resguardo</label>
-                                <input 
-                                    type="text" 
+                                <input
+                                    type="text"
                                     required={form.resguardo}
                                     placeholder="NOMBRE DEL PERSONAL DE RESGUARDO"
                                     value={form.nombre_resguardo}
-                                    onChange={(e) => setForm({...form, nombre_resguardo: e.target.value.toUpperCase()})}
-                                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm text-slate-700 transition-all"
+                                    onChange={(e) => setForm({ ...form, nombre_resguardo: e.target.value.toUpperCase() })}
+                                    className="w-full px-3 py-2.5 bg-white border border-slate-200 rounded-xl focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none uppercase font-semibold text-sm text-slate-700 transition-all border-red-500"
                                 />
                             </div>
                         )}
@@ -408,11 +433,11 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                             <>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Fecha/Hora Llegada</label>
-                                    <input 
-                                        type="datetime-local" 
+                                    <input
+                                        type="datetime-local"
                                         value={form.fecha_hora_llegada}
                                         onChange={(e) => setForm({
-                                            ...form, 
+                                            ...form,
                                             fecha_hora_llegada: e.target.value,
                                             estado: e.target.value ? 'FINALIZADO' : form.estado
                                         })}
@@ -421,14 +446,14 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                                 </div>
                                 <div>
                                     <label className="block text-xs font-semibold text-slate-500 uppercase mb-1.5 tracking-wide">Estado</label>
-                                    <select 
+                                    <select
                                         value={form.estado}
-                                        onChange={(e) => setForm({...form, estado: e.target.value})}
-                                        className={`w-full px-3 py-2.5 rounded-xl border focus:ring-2 focus:ring-red-500/10 outline-none font-semibold text-sm transition-all cursor-pointer ${
-                                            form.estado === 'FINALIZADO' ? 'border-green-300 bg-green-50 text-green-700' :
+                                        onChange={(e) => setForm({ ...form, estado: e.target.value })}
+                                        disabled
+                                        className={`w-full px-3 py-2.5 rounded-xl border focus:ring-2 focus:ring-red-500/10 outline-none font-semibold text-sm transition-all cursor-not-allowed opacity-80 ${form.estado === 'FINALIZADO' ? 'border-green-300 bg-green-50 text-green-700' :
                                             form.estado === 'EN RUTA' ? 'border-blue-300 bg-blue-50 text-blue-700' :
-                                            'border-red-300 bg-red-50 text-red-700'
-                                        }`}
+                                                'border-red-300 bg-red-50 text-red-700'
+                                            }`}
                                     >
                                         <option value="EN RUTA">EN RUTA</option>
                                         <option value="FINALIZADO">FINALIZADO</option>
@@ -440,14 +465,14 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                     </div>
 
                     <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
-                        <button 
-                            type="button" 
+                        <button
+                            type="button"
                             onClick={onClose}
                             className="px-6 py-2.5 text-slate-500 font-semibold text-xs uppercase tracking-wide hover:bg-slate-50 rounded-xl border border-transparent hover:border-slate-200 transition-all"
                         >
                             Cancelar
                         </button>
-                        <button 
+                        <button
                             type="submit"
                             disabled={loading}
                             className="flex items-center gap-2 px-8 py-2.5 bg-red-600 text-white font-semibold text-xs uppercase tracking-wide rounded-xl hover:bg-red-700 border border-red-700 shadow-md transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
