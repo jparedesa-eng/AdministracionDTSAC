@@ -37,7 +37,7 @@ export interface ValidationResult {
 
 export interface PlanTelefonico {
     id: string;
-    operador: 'CLARO' | 'ENTEL' | 'MOVISTAR';
+    operador: 'CLARO' | 'ENTEL' | 'MOVISTAR' | 'BITEL';
     nombre: string; // e.g. "Plan 29.90"
     costo: number;
     gigas: string; // e.g. "10GB", "Ilimitado"
@@ -102,7 +102,7 @@ export interface FacturaItem {
 export interface Factura {
     id: string;
     numero_factura: string;
-    proveedor: 'CLARO' | 'ENTEL';
+    proveedor: 'CLARO' | 'ENTEL' | 'BITEL';
     fecha_compra: string;
     monto: number;
     cantidad_total?: number;

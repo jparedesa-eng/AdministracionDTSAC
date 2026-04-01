@@ -2994,6 +2994,7 @@ export default function InventarioTelefonia() {
                                             <option value="MOVISTAR">MOVISTAR</option>
                                             <option value="CLARO">CLARO</option>
                                             <option value="ENTEL">ENTEL</option>
+                                            <option value="BITEL">BITEL</option>
                                         </select>
                                     </div>
                                 </div>
@@ -3040,6 +3041,7 @@ export default function InventarioTelefonia() {
                             <option value="MOVISTAR">MOVISTAR</option>
                             <option value="CLARO">CLARO</option>
                             <option value="ENTEL">ENTEL</option>
+                            <option value="BITEL">BITEL</option>
                         </select>
                     </div>
                     <div>
@@ -3101,6 +3103,7 @@ export default function InventarioTelefonia() {
                             <option value="CLARO">CLARO</option>
                             <option value="MOVISTAR">MOVISTAR</option>
                             <option value="ENTEL">ENTEL</option>
+                            <option value="BITEL">BITEL</option>
                         </select>
                     </div>
 
