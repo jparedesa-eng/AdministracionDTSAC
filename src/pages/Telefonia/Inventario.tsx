@@ -1663,7 +1663,8 @@ export default function InventarioTelefonia() {
                                                         <div className="text-xs">
                                                             <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
                                                                 item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
-                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 'text-gray-600'
+                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 
+                                                                        item.chip.plan.operador === 'BITEL' ? 'text-yellow-600' : 'text-gray-600'
                                                                 }`}>
                                                                 {item.chip.plan.operador}
                                                             </div>
@@ -1945,7 +1946,9 @@ export default function InventarioTelefonia() {
                                             <td className="px-6 py-4 whitespace-nowrap">
                                                 <span className={`px-2 py-1 rounded text-xs font-bold ${item.operador === 'CLARO' ? 'bg-red-100 text-red-800' :
                                                     item.operador === 'MOVISTAR' ? 'bg-blue-100 text-blue-800' :
-                                                        'bg-orange-100 text-orange-800'
+                                                        item.operador === 'ENTEL' ? 'bg-orange-100 text-orange-800' :
+                                                            item.operador === 'BITEL' ? 'bg-yellow-100 text-yellow-800' :
+                                                                'bg-slate-100 text-slate-800'
                                                     }`}>
                                                     {item.operador}
                                                 </span>

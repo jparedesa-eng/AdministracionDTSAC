@@ -13,7 +13,7 @@ import type { ToastState, ToastType } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes, upsertSede, type Sede } from "../../store/sedesStore";
 
 const PAGE_SIZE = 10;
-const OPERATORS = ["ENTEL", "CLARO"];
+const OPERATORS = ["ENTEL", "CLARO", "BITEL"];
 
 export default function CoberturaOperadores() {
     const [, setVersion] = useState(0);
