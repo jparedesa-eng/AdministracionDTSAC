@@ -129,7 +129,7 @@ export async function fetchMMPPRecords(): Promise<void> {
             .from(TABLE_MMPP)
             .select(`
                 *,
-                ${TABLE_UBICACIONES} (*)
+                ubicaciones:${TABLE_UBICACIONES} (*)
             `)
             .order('created_at', { ascending: false });
 
@@ -187,14 +187,15 @@ export async function deleteMMPPRecord(id: string): Promise<void> {
     }
 }
 
-export async function addMMPPUbicacion(recordId: string, location: string, userId: string): Promise<void> {
+export async function addMMPPUbicacion(recordId: string, location: string, userId: string, timestamp: string): Promise<void> {
     try {
         const { error } = await supabase
             .from(TABLE_UBICACIONES)
             .insert({
                 monitoreo_mmpp_id: recordId,
                 ubicacion: location,
-                usuario_id: userId
+                usuario_id: userId,
+                timestamp: timestamp
             });
 
         if (error) throw error;
