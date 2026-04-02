@@ -15,6 +15,10 @@ export type Camara = {
     fecha_instalacion?: string | null;
     area?: string | null;
     activa: boolean;
+    sustentacion_empleo?: string | null;
+    responsable_control?: string | null;
+    criticidad?: "ALTA" | "MEDIA" | "BAJA" | null;
+    foto_enfoque_url?: string | null;
     created_at?: string | null;
 };
 
@@ -85,6 +89,10 @@ export async function refreshCamaras(): Promise<void> {
         fecha_instalacion: row.fecha_instalacion as string | null,
         area: row.area as string | null,
         activa: row.activa as boolean,
+        sustentacion_empleo: row.sustentacion_empleo as string | null,
+        responsable_control: row.responsable_control as string | null,
+        criticidad: row.criticidad as "ALTA" | "MEDIA" | "BAJA" | null,
+        foto_enfoque_url: row.foto_enfoque_url as string | null,
         created_at: row.created_at,
     }));
 
@@ -106,6 +114,10 @@ export async function upsertCamara(input: {
     fecha_instalacion?: string | null;
     area?: string | null;
     activa?: boolean;
+    sustentacion_empleo?: string | null;
+    responsable_control?: string | null;
+    criticidad?: "ALTA" | "MEDIA" | "BAJA" | null;
+    foto_enfoque_url?: string | null;
 }): Promise<void> {
     const payload: any = {
         codigo: input.codigo,
@@ -120,6 +132,10 @@ export async function upsertCamara(input: {
         fecha_instalacion: input.fecha_instalacion || null,
         area: input.area || null,
         activa: input.activa !== undefined ? input.activa : true,
+        sustentacion_empleo: input.sustentacion_empleo || null,
+        responsable_control: input.responsable_control || null,
+        criticidad: input.criticidad || null,
+        foto_enfoque_url: input.foto_enfoque_url || null,
     };
 
     const { error } = await supabase
@@ -158,6 +174,26 @@ export function getCamarasByCentral(centralId: string): Camara[] {
 
 export function getCamarasBySede(sedeId: string): Camara[] {
     return state.camaras.filter(c => c.sede_id === sedeId);
+}
+
+export async function uploadFotoCamara(file: File, camaraId: string): Promise<string> {
+    const fileExt = file.name.split('.').pop();
+    const fileName = `${camaraId}-${Math.random()}.${fileExt}`;
+    const filePath = `${fileName}`;
+
+    const { error: uploadError } = await supabase.storage
+        .from('camaras-fotos')
+        .upload(filePath, file);
+
+    if (uploadError) {
+        throw new Error(uploadError.message);
+    }
+
+    const { data } = supabase.storage
+        .from('camaras-fotos')
+        .getPublicUrl(filePath);
+
+    return data.publicUrl;
 }
 
 // ===== LEGACY TYPES FROM types.ts =====

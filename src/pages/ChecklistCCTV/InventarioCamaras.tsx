@@ -16,7 +16,7 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
-import { getCamarasState, subscribeCamaras, upsertCamara, type Camara } from "../../store/camarasStore";
+import { getCamarasState, subscribeCamaras, upsertCamara, type Camara, uploadFotoCamara } from "../../store/camarasStore";
 import { getChecklistDataRange } from "../../store/checklistCamarasStore";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -123,6 +123,7 @@ function TabCamaras({
     const [filterEstado, setFilterEstado] = useState<"all" | "activa" | "inactiva">("all");
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Camara | null>(null);
+    const [isUploading, setIsUploading] = useState(false);
 
     // Status Modal State
     const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -615,6 +616,10 @@ function TabCamaras({
         ubicacion: "" as "" | "INTERIOR" | "EXTERIOR",
         fecha_instalacion: "",
         area: "",
+        sustentacion_empleo: Array(7).fill(""), // Array of 7 empty strings
+        responsable_control: "",
+        criticidad: "" as "" | "ALTA" | "MEDIA" | "BAJA",
+        foto_enfoque_url: "",
     });
 
     const filtered = camaras.filter(c => {
@@ -757,6 +762,12 @@ function TabCamaras({
                 ubicacion: item.ubicacion || "",
                 fecha_instalacion: item.fecha_instalacion || "",
                 area: item.area || "",
+                sustentacion_empleo: item.sustentacion_empleo ?
+                    item.sustentacion_empleo.split('\n').concat(Array(7).fill("")).slice(0, 7) : 
+                    Array(7).fill(""),
+                responsable_control: item.responsable_control || "",
+                criticidad: item.criticidad || "",
+                foto_enfoque_url: item.foto_enfoque_url || "",
             });
         } else {
             const initialCentralId = filterCentral || centrales[0]?.id || "";
@@ -775,9 +786,34 @@ function TabCamaras({
                 ubicacion: "",
                 fecha_instalacion: "",
                 area: "",
+                sustentacion_empleo: Array(7).fill(""),
+                responsable_control: "",
+                criticidad: "",
+                foto_enfoque_url: "",
             });
         }
         setModalOpen(true);
+    };
+
+    const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        if (!formData.codigo) {
+             setToast({ type: "error", message: "Primero selecciona una central para generar el código." });
+             return;
+        }
+
+        try {
+            setIsUploading(true);
+            const url = await uploadFotoCamara(file, formData.codigo);
+            setFormData(prev => ({ ...prev, foto_enfoque_url: url }));
+            setToast({ type: "success", message: "Foto subida correctamente." });
+        } catch (error: any) {
+            setToast({ type: "error", message: "Error al subir la foto: " + error.message });
+        } finally {
+            setIsUploading(false);
+        }
     };
 
     const handleSubmit = () => {
@@ -796,10 +832,18 @@ function TabCamaras({
                 ubicacion: formData.ubicacion || null,
                 fecha_instalacion: formData.fecha_instalacion || null,
                 area: formData.area || null,
+                sustentacion_empleo: formData.sustentacion_empleo.filter(v => v.trim()).join('\n') || null,
+                responsable_control: formData.responsable_control || null,
+                criticidad: formData.criticidad || null,
+                foto_enfoque_url: formData.foto_enfoque_url || null,
             };
             onUpdate(editItem.id, updateData);
         } else {
-            onAdd({ ...formData, activa: true });
+            onAdd({ 
+                ...formData, 
+                activa: true,
+                sustentacion_empleo: formData.sustentacion_empleo.filter(v => v.trim()).join('\n') || null
+            });
         }
         setModalOpen(false);
     };
@@ -1206,6 +1250,91 @@ function TabCamaras({
                                 onChange={e => setFormData({ ...formData, area: e.target.value })}
                                 placeholder="Eje: Empaque, Recepción, etc."
                             />
+                        </div>
+                    </div>
+
+                    <div className="pt-6 mt-4 border-t border-slate-200">
+                        <h3 className="text-sm font-bold text-gray-900 mb-4 flex items-center gap-2">
+                            <span className="w-1.5 h-4 bg-blue-600 rounded-full"></span>
+                            Información Adicional (Detalle de Instalación)
+                        </h3>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Criticidad</label>
+                                <select
+                                    className="w-full h-11 rounded-lg border border-gray-200 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 text-sm px-3 outline-none"
+                                    value={formData.criticidad}
+                                    onChange={e => setFormData({ ...formData, criticidad: e.target.value as any })}
+                                >
+                                    <option value="">-- Seleccionar --</option>
+                                    <option value="ALTA">Alta</option>
+                                    <option value="MEDIA">Media</option>
+                                    <option value="BAJA">Baja</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Responsable de su control</label>
+                                <input
+                                    type="text"
+                                    className="w-full h-11 rounded-lg border border-gray-200 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 text-sm px-3 outline-none"
+                                    value={formData.responsable_control}
+                                    onChange={e => setFormData({ ...formData, responsable_control: e.target.value })}
+                                    placeholder="Ej: Seguridad Patrimonial"
+                                />
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4 mb-4">
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Sustentación de Empleo (Motivos de instalación)</label>
+                                <div className="space-y-2">
+                                    {formData.sustentacion_empleo.map((line, idx) => (
+                                        <div key={idx} className="flex gap-2 items-center">
+                                            <span className="text-xs font-bold text-slate-400 w-4 text-right">{idx + 1}.</span>
+                                            <input
+                                                type="text"
+                                                className="w-full h-9 rounded-lg border border-gray-200 focus:border-gray-400 focus:ring-1 focus:ring-gray-200 text-sm px-3 outline-none"
+                                                value={line}
+                                                onChange={e => {
+                                                    const textArr = [...formData.sustentacion_empleo];
+                                                    textArr[idx] = e.target.value;
+                                                    setFormData({ ...formData, sustentacion_empleo: textArr });
+                                                }}
+                                                placeholder={`Motivo ${idx + 1}...`}
+                                            />
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="col-span-2">
+                                <label className="block text-sm font-medium text-gray-700 mb-1.5">Foto de Enfoque de la Cámara</label>
+                                <div className="flex items-center gap-4">
+                                    <label className="flex flex-col items-center justify-center w-full max-w-sm h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                            <Camera className="w-8 h-8 mb-2 text-slate-400" />
+                                            <p className="mb-2 text-sm text-slate-500 font-semibold">{isUploading ? 'Subiendo...' : 'Click para subir foto'}</p>
+                                            <p className="text-xs text-slate-400">PNG, JPG hasta 5MB</p>
+                                        </div>
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading || !formData.codigo} />
+                                    </label>
+                                    {formData.foto_enfoque_url && (
+                                        <div className="relative h-32 w-32 rounded-lg border border-slate-200 overflow-hidden shadow-sm flex-shrink-0">
+                                            <img src={formData.foto_enfoque_url} alt="Enfoque de la cámara" className="h-full w-full object-cover" />
+                                            <button 
+                                                onClick={() => setFormData(prev => ({ ...prev, foto_enfoque_url: '' }))}
+                                                className="absolute top-1 right-1 bg-white/80 rounded-full p-1 hover:bg-red-50 text-red-500 transition-colors"
+                                            >
+                                                <Power className="w-3 h-3" />
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                                {!formData.codigo && <p className="text-xs text-amber-500 mt-2 font-medium">Debe seleccionar una central para generar un código antes de subir la foto.</p>}
+                            </div>
                         </div>
                     </div>
 
