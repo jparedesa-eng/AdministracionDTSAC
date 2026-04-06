@@ -321,7 +321,7 @@ export const MonitoreoMMPP: React.FC = () => {
                                     <span className="text-[10px] font-bold text-red-400 uppercase tracking-tighter mt-1">
                                         {record.estado === 'LLEGADO' || record.estado === 'FINALIZADO'
                                             ? calculateTimeDiff(record.fecha_hora_origen, record.fecha_hora_llegada)
-                                            : calculateTimeDiff(record.fecha_hora_origen, new Date().toISOString())
+                                            : calculateTimeDiff(record.fecha_hora_origen, new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16))
                                         }
                                     </span>
                                     <span className="text-[9px] font-semibold text-gray-400">

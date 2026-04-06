@@ -44,8 +44,8 @@ export const FinalizarModal: React.FC<FinalizarModalProps> = ({ isOpen, onClose,
             const minutes = Math.floor((absDiffMs % (1000 * 60 * 60)) / (1000 * 60));
             const tiempo_recorridoStr = `${diffMs < 0 ? '-' : ''}${hours}h ${minutes}m`;
 
-            // Para la BD requerimos el formato ISO completo
-            const endIsoString = new Date(timestamp).toISOString();
+            // Para la BD enviamos la cadena del input directamente para evitar conversiones a UTC (+5h)
+            const endIsoString = timestamp;
 
             await updateMMPPRecord(record.id, {
                 estado: 'FINALIZADO',

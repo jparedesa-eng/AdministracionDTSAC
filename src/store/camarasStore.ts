@@ -176,14 +176,56 @@ export function getCamarasBySede(sedeId: string): Camara[] {
     return state.camaras.filter(c => c.sede_id === sedeId);
 }
 
+async function compressImage(file: File, maxWidth = 1280, quality = 0.7): Promise<Blob> {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target?.result as string;
+            img.onload = () => {
+                const canvas = document.createElement('canvas');
+                let width = img.width;
+                let height = img.height;
+
+                if (width > maxWidth) {
+                    height *= maxWidth / width;
+                    width = maxWidth;
+                }
+
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx?.drawImage(img, 0, 0, width, height);
+
+                canvas.toBlob(
+                    (blob) => {
+                        if (blob) resolve(blob);
+                        else reject(new Error('Error al comprimir imagen'));
+                    },
+                    'image/jpeg',
+                    quality
+                );
+            };
+            img.onerror = () => reject(new Error('Error al cargar imagen para compresión'));
+        };
+        reader.onerror = () => reject(new Error('Error al leer archivo'));
+    });
+}
+
 export async function uploadFotoCamara(file: File, camaraId: string): Promise<string> {
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${camaraId}-${Math.random()}.${fileExt}`;
+    const fileExt = 'jpg'; // Siempre usamos jpg por la compresión
+    const fileName = `${camaraId}-${Date.now()}.${fileExt}`;
     const filePath = `${fileName}`;
+
+    // Compresión antes de subir
+    const compressedBlob = await compressImage(file);
 
     const { error: uploadError } = await supabase.storage
         .from('camaras-fotos')
-        .upload(filePath, file);
+        .upload(filePath, compressedBlob, {
+            contentType: 'image/jpeg'
+        });
 
     if (uploadError) {
         throw new Error(uploadError.message);
