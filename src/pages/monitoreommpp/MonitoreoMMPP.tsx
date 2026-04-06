@@ -31,6 +31,7 @@ export const MonitoreoMMPP: React.FC = () => {
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
     const [appliedFilters, setAppliedFilters] = useState({ term: '', start: '', end: '' });
+    const [hasAppliedHistory, setHasAppliedHistory] = useState(false);
     const [selectedTripDetails, setSelectedTripDetails] = useState<MMPPRecord | null>(null);
 
     useEffect(() => {
@@ -56,6 +57,10 @@ export const MonitoreoMMPP: React.FC = () => {
         if (!state.records) return [];
 
         return state.records.filter((r) => {
+            if (filterStatus === 'ALL') {
+                if (!hasAppliedHistory || (!appliedFilters.start && !appliedFilters.end)) return false;
+            }
+
             const searchT = appliedFilters.term.toLowerCase();
             const matchesSearch = !searchT ||
                 r.placa.toLowerCase().includes(searchT) ||
@@ -85,7 +90,7 @@ export const MonitoreoMMPP: React.FC = () => {
 
             return matchesSearch && matchesStatus && matchesDate;
         });
-    }, [state.records, filterStatus, appliedFilters]);
+    }, [state.records, filterStatus, appliedFilters, hasAppliedHistory]);
 
     const handleEdit = (e: React.MouseEvent, record: MMPPRecord) => {
         e.stopPropagation();
@@ -157,7 +162,7 @@ export const MonitoreoMMPP: React.FC = () => {
     };
 
     return (
-        <div className="p-8 min-h-screen bg-gray-50/50 relative">
+        <div className="p-3 min-h-screen bg-gray-50/50 relative">
             <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 mb-8 mt-2">
                 <div className="space-y-1">
                     <h1 className="text-2xl font-bold tracking-tight text-gray-900">
@@ -184,7 +189,14 @@ export const MonitoreoMMPP: React.FC = () => {
                             key={s}
                             onClick={() => {
                                 setFilterStatus(s);
-                                if (s !== 'ALL') {
+                                if (s === 'ALL') {
+                                    setHasAppliedHistory(false);
+                                    const now = new Date();
+                                    const end = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().split('T')[0];
+                                    const start = new Date(now.getTime() - (now.getTimezoneOffset() * 60000) - (7 * 24 * 60 * 60 * 1000)).toISOString().split('T')[0];
+                                    setStartDate(start);
+                                    setEndDate(end);
+                                } else {
                                     setStartDate('');
                                     setEndDate('');
                                     setAppliedFilters({ term: appliedFilters.term, start: '', end: '' });
@@ -210,7 +222,12 @@ export const MonitoreoMMPP: React.FC = () => {
                         className="block w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-lg focus:outline-none focus:bg-white focus:ring-2 focus:ring-red-500/10 focus:border-red-500 transition-all text-sm h-[38px] placeholder-gray-400"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && setAppliedFilters({ term: searchTerm, start: startDate, end: endDate })}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                setAppliedFilters({ term: searchTerm, start: startDate, end: endDate });
+                                if (filterStatus === 'ALL') setHasAppliedHistory(true);
+                            }
+                        }}
                     />
                 </div>
 
@@ -232,7 +249,10 @@ export const MonitoreoMMPP: React.FC = () => {
                             title="Fecha Origen (Hasta)"
                         />
                         <button
-                            onClick={() => setAppliedFilters({ term: searchTerm, start: startDate, end: endDate })}
+                            onClick={() => {
+                                setAppliedFilters({ term: searchTerm, start: startDate, end: endDate });
+                                setHasAppliedHistory(true);
+                            }}
                             className="h-full px-4 bg-red-500 text-white hover:bg-red-600 transition-colors flex items-center justify-center cursor-pointer ml-auto border-l border-red-600"
                             title="Buscar en rango de fechas"
                         >
@@ -241,22 +261,6 @@ export const MonitoreoMMPP: React.FC = () => {
                     </div>
                 )}
 
-                <div className="flex gap-2 w-full lg:w-auto shrink-0 justify-end">
-                    {(appliedFilters.term || appliedFilters.start || appliedFilters.end) && (
-                        <button
-                            onClick={() => {
-                                setSearchTerm('');
-                                setStartDate('');
-                                setEndDate('');
-                                setAppliedFilters({ term: '', start: '', end: '' });
-                            }}
-                            className="px-3 py-2 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition-all h-[38px] border border-red-100 flex items-center justify-center shrink-0"
-                            title="Limpiar filtros"
-                        >
-                            <X className="w-4 h-4" />
-                        </button>
-                    )}
-                </div>
             </div>
 
             <div className="space-y-4">
