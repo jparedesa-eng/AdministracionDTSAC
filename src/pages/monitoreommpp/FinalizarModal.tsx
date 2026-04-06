@@ -27,7 +27,21 @@ export const FinalizarModal: React.FC<FinalizarModalProps> = ({ isOpen, onClose,
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!timestamp) return;
+        if (!timestamp || !record) return;
+
+        const now = new Date();
+        const nowLocalIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+        const originLocalIso = record.fecha_hora_origen.replace(' ', 'T').slice(0, 16);
+
+        if (timestamp > nowLocalIso) {
+            onShowToast('error', 'La fecha y hora de llegada no puede ser futura.');
+            return;
+        }
+
+        if (timestamp < originLocalIso) {
+            onShowToast('error', 'La fecha de llegada no puede ser anterior a la de origen.');
+            return;
+        }
 
         setLoading(true);
         try {
@@ -83,6 +97,8 @@ export const FinalizarModal: React.FC<FinalizarModalProps> = ({ isOpen, onClose,
                     <input 
                         type="datetime-local" 
                         value={timestamp}
+                        min={record.fecha_hora_origen.replace(' ', 'T').slice(0, 16)}
+                        max={new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16)}
                         onChange={(e) => setTimestamp(e.target.value)}
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-green-500/10 focus:border-green-500 outline-none font-semibold text-sm"
                         required

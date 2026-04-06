@@ -395,7 +395,7 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                                 <button
                                     type="button"
                                     onClick={() => setForm({ ...form, resguardo: true })}
-                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${form.resguardo
+                                    className={`rounded-xl text-xs font-bold transition-all border ${form.resguardo
                                         ? 'bg-red-500 text-white border-red-700'
                                         : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                                         }`}
@@ -405,7 +405,7 @@ export const MMPPFormModal: React.FC<MMPPFormModalProps> = ({ isOpen, onClose, r
                                 <button
                                     type="button"
                                     onClick={() => setForm({ ...form, resguardo: false })}
-                                    className={`rounded-xl text-xs font-bold transition-all border shadow-sm ${!form.resguardo
+                                    className={`rounded-xl text-xs font-bold transition-all border ${!form.resguardo
                                         ? 'bg-red-500 text-white border-red-700'
                                         : 'bg-white text-slate-500 border-slate-200 hover:border-slate-300'
                                         }`}

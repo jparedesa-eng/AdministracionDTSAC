@@ -16,6 +16,7 @@ import { UbicacionModal } from './UbicacionModal';
 import { FinalizarModal } from './FinalizarModal';
 import { useAuth } from '../../auth/AuthContext';
 import { Toast } from '../../components/ui/Toast';
+import { Modal } from '../../components/ui/Modal';
 import type { ToastState } from '../../components/ui/Toast';
 
 export const MonitoreoMMPP: React.FC = () => {
@@ -33,6 +34,7 @@ export const MonitoreoMMPP: React.FC = () => {
     const [appliedFilters, setAppliedFilters] = useState({ term: '', start: '', end: '' });
     const [hasAppliedHistory, setHasAppliedHistory] = useState(false);
     const [selectedTripDetails, setSelectedTripDetails] = useState<MMPPRecord | null>(null);
+    const [recordToDeleteId, setRecordToDeleteId] = useState<string | null>(null);
 
     useEffect(() => {
         const unsubscribe = subscribeMMPP(() => {
@@ -98,16 +100,22 @@ export const MonitoreoMMPP: React.FC = () => {
         setIsFormOpen(true);
     };
 
-    const handleDelete = async (e: React.MouseEvent, id: string) => {
+    const handleDelete = (e: React.MouseEvent, id: string) => {
         e.stopPropagation();
-        if (!confirm('¿Está seguro de eliminar este registro de monitoreo?')) return;
+        setRecordToDeleteId(id);
+    };
+
+    const confirmDelete = async () => {
+        if (!recordToDeleteId) return;
         try {
-            await deleteMMPPRecord(id);
-            if (selectedTripDetails?.id === id) setSelectedTripDetails(null);
+            await deleteMMPPRecord(recordToDeleteId);
+            if (selectedTripDetails?.id === recordToDeleteId) setSelectedTripDetails(null);
             setToast({ type: 'success', message: 'Registro eliminado exitosamente.' });
         } catch (error) {
             console.error("Error deleting record:", error);
             setToast({ type: 'error', message: 'Error al eliminar el registro.' });
+        } finally {
+            setRecordToDeleteId(null);
         }
     };
 
@@ -560,7 +568,7 @@ export const MonitoreoMMPP: React.FC = () => {
             <UbicacionModal
                 isOpen={isUbicacionOpen}
                 onClose={() => setIsUbicacionOpen(false)}
-                recordId={selectedRecord?.id || null}
+                record={selectedRecord}
                 onShowToast={(type, msg) => setToast({ type, message: msg })}
             />
             <FinalizarModal
@@ -569,6 +577,37 @@ export const MonitoreoMMPP: React.FC = () => {
                 record={selectedTripDetails}
                 onShowToast={(type, msg) => setToast({ type, message: msg })}
             />
+
+            <Modal
+                open={!!recordToDeleteId}
+                onClose={() => setRecordToDeleteId(null)}
+                title="Confirmar Eliminación"
+                size="sm"
+                footer={
+                    <div className="flex gap-2">
+                        <button
+                            onClick={() => setRecordToDeleteId(null)}
+                            className="px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 rounded-xl transition-all"
+                        >
+                            Cancelar
+                        </button>
+                        <button
+                            onClick={confirmDelete}
+                            className="px-4 py-2 text-sm font-semibold text-white bg-red-600 hover:bg-red-700 rounded-xl transition-all shadow-sm"
+                        >
+                            Eliminar
+                        </button>
+                    </div>
+                }
+            >
+                <div className="flex flex-col items-center text-center py-4">
+                    <div className="w-12 h-12 bg-red-50 rounded-full flex items-center justify-center mb-4">
+                        <AlertCircle className="w-6 h-6 text-red-600" />
+                    </div>
+                    <p className="text-gray-900 font-bold text-lg mb-1">¿Está seguro?</p>
+                    <p className="text-gray-500 text-sm">Esta acción eliminará el registro de monitoreo permanentemente y no se puede deshacer.</p>
+                </div>
+            </Modal>
 
             {toast && <Toast toast={toast} onClose={() => setToast(null)} />}
         </div>

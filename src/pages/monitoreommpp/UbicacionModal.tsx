@@ -3,14 +3,16 @@ import { X, Loader2, Save } from 'lucide-react';
 import { addMMPPUbicacion } from '../../store/monitoreoMMPPStore';
 import { useAuth } from '../../auth/AuthContext';
 
+import type { MMPPRecord } from '../../store/monitoreoMMPPStore';
+
 interface UbicacionModalProps {
     isOpen: boolean;
     onClose: () => void;
-    recordId: string | null;
+    record: MMPPRecord | null;
     onShowToast: (type: 'success' | 'error' | 'info', msg: string) => void;
 }
 
-export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose, recordId, onShowToast }) => {
+export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose, record, onShowToast }) => {
     const { profile } = useAuth();
     const [loading, setLoading] = useState(false);
     const [ubicacion, setUbicacion] = useState('');
@@ -25,16 +27,31 @@ export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose,
         }
     }, [isOpen]);
 
-    if (!isOpen || !recordId) return null;
+    if (!isOpen || !record) return null;
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!ubicacion.trim() || !timestamp) return;
 
+        const now = new Date();
+        const nowLocalIso = new Date(now.getTime() - (now.getTimezoneOffset() * 60000)).toISOString().slice(0, 16);
+
+        const originLocalIso = record.fecha_hora_origen.replace(' ', 'T').slice(0, 16);
+
+        if (timestamp > nowLocalIso) {
+            onShowToast('error', 'La fecha y hora del reporte no puede ser futura.');
+            return;
+        }
+
+        if (timestamp < originLocalIso) {
+            onShowToast('error', 'La fecha del reporte no puede ser anterior a la de origen.');
+            return;
+        }
+
         setLoading(true);
         try {
             // Pasamos el timestamp manualmente
-            await addMMPPUbicacion(recordId, ubicacion.toUpperCase(), profile?.id || '', timestamp);
+            await addMMPPUbicacion(record.id, ubicacion.toUpperCase(), profile?.id || '', timestamp);
             setUbicacion('');
             onShowToast('success', 'Ubicación registrada exitosamente.');
             onClose();
@@ -60,9 +77,11 @@ export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose,
                     <div className="space-y-4 mb-6">
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-2 tracking-wide">Fecha y Hora de Reporte</label>
-                            <input 
-                                type="datetime-local" 
+                            <input
+                                type="datetime-local"
                                 value={timestamp}
+                                min={record.fecha_hora_origen.replace(' ', 'T').slice(0, 16)}
+                                max={new Date(new Date().getTime() - (new Date().getTimezoneOffset() * 60000)).toISOString().slice(0, 16)}
                                 onChange={(e) => setTimestamp(e.target.value)}
                                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-lg focus:ring-2 focus:ring-red-500/10 focus:border-red-500 outline-none font-semibold text-sm"
                                 required
@@ -70,7 +89,7 @@ export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose,
                         </div>
                         <div>
                             <label className="block text-[10px] font-semibold text-slate-400 uppercase mb-2 tracking-wide">Punto de Control / Ubicación Actual</label>
-                            <textarea 
+                            <textarea
                                 value={ubicacion}
                                 onChange={(e) => setUbicacion(e.target.value)}
                                 placeholder="Ej: PEAJE VIRU, DESVIO CHIMBOTE, etc."
@@ -82,14 +101,14 @@ export const UbicacionModal: React.FC<UbicacionModalProps> = ({ isOpen, onClose,
                     </div>
 
                     <div className="flex justify-end gap-3 pt-5 border-t border-gray-100">
-                        <button 
-                            type="button" 
+                        <button
+                            type="button"
                             onClick={onClose}
                             className="px-5 py-2 text-slate-500 font-semibold text-[10px] uppercase tracking-widest hover:bg-gray-100 rounded-lg border border-transparent hover:border-gray-200 transition-all"
                         >
                             Cancelar
                         </button>
-                        <button 
+                        <button
                             type="submit"
                             disabled={loading || !ubicacion.trim() || !timestamp}
                             className="flex items-center gap-2 px-6 py-2 bg-[#ff0000] text-white font-semibold text-[10px] uppercase tracking-widest rounded-lg hover:bg-[#cc0000] border border-red-600 shadow-sm transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
