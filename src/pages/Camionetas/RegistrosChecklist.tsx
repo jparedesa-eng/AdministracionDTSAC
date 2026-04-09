@@ -1434,6 +1434,7 @@ export default function RegistrosChecklist() {
   const [placaFilter, setPlacaFilter] = React.useState<string>("");
   const [tipoFilter, setTipoFilter] = React.useState<string>(""); // NUEVO FILTRO
   const [sedeFilter, setSedeFilter] = React.useState<string>(""); // FILTRO SEDE
+  const [showFiltersMobile, setShowFiltersMobile] = React.useState(false); // TOGGLE PARA MOBILE
 
   // Para el filtro buscador de placa
   const [placaOpenFilter, setPlacaOpenFilter] = React.useState(false);
@@ -1469,7 +1470,7 @@ export default function RegistrosChecklist() {
       // Realizamos un borrado lógico (soft delete) cambiando el estado 'activo' a false
       const { error } = await supabase.from("checklists").update({ activo: false }).eq("id", deleteRow.id);
       if (error) throw error;
-      
+
       setToast({ type: "success", message: "Checklist ocultado correctamente." });
       setOpenDelete(false);
       setDeleteRow(null);
@@ -1722,7 +1723,7 @@ export default function RegistrosChecklist() {
             Registros de Checklist
           </h1>
           <p className="text-sm text-gray-600">
-            Historial con paginación y filtro por fecha y placa.
+            Registro e Historial de revisiones de las unidades
           </p>
         </div>
         <div className="flex w-full sm:w-auto flex-col items-center sm:items-end gap-2">
@@ -1737,8 +1738,26 @@ export default function RegistrosChecklist() {
         </div>
       </div>
 
+      {/* Toggle Filtros Mobile */}
+      <div className="sm:hidden px-1">
+        <button
+          type="button"
+          onClick={() => setShowFiltersMobile(!showFiltersMobile)}
+          className="flex w-full items-center justify-between rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-700 hover:bg-gray-50 active:scale-[.99]"
+        >
+          <div className="flex items-center gap-2">
+            <Filter className="h-4 w-4" />
+            <span>Filtros y Exportación</span>
+          </div>
+          <ChevronDown
+            className={`h-4 w-4 text-gray-400 transition-transform ${showFiltersMobile ? "rotate-180" : ""
+              }`}
+          />
+        </button>
+      </div>
+
       {/* Filtros */}
-      <div className="rounded-2xl px-5 py-4 border border-gray-200 bg-white">
+      <div className={`rounded-2xl px-5 py-4 border border-gray-200 bg-white ${showFiltersMobile ? "block" : "hidden sm:block"}`}>
         <div className="flex flex-col sm:flex-row flex-wrap sm:items-end gap-3">
           <div className="grid gap-1 w-full sm:w-auto">
             <label className="text-xs font-medium text-gray-600">Desde</label>
