@@ -11,6 +11,7 @@ interface ConfirmationModalProps {
     cancelText?: string;
     variant?: "danger" | "warning" | "info";
     loading?: boolean;
+    zIndex?: number;
 }
 
 export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
@@ -23,6 +24,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     cancelText = "Cancelar",
     variant = "danger",
     loading = false,
+    zIndex,
 }) => {
     const getConfirmButtonClass = () => {
         switch (variant) {
@@ -38,7 +40,7 @@ export const ConfirmationModal: React.FC<ConfirmationModalProps> = ({
     };
 
     return (
-        <Modal open={open} onClose={onClose} title={title} size="sm">
+        <Modal open={open} onClose={onClose} title={title} size="sm" zIndex={zIndex}>
             <div className="space-y-4">
                 <div className="text-gray-700">
                     {children}

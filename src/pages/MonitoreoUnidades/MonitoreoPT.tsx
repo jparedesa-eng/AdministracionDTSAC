@@ -134,6 +134,8 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
         const lastDay = new Date(curr.setDate(last)).toISOString().split('T')[0];
         return { start: firstDay, end: lastDay };
     });
+    const [appliedStatusFilter, setAppliedStatusFilter] = useState<FilterStatus>('TRANSIT');
+    const [appliedDateRange, setAppliedDateRange] = useState(dateRange);
 
     const [editingControlIndex, setEditingControlIndex] = useState<number | null>(null);
     const [showAddStopProg, setShowAddStopProg] = useState(false);
@@ -252,6 +254,10 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
     };
 
     const filteredUnits = useMemo(() => {
+        if (statusFilter !== appliedStatusFilter) {
+            return [];
+        }
+
         return units.filter(u => {
             const searchLower = searchTerm.toLowerCase();
             const matchesSearch =
@@ -262,30 +268,30 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
 
             if (!matchesSearch) return false;
 
-            if ((statusFilter === 'ALL' || statusFilter === 'ARRIVED' || statusFilter === 'CANCELLED') && (dateRange.start || dateRange.end)) {
+            if ((appliedStatusFilter === 'ALL' || appliedStatusFilter === 'ARRIVED' || appliedStatusFilter === 'CANCELLED') && (appliedDateRange.start || appliedDateRange.end)) {
                 // If filtering by arrivals, use the arrival date instead of departure date
                 let unitDateRaw = u.fechaSalidaPlanta;
-                if (statusFilter === 'ARRIVED') {
+                if (appliedStatusFilter === 'ARRIVED') {
                     unitDateRaw = u.fechaLlegadaDestino2 || u.fechaLlegadaDestino1 || u.lastUpdate;
                 }
                 
                 if (!unitDateRaw) return false;
 
                 const unitDate = new Date(unitDateRaw);
-                const start = dateRange.start ? new Date(dateRange.start) : new Date('2000-01-01');
-                const end = dateRange.end ? new Date(dateRange.end) : new Date('2100-01-01');
+                const start = appliedDateRange.start ? new Date(appliedDateRange.start) : new Date('2000-01-01');
+                const end = appliedDateRange.end ? new Date(appliedDateRange.end) : new Date('2100-01-01');
                 end.setHours(23, 59, 59);
                 if (unitDate < start || unitDate > end) return false;
             }
 
-            if (statusFilter === 'ALL') return true;
-            if (statusFilter === 'TRANSIT') return u.status === UnitStatus.TRANSIT || u.status === UnitStatus.PLANT || u.status === 'EN PARADA' || u.status === 'INCIDENTE';
-            if (statusFilter === 'ARRIVED') return u.status === UnitStatus.DELIVERED;
-            if (statusFilter === 'CANCELLED') return u.status === 'CANCELADO';
+            if (appliedStatusFilter === 'ALL') return true;
+            if (appliedStatusFilter === 'TRANSIT') return u.status === UnitStatus.TRANSIT || u.status === UnitStatus.PLANT || u.status === 'EN PARADA' || u.status === 'INCIDENTE';
+            if (appliedStatusFilter === 'ARRIVED') return u.status === UnitStatus.DELIVERED;
+            if (appliedStatusFilter === 'CANCELLED') return u.status === 'CANCELADO';
 
             return true;
         });
-    }, [units, searchTerm, statusFilter, dateRange]);
+    }, [units, searchTerm, statusFilter, appliedStatusFilter, appliedDateRange]);
 
     const selectedUnit = useMemo(() => units.find(u => u.id === selectedUnitId) || null, [units, selectedUnitId]);
 
@@ -1302,7 +1308,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 </div>
                 <div className="flex items-center gap-4">
                     <div className="flex items-center gap-1 bg-gray-100 p-1 rounded-lg">
-                        <button onClick={() => setStatusFilter('TRANSIT')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>En Ruta</button>
+                        <button onClick={() => { setStatusFilter('TRANSIT'); setAppliedStatusFilter('TRANSIT'); }} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'TRANSIT' ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>En Ruta</button>
                         <button onClick={() => setStatusFilter('ALL')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'ALL' ? 'bg-white text-gray-900 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Todos</button>
                         <button onClick={() => setStatusFilter('ARRIVED')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'ARRIVED' ? 'bg-white text-emerald-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Llegados</button>
                         <button onClick={() => setStatusFilter('CANCELLED')} className={`px-4 py-1.5 rounded-md text-sm font-medium transition-all ${statusFilter === 'CANCELLED' ? 'bg-white text-rose-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'}`}>Cancelados</button>
@@ -1338,7 +1344,11 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                                 <span className="text-slate-300">-</span>
                                 <input type="date" className="bg-transparent text-[11px] font-bold text-slate-600 outline-none w-24" value={dateRange.end} onChange={e => setDateRange({ ...dateRange, end: e.target.value })} />
                                 <button 
-                                    onClick={() => fetchUnits(true)}
+                                    onClick={() => {
+                                        setAppliedStatusFilter(statusFilter);
+                                        setAppliedDateRange(dateRange);
+                                        fetchUnits(true);
+                                    }}
                                     className="ml-1 bg-white border border-slate-200 text-slate-600 p-1 rounded-md hover:bg-slate-100 transition-all flex items-center gap-1"
                                     title="Aplicar filtro y refrescar"
                                 >
@@ -1457,7 +1467,9 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                         {filteredUnits.length === 0 && (
                             <div className="h-32 flex flex-col items-center justify-center text-slate-400 border-2 border-dashed border-slate-300 rounded-xl">
                                 <Truck size={24} className="mb-2 opacity-50" />
-                                <p className="text-xs font-bold uppercase tracking-widest">No hay unidades en esta vista</p>
+                                <p className="text-xs font-bold uppercase tracking-widest">
+                                    {statusFilter !== appliedStatusFilter ? 'Haga clic en "Filtrar" para cargar datos' : 'No hay unidades en esta vista'}
+                                </p>
                             </div>
                         )}
                     </div>
@@ -2281,6 +2293,7 @@ export const TransportTracker: React.FC<TransportTrackerProps> = ({ units }) => 
                 variant={alertConfig.variant}
                 confirmText="Entendido"
                 cancelText=""
+                zIndex={9999}
             >
                 <div className="flex flex-col items-center gap-4 py-2">
                     <div className={`w-16 h-16 rounded-full flex items-center justify-center ${alertConfig.variant === 'danger' ? 'bg-red-50 text-red-500' : alertConfig.variant === 'warning' ? 'bg-amber-50 text-amber-500' : 'bg-indigo-50 text-indigo-500'}`}>
