@@ -16,7 +16,9 @@ import {
   CheckCircle,
   ChevronDown,
   FileSpreadsheet,
+  Trash2,
 } from "lucide-react";
+import { ConfirmationModal } from "../../components/ui/ConfirmationModal";
 import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import jsPDF from "jspdf";
@@ -67,6 +69,7 @@ type ChecklistRow = {
   codigo?: string; // Editado a string
   fotos_drive?: string | null; // NUEVO CAMPO
   id_usuario?: string | null; // NUEVO CAMPO
+  activo?: boolean | null; // NUEVO CAMPO PARA SOFT DELETE
 };
 
 type ChecklistItemRow = {
@@ -1430,6 +1433,53 @@ export default function RegistrosChecklist() {
   const [placasInventario, setPlacasInventario] = React.useState<string[]>([]);
   const [placaFilter, setPlacaFilter] = React.useState<string>("");
   const [tipoFilter, setTipoFilter] = React.useState<string>(""); // NUEVO FILTRO
+  const [sedeFilter, setSedeFilter] = React.useState<string>(""); // FILTRO SEDE
+
+  // Para el filtro buscador de placa
+  const [placaOpenFilter, setPlacaOpenFilter] = React.useState(false);
+  const [placaSearchFilter, setPlacaSearchFilter] = React.useState("");
+  const placaFilterRef = React.useRef<HTMLDivElement | null>(null);
+
+  React.useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (!placaFilterRef.current) return;
+      if (!placaFilterRef.current.contains(e.target as Node)) {
+        setPlacaOpenFilter(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const filteredPlacasFilter = React.useMemo(() => {
+    const q = placaSearchFilter.trim().toUpperCase();
+    if (!q) return placasInventario;
+    return placasInventario.filter((p) => p.toUpperCase().includes(q));
+  }, [placaSearchFilter, placasInventario]);
+
+  // Para eliminar
+  const [openDelete, setOpenDelete] = React.useState(false);
+  const [deleteRow, setDeleteRow] = React.useState<ChecklistRow | null>(null);
+  const [deleting, setDeleting] = React.useState(false);
+
+  const handleDelete = async () => {
+    if (!deleteRow) return;
+    try {
+      setDeleting(true);
+      // Realizamos un borrado lógico (soft delete) cambiando el estado 'activo' a false
+      const { error } = await supabase.from("checklists").update({ activo: false }).eq("id", deleteRow.id);
+      if (error) throw error;
+      
+      setToast({ type: "success", message: "Checklist ocultado correctamente." });
+      setOpenDelete(false);
+      setDeleteRow(null);
+      fetchChecklists({ silent: true });
+    } catch (err: any) {
+      setToast({ type: "error", message: err?.message || "No se pudo eliminar el checklist." });
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const [exportingExcel, setExportingExcel] = React.useState(false);
 
@@ -1482,6 +1532,7 @@ export default function RegistrosChecklist() {
           .select("*", { count: "exact" })
           .gte("created_at", fromISO)
           .lte("created_at", toISO)
+          .neq("activo", false) // Ocultar registros eliminados/inactivos
           .order("created_at", { ascending: false });
 
         if (placaFilter) {
@@ -1489,6 +1540,9 @@ export default function RegistrosChecklist() {
         }
         if (tipoFilter) {
           query = query.eq("tipo", tipoFilter);
+        }
+        if (sedeFilter) {
+          query = query.eq("sede", sedeFilter);
         }
 
         const { data, error, count } = await query.range(from, to);
@@ -1502,7 +1556,7 @@ export default function RegistrosChecklist() {
         if (!opts?.silent) setLoading(false);
       }
     },
-    [fromDate, toDate, page, pageSize, placaFilter, tipoFilter]
+    [fromDate, toDate, page, pageSize, placaFilter, tipoFilter, sedeFilter]
   );
 
   React.useEffect(() => {
@@ -1528,6 +1582,7 @@ export default function RegistrosChecklist() {
         .select("*")
         .gte("created_at", fromISO)
         .lte("created_at", toISO)
+        .neq("activo", false) // Ocultar registros eliminados/inactivos
         .order("created_at", { ascending: false });
 
       if (placaFilter) {
@@ -1535,6 +1590,9 @@ export default function RegistrosChecklist() {
       }
       if (tipoFilter) {
         query = query.eq("tipo", tipoFilter);
+      }
+      if (sedeFilter) {
+        query = query.eq("sede", sedeFilter);
       }
 
       const { data, error } = await query;
@@ -1705,20 +1763,59 @@ export default function RegistrosChecklist() {
             />
           </div>
 
-          <div className="grid gap-1 w-full sm:w-auto">
+          <div className="relative grid gap-1 w-full sm:w-[180px]" ref={placaFilterRef}>
             <label className="text-xs font-medium text-gray-600">Placa</label>
-            <select
-              value={placaFilter}
-              onChange={(e) => setPlacaFilter(e.target.value)}
-              className="w-full sm:w-[180px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
-            >
-              <option value="">Todas</option>
-              {placasInventario.map((p) => (
-                <option key={p} value={p}>
-                  {p}
-                </option>
-              ))}
-            </select>
+            <div className="relative">
+              <input
+                type="text"
+                value={placaSearchFilter}
+                onChange={(e) => {
+                  setPlacaSearchFilter(e.target.value.toUpperCase());
+                  setPlacaOpenFilter(true);
+                }}
+                onFocus={() => {
+                  setPlacaSearchFilter(placaFilter);
+                  setPlacaOpenFilter(true);
+                }}
+                className="w-full rounded-xl border border-gray-200 py-2.5 pl-3 pr-8 text-sm outline-none focus:border-gray-400 focus:ring-1 focus:ring-gray-400 placeholder:text-gray-400"
+                placeholder="Todas"
+              />
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none">
+                <ChevronDown className="h-4 w-4 text-gray-400" />
+              </div>
+            </div>
+
+            {placaOpenFilter && (
+              <div className="absolute z-50 mt-1 w-full rounded-xl border border-gray-100 bg-white overflow-hidden max-h-60 overflow-y-auto top-full shadow-md">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPlacaFilter("");
+                    setPlacaSearchFilter("");
+                    setPlacaOpenFilter(false);
+                  }}
+                  className={`flex w-full items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${"" === placaFilter ? "bg-gray-100 font-medium" : ""
+                    }`}
+                >
+                  Todas
+                </button>
+                {filteredPlacasFilter.map((p) => (
+                  <button
+                    key={p}
+                    type="button"
+                    onClick={() => {
+                      setPlacaFilter(p);
+                      setPlacaSearchFilter(p);
+                      setPlacaOpenFilter(false);
+                    }}
+                    className={`flex w-full items-center justify-between px-3 py-2 text-sm text-left hover:bg-gray-50 ${p === placaFilter ? "bg-gray-100 font-medium" : ""
+                      }`}
+                  >
+                    {p}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="grid gap-1 w-full sm:w-auto">
@@ -1731,6 +1828,24 @@ export default function RegistrosChecklist() {
               <option value="">Todos</option>
               <option value="entrega">Entrega</option>
               <option value="regular">Regular</option>
+            </select>
+          </div>
+
+          <div className="grid gap-1 w-full sm:w-auto">
+            <label className="text-xs font-medium text-gray-600">Sede</label>
+            <select
+              value={sedeFilter}
+              onChange={(e) => setSedeFilter(e.target.value)}
+              className="w-full sm:w-[140px] rounded-xl border border-gray-200 px-3 py-2.5 text-sm outline-none focus:ring-1 focus:ring-gray-200"
+            >
+              <option value="">Todas</option>
+              <option value="Trujillo">Trujillo</option>
+              <option value="Arequipa">Arequipa</option>
+              <option value="Olmos">Olmos</option>
+              <option value="Lima">Lima</option>
+              <option value="Venturosa">Venturosa</option>
+              <option value="Piura">Piura</option>
+              <option value="Dominus">Dominus</option>
             </select>
           </div>
 
@@ -1848,6 +1963,15 @@ export default function RegistrosChecklist() {
                         disabled={!(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre))}
                       >
                         <PenLine className="h-4 w-4" />
+                      </button>
+                      <button
+                        type="button"
+                        className={`p-1.5 rounded-lg transition-colors ${(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) ? "bg-red-50 text-red-600 hover:bg-red-100" : "bg-gray-100 text-gray-400 cursor-not-allowed"}`}
+                        onClick={() => (c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) && (() => { setDeleteRow(c); setOpenDelete(true); })()}
+                        title={(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre)) ? "Eliminar registro" : "Solo el creador puede eliminar"}
+                        disabled={!(c.id_usuario === profile?.id || (!c.id_usuario && getNombre(c) === profile?.nombre))}
+                      >
+                        <Trash2 className="h-4 w-4" />
                       </button>
                     </div>
                   </td>
@@ -2141,6 +2265,22 @@ export default function RegistrosChecklist() {
           setToast({ type: "success", message: "Checklist guardado correctamente." });
         }}
       />
+
+      <ConfirmationModal
+        open={openDelete}
+        onClose={() => setOpenDelete(false)}
+        onConfirm={handleDelete}
+        title="Eliminar Checklist"
+        confirmText="Eliminar"
+        variant="danger"
+        loading={deleting}
+      >
+        <p>¿Estás seguro de que deseas eliminar este checklist?</p>
+        <p className="mt-2 text-sm text-gray-500">
+          Esta acción no se puede deshacer y borrará permanentemente todos los datos asociados.
+        </p>
+      </ConfirmationModal>
+
       <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );

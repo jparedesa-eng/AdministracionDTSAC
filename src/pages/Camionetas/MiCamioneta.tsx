@@ -261,6 +261,7 @@ export default function MiCamioneta() {
                 .from("checklists")
                 .select("*")
                 .eq("placa", placa)
+                .neq("activo", false) // Excluir checklists inactivos (soft-deleted)
                 .order("fecha", { ascending: false });
 
             if (cError) throw cError;
