@@ -1243,7 +1243,7 @@ export default function InventarioTelefonia() {
                     </p>
                 </div>
 
-                 {/* Total Counters (Unfiltered) */}
+                {/* Total Counters (Unfiltered) */}
                 <div className="flex flex-wrap items-center gap-3">
                     {/* Filter: Gestión Global */}
                     <div className="relative group min-w-[180px]">
@@ -1271,7 +1271,7 @@ export default function InventarioTelefonia() {
                             <p className="text-xs font-medium text-gray-500 uppercase">Equipos</p>
                             <div className="flex items-baseline gap-1">
                                 <p className="text-xl font-bold text-gray-900">
-                                    {telefoniaStore.equipos.filter(e => !filterGestion || e.gestion === filterGestion).length}
+                                    {telefoniaStore.equipos.filter(e => e.estado !== "Baja" && (!filterGestion || e.gestion === filterGestion)).length}
                                 </p>
                                 <span className="text-xs text-gray-500 font-medium">
                                     ({telefoniaStore.equipos.filter(e => (e.estado === "Asignado") && (!filterGestion || e.gestion === filterGestion)).length} asig.)
@@ -1288,11 +1288,28 @@ export default function InventarioTelefonia() {
                             <p className="text-xs font-medium text-gray-500 uppercase">Chips</p>
                             <div className="flex items-baseline gap-1">
                                 <p className="text-xl font-bold text-gray-900">
-                                    {telefoniaStore.chips.filter(c => !filterGestion || c.gestion === filterGestion).length}
+                                    {telefoniaStore.chips.filter(c => c.estado !== "Baja" && (!filterGestion || c.gestion === filterGestion)).length}
                                 </p>
                                 <span className="text-xs text-gray-500 font-medium">
                                     ({telefoniaStore.chips.filter(c => (c.estado === "Asignado") && (!filterGestion || c.gestion === filterGestion)).length} asig.)
                                 </span>
+                            </div>
+                        </div>
+                    </div>
+                    {/* De Baja */}
+                    <div className="rounded-xl border border-gray-200 bg-white p-3 flex items-center gap-3 min-w-[140px] shadow-sm">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-full bg-rose-50 text-rose-600">
+                            <Trash2 className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 uppercase">De Baja</p>
+                            <div className="flex items-baseline gap-1">
+                                <p className="text-xl font-bold text-gray-900" title="Equipos de baja">
+                                    {telefoniaStore.equipos.filter(e => e.estado === "Baja" && (!filterGestion || e.gestion === filterGestion)).length} <span className="text-sm font-normal text-gray-600">Eq.</span>
+                                </p>
+                                <p className="text-xl font-bold text-gray-900 ml-2" title="Chips de baja">
+                                    {telefoniaStore.chips.filter(c => c.estado === "Baja" && (!filterGestion || c.gestion === filterGestion)).length} <span className="text-sm font-normal text-gray-600">Ch.</span>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -1663,7 +1680,7 @@ export default function InventarioTelefonia() {
                                                         <div className="text-xs">
                                                             <div className={`font-bold text-[10px] uppercase mb-0.5 ${item.chip.plan.operador === 'CLARO' ? 'text-red-600' :
                                                                 item.chip.plan.operador === 'MOVISTAR' ? 'text-blue-600' :
-                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' : 
+                                                                    item.chip.plan.operador === 'ENTEL' ? 'text-orange-600' :
                                                                         item.chip.plan.operador === 'BITEL' ? 'text-yellow-600' : 'text-gray-600'
                                                                 }`}>
                                                                 {item.chip.plan.operador}
@@ -3827,7 +3844,7 @@ export default function InventarioTelefonia() {
                         <label className="block text-sm font-medium text-gray-700 mb-1">
                             Resultado de la Revisión
                         </label>
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <button
                                 type="button"
                                 onClick={() => setRevisionData({ ...revisionData, estado: "Bueno" })}

@@ -696,16 +696,16 @@ export const telefoniaStore = {
             .eq("dni", cleanDni)
             .limit(1)
             .maybeSingle();
-            
+
         if (error) {
             console.error("Error buscando perfil:", error);
             throw new Error(error.message || "No se encontró el perfil o hubo un error de red");
         }
-        
+
         if (!data) {
-             throw new Error("No se encontró ningún usuario con ese DNI");
+            throw new Error("No se encontró ningún usuario con ese DNI");
         }
-        
+
         return data as { id: string, nombre: string, dni: string };
     },
 
