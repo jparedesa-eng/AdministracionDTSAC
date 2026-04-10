@@ -944,7 +944,8 @@ export default function AsignarTercero() {
                   className="mt-1 w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm outline-none focus:border-gray-400 transition-colors"
                 >
                   <option value="">— Selecciona origen —</option>
-                  <option value="TRUJILLO">TRUJILLO</option>
+                  <option value="PLANTA CONSERVA Y CONGELADO">PLANTA CONSERVA Y CONGELADO</option>
+                  <option value="PLANTA CONSERVA PEDREGAL">PLANTA CONSERVA PEDREGAL</option>
                 </select>
               </div>
 
