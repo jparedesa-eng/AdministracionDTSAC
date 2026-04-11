@@ -8,7 +8,8 @@ import {
     Camera,
     MapPin,
     Activity,
-    Monitor
+    Monitor,
+    Eye
 } from "lucide-react";
 import { Modal } from "../../components/ui/Modal";
 import { PaginationFooter } from "../../components/ui/PaginationFooter";
@@ -16,7 +17,7 @@ import { Toast } from "../../components/ui/Toast";
 import type { ToastState } from "../../components/ui/Toast";
 import { getSedesState, subscribeSedes } from "../../store/sedesStore";
 import { getCentralesState, subscribeCentrales } from "../../store/cctvCentralesStore";
-import { getCamarasState, subscribeCamaras, upsertCamara, type Camara, uploadFotoCamara } from "../../store/camarasStore";
+import { getCamarasState, subscribeCamaras, upsertCamara, type Camara, uploadFotoCamara, getSignedUrlForFoto } from "../../store/camarasStore";
 import { getChecklistDataRange } from "../../store/checklistCamarasStore";
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -124,6 +125,11 @@ function TabCamaras({
     const [modalOpen, setModalOpen] = useState(false);
     const [editItem, setEditItem] = useState<Camara | null>(null);
     const [isUploading, setIsUploading] = useState(false);
+    const [signedUrl, setSignedUrl] = useState<string | null>(null);
+
+    // View Modal State
+    const [viewModalOpen, setViewModalOpen] = useState(false);
+    const [viewItem, setViewItem] = useState<Camara | null>(null);
 
     // Status Modal State
     const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -769,11 +775,21 @@ function TabCamaras({
                 criticidad: item.criticidad || "",
                 foto_enfoque_url: item.foto_enfoque_url || "",
             });
+
+            // Generar URL firmada si existe ruta
+            if (item.foto_enfoque_url) {
+                getSignedUrlForFoto(item.foto_enfoque_url)
+                    .then(url => setSignedUrl(url))
+                    .catch(() => setSignedUrl(null));
+            } else {
+                setSignedUrl(null);
+            }
         } else {
             const initialCentralId = filterCentral || centrales[0]?.id || "";
             const initialSedeId = filterSede || sedes[0]?.id || "";
 
             setEditItem(null);
+            setSignedUrl(null);
             setFormData({
                 codigo: generateNextCodigo(initialCentralId),
                 nombre: "",
@@ -795,6 +811,20 @@ function TabCamaras({
         setModalOpen(true);
     };
 
+    const handleViewClick = async (item: Camara) => {
+        setViewItem(item);
+        setSignedUrl(null);
+        if (item.foto_enfoque_url) {
+            try {
+                const url = await getSignedUrlForFoto(item.foto_enfoque_url);
+                setSignedUrl(url);
+            } catch (e) {
+                console.error("Error al firmar URL", e);
+            }
+        }
+        setViewModalOpen(true);
+    };
+
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
@@ -806,8 +836,9 @@ function TabCamaras({
 
         try {
             setIsUploading(true);
-            const url = await uploadFotoCamara(file, formData.codigo);
-            setFormData(prev => ({ ...prev, foto_enfoque_url: url }));
+            const { path, signedUrl } = await uploadFotoCamara(file, formData.codigo);
+            setFormData(prev => ({ ...prev, foto_enfoque_url: path }));
+            setSignedUrl(signedUrl);
             setToast({ type: "success", message: "Foto subida correctamente." });
         } catch (error: any) {
             setToast({ type: "error", message: "Error al subir la foto: " + error.message });
@@ -1077,6 +1108,13 @@ function TabCamaras({
                                                     <Power className="h-3.5 w-3.5" />
                                                 </button>
                                                 <button
+                                                    onClick={() => handleViewClick(c)}
+                                                    className="p-1 rounded bg-slate-50 text-slate-600 hover:bg-slate-100 transition-colors"
+                                                    title="Ver detalles"
+                                                >
+                                                    <Eye className="h-3.5 w-3.5" />
+                                                </button>
+                                                <button
                                                     onClick={() => handleOpen(c)}
                                                     className="p-1 rounded bg-blue-50 text-blue-600 hover:bg-blue-100 transition-colors"
                                                     title="Editar"
@@ -1313,23 +1351,44 @@ function TabCamaras({
                             <div className="col-span-2">
                                 <label className="block text-sm font-medium text-gray-700 mb-1.5">Foto de Enfoque de la Cámara</label>
                                 <div className="flex items-center gap-4">
-                                    <label className="flex flex-col items-center justify-center w-full max-w-sm h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
-                                        <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                            <Camera className="w-8 h-8 mb-2 text-slate-400" />
-                                            <p className="mb-2 text-sm text-slate-500 font-semibold">{isUploading ? 'Subiendo...' : 'Click para subir foto'}</p>
-                                            <p className="text-xs text-slate-400">PNG, JPG hasta 5MB</p>
-                                        </div>
-                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading || !formData.codigo} />
-                                    </label>
-                                    {formData.foto_enfoque_url && (
-                                        <div className="relative h-32 w-32 rounded-lg border border-slate-200 overflow-hidden shadow-sm flex-shrink-0">
-                                            <img src={formData.foto_enfoque_url} alt="Enfoque de la cámara" className="h-full w-full object-cover" />
-                                            <button 
-                                                onClick={() => setFormData(prev => ({ ...prev, foto_enfoque_url: '' }))}
-                                                className="absolute top-1 right-1 bg-white/80 rounded-full p-1 hover:bg-red-50 text-red-500 transition-colors"
-                                            >
-                                                <Power className="w-3 h-3" />
-                                            </button>
+                                    {!formData.foto_enfoque_url ? (
+                                        <label className="flex flex-col items-center justify-center w-full max-w-sm h-32 border-2 border-slate-300 border-dashed rounded-lg cursor-pointer bg-slate-50 hover:bg-slate-100 transition-colors">
+                                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
+                                                <Camera className="w-8 h-8 mb-2 text-slate-400" />
+                                                <p className="mb-2 text-sm text-slate-500 font-semibold">{isUploading ? 'Subiendo...' : 'Click para subir foto'}</p>
+                                                <p className="text-xs text-slate-400">PNG, JPG hasta 5MB</p>
+                                            </div>
+                                            <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading || !formData.codigo} />
+                                        </label>
+                                    ) : (
+                                        <div className="flex flex-col gap-3 w-full max-w-sm">
+                                            <div className="relative h-48 w-full rounded-xl border border-slate-200 overflow-hidden shadow-sm bg-slate-100 flex items-center justify-center">
+                                                {signedUrl ? (
+                                                    <img src={signedUrl} alt="Enfoque de la cámara" className="h-full w-full object-cover" />
+                                                ) : (
+                                                    <div className="flex flex-col items-center text-slate-400">
+                                                        <Activity className="animate-pulse h-8 w-8 mb-2" />
+                                                        <span className="text-xs">Cargando firma segura...</span>
+                                                    </div>
+                                                )}
+                                                <div className="absolute top-2 right-2 flex gap-1">
+                                                    <button 
+                                                        onClick={() => {
+                                                            setFormData(prev => ({ ...prev, foto_enfoque_url: '' }));
+                                                            setSignedUrl(null);
+                                                        }}
+                                                        className="bg-white/90 backdrop-blur rounded-lg p-1.5 hover:bg-red-50 text-red-500 transition-colors shadow-sm"
+                                                        title="Eliminar foto"
+                                                    >
+                                                        <Power className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <label className="cursor-pointer bg-white border border-slate-200 text-slate-700 px-4 py-2.5 rounded-xl text-xs font-bold hover:bg-slate-50 transition-all text-center flex items-center justify-center gap-2 shadow-sm">
+                                                <Camera size={14} className="text-slate-500" />
+                                                Reemplazar Foto
+                                                <input type="file" className="hidden" accept="image/*" onChange={handleFileUpload} disabled={isUploading} />
+                                            </label>
                                         </div>
                                     )}
                                 </div>
@@ -1536,7 +1595,109 @@ function TabCamaras({
                     </div>
                 </div>
             </Modal>
+
+            {/* View Details Modal */}
+            <Modal
+                open={viewModalOpen}
+                onClose={() => setViewModalOpen(false)}
+                title={`Detalles de Cámara: ${viewItem?.codigo}`}
+                size="lg"
+            >
+                {viewItem && (
+                    <div className="space-y-6 mt-4">
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            {/* Left Col: Photo */}
+                            <div className="space-y-3">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foto de Enfoque (Referencial)</label>
+                                <div className="aspect-video w-full rounded-2xl border border-slate-200 bg-slate-100 overflow-hidden shadow-sm relative group">
+                                    {signedUrl ? (
+                                        <img 
+                                            src={signedUrl} 
+                                            alt={viewItem.nombre} 
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                        />
+                                    ) : (
+                                        <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-3">
+                                            {viewItem.foto_enfoque_url ? (
+                                                <>
+                                                    <Activity className="animate-pulse h-10 w-10 text-blue-400" />
+                                                    <p className="text-xs font-medium">Validando acceso seguro...</p>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <Camera className="h-10 w-10 opacity-20" />
+                                                    <p className="text-xs font-medium italic">Sin foto de enfoque registrada</p>
+                                                </>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
+                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sustentación de Empleo</h4>
+                                    {viewItem.sustentacion_empleo ? (
+                                        <ul className="space-y-1.5">
+                                            {viewItem.sustentacion_empleo.split('\n').map((line, i) => (
+                                                <li key={i} className="text-sm text-slate-700 flex gap-2">
+                                                    <span className="text-blue-500 font-bold">•</span>
+                                                    {line}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    ) : (
+                                        <p className="text-xs italic text-slate-400">No hay motivos de instalación registrados.</p>
+                                    )}
+                                </div>
+                            </div>
+
+                            {/* Right Col: Stats */}
+                            <div className="space-y-4">
+                                <div className="grid grid-cols-2 gap-4">
+                                    <InfoCard label="Nombre" value={viewItem.nombre} icon={<Camera size={14}/>} />
+                                    <InfoCard label="Central" value={centrales.find(c => c.id === viewItem.central_id)?.nombre || "-"} icon={<Monitor size={14}/>} />
+                                    <InfoCard label="Sede" value={sedes.find(s => s.id === viewItem.sede_id)?.nombre || "-"} icon={<Building2 size={14}/>} />
+                                    <InfoCard label="Nave / Fundo" value={viewItem.nave_fundo || "-"} icon={<MapPin size={14}/>} />
+                                    <InfoCard label="Ubicación" value={viewItem.ubicacion || "-"} icon={<Activity size={14}/>} isTag />
+                                    <InfoCard label="Tipo" value={viewItem.tipo_componente || "-"} icon={<Camera size={14}/>} isTag />
+                                    <InfoCard label="Marca" value={viewItem.marca || "-"} />
+                                    <InfoCard label="Criticidad" value={viewItem.criticidad || "-"} isTag />
+                                    <InfoCard label="Área" value={viewItem.area || "-"} />
+                                    <InfoCard label="Resp. Control" value={viewItem.responsable_control || "-"} />
+                                    <InfoCard label="Tiempo Respaldo" value={`${viewItem.tiempo_respaldo || "0"} Días`} />
+                                    <InfoCard label="Fecha Instalación" value={viewItem.fecha_instalacion || "-"} />
+                                </div>
+                                
+                                <div className="pt-4 flex justify-end">
+                                    <button 
+                                        onClick={() => setViewModalOpen(false)}
+                                        className="bg-slate-900 text-white px-8 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200"
+                                    >
+                                        Cerrar Vista
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </Modal>
         </div >
+    );
+}
+
+function InfoCard({ label, value, icon, isTag }: { label: string, value: string, icon?: React.ReactNode, isTag?: boolean }) {
+    return (
+        <div className="bg-white border border-slate-100 p-3 rounded-xl hover:border-slate-200 transition-colors">
+            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter block mb-1">{label}</label>
+            <div className="flex items-center gap-2">
+                {icon && <span className="text-slate-300">{icon}</span>}
+                {isTag ? (
+                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">
+                        {value}
+                    </span>
+                ) : (
+                    <span className="text-sm font-bold text-slate-700 truncate">{value}</span>
+                )}
+            </div>
+        </div>
     );
 }
 

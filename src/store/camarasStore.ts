@@ -213,7 +213,19 @@ async function compressImage(file: File, maxWidth = 1280, quality = 0.7): Promis
     });
 }
 
-export async function uploadFotoCamara(file: File, camaraId: string): Promise<string> {
+export async function getSignedUrlForFoto(path: string): Promise<string> {
+    const { data, error } = await supabase.storage
+        .from('camaras-fotos')
+        .createSignedUrl(path, 7200); // 2 horas
+
+    if (error) {
+        throw new Error(error.message);
+    }
+
+    return data.signedUrl;
+}
+
+export async function uploadFotoCamara(file: File, camaraId: string): Promise<{ path: string, signedUrl: string }> {
     const fileExt = 'jpg'; // Siempre usamos jpg por la compresión
     const fileName = `${camaraId}-${Date.now()}.${fileExt}`;
     const filePath = `${fileName}`;
@@ -224,18 +236,18 @@ export async function uploadFotoCamara(file: File, camaraId: string): Promise<st
     const { error: uploadError } = await supabase.storage
         .from('camaras-fotos')
         .upload(filePath, compressedBlob, {
-            contentType: 'image/jpeg'
+            contentType: 'image/jpeg',
+            upsert: true
         });
 
     if (uploadError) {
         throw new Error(uploadError.message);
     }
 
-    const { data } = supabase.storage
-        .from('camaras-fotos')
-        .getPublicUrl(filePath);
+    // Generamos una URL firmada inmediata para previsualizar
+    const signedUrl = await getSignedUrlForFoto(filePath);
 
-    return data.publicUrl;
+    return { path: filePath, signedUrl };
 }
 
 // ===== LEGACY TYPES FROM types.ts =====
