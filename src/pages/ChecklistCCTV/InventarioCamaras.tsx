@@ -130,6 +130,7 @@ function TabCamaras({
     // View Modal State
     const [viewModalOpen, setViewModalOpen] = useState(false);
     const [viewItem, setViewItem] = useState<Camara | null>(null);
+    const [isImageFull, setIsImageFull] = useState(false);
 
     // Status Modal State
     const [statusModalOpen, setStatusModalOpen] = useState(false);
@@ -769,7 +770,7 @@ function TabCamaras({
                 fecha_instalacion: item.fecha_instalacion || "",
                 area: item.area || "",
                 sustentacion_empleo: item.sustentacion_empleo ?
-                    item.sustentacion_empleo.split('\n').concat(Array(7).fill("")).slice(0, 7) : 
+                    item.sustentacion_empleo.split('\n').concat(Array(7).fill("")).slice(0, 7) :
                     Array(7).fill(""),
                 responsable_control: item.responsable_control || "",
                 criticidad: item.criticidad || "",
@@ -830,8 +831,8 @@ function TabCamaras({
         if (!file) return;
 
         if (!formData.codigo) {
-             setToast({ type: "error", message: "Primero selecciona una central para generar el código." });
-             return;
+            setToast({ type: "error", message: "Primero selecciona una central para generar el código." });
+            return;
         }
 
         try {
@@ -870,8 +871,8 @@ function TabCamaras({
             };
             onUpdate(editItem.id, updateData);
         } else {
-            onAdd({ 
-                ...formData, 
+            onAdd({
+                ...formData,
                 activa: true,
                 sustentacion_empleo: formData.sustentacion_empleo.filter(v => v.trim()).join('\n') || null
             });
@@ -1372,7 +1373,7 @@ function TabCamaras({
                                                     </div>
                                                 )}
                                                 <div className="absolute top-2 right-2 flex gap-1">
-                                                    <button 
+                                                    <button
                                                         onClick={() => {
                                                             setFormData(prev => ({ ...prev, foto_enfoque_url: '' }));
                                                             setSignedUrl(null);
@@ -1601,20 +1602,24 @@ function TabCamaras({
                 open={viewModalOpen}
                 onClose={() => setViewModalOpen(false)}
                 title={`Detalles de Cámara: ${viewItem?.codigo}`}
-                size="lg"
+                size="xl"
             >
                 {viewItem && (
-                    <div className="space-y-6 mt-4">
-                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                            {/* Left Col: Photo */}
-                            <div className="space-y-3">
-                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foto de Enfoque (Referencial)</label>
-                                <div className="aspect-video w-full rounded-2xl border border-slate-200 bg-slate-100 overflow-hidden shadow-sm relative group">
+                    <div className="space-y-4 mt-2">
+                        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                            {/* Left Col: Photo (5 cols) */}
+                            <div className="lg:col-span-5 space-y-3">
+                                <label className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Foto de Enfoque de la Cámara</label>
+                                <div
+                                    onClick={() => signedUrl && setIsImageFull(true)}
+                                    className="aspect-video w-full rounded-2xl border border-slate-200 bg-slate-100 overflow-hidden relative group cursor-pointer"
+                                    title="Click para ver en pantalla completa"
+                                >
                                     {signedUrl ? (
-                                        <img 
-                                            src={signedUrl} 
-                                            alt={viewItem.nombre} 
-                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                                        <img
+                                            src={signedUrl}
+                                            alt={viewItem.nombre}
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                                         />
                                     ) : (
                                         <div className="w-full h-full flex flex-col items-center justify-center text-slate-400 gap-3">
@@ -1632,8 +1637,8 @@ function TabCamaras({
                                         </div>
                                     )}
                                 </div>
-                                <div className="bg-slate-50 p-4 rounded-xl border border-slate-100">
-                                    <h4 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Sustentación de Empleo</h4>
+                                <div className="bg-slate-50 p-3 rounded-xl border border-slate-100">
+                                    <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-2">Sustentación de Empleo</h4>
                                     {viewItem.sustentacion_empleo ? (
                                         <ul className="space-y-1.5">
                                             {viewItem.sustentacion_empleo.split('\n').map((line, i) => (
@@ -1649,15 +1654,15 @@ function TabCamaras({
                                 </div>
                             </div>
 
-                            {/* Right Col: Stats */}
-                            <div className="space-y-4">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <InfoCard label="Nombre" value={viewItem.nombre} icon={<Camera size={14}/>} />
-                                    <InfoCard label="Central" value={centrales.find(c => c.id === viewItem.central_id)?.nombre || "-"} icon={<Monitor size={14}/>} />
-                                    <InfoCard label="Sede" value={sedes.find(s => s.id === viewItem.sede_id)?.nombre || "-"} icon={<Building2 size={14}/>} />
-                                    <InfoCard label="Nave / Fundo" value={viewItem.nave_fundo || "-"} icon={<MapPin size={14}/>} />
-                                    <InfoCard label="Ubicación" value={viewItem.ubicacion || "-"} icon={<Activity size={14}/>} isTag />
-                                    <InfoCard label="Tipo" value={viewItem.tipo_componente || "-"} icon={<Camera size={14}/>} isTag />
+                            {/* Right Col: Stats (7 cols) */}
+                            <div className="lg:col-span-7 space-y-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                                    <InfoCard label="Nombre" value={viewItem.nombre} icon={<Camera size={14} />} />
+                                    <InfoCard label="Central" value={centrales.find(c => c.id === viewItem.central_id)?.nombre || "-"} icon={<Monitor size={14} />} />
+                                    <InfoCard label="Sede" value={sedes.find(s => s.id === viewItem.sede_id)?.nombre || "-"} icon={<Building2 size={14} />} />
+                                    <InfoCard label="Nave / Fundo" value={viewItem.nave_fundo || "-"} icon={<MapPin size={14} />} />
+                                    <InfoCard label="Ubicación" value={viewItem.ubicacion || "-"} icon={<Activity size={14} />} isTag />
+                                    <InfoCard label="Tipo" value={viewItem.tipo_componente || "-"} icon={<Camera size={14} />} isTag />
                                     <InfoCard label="Marca" value={viewItem.marca || "-"} />
                                     <InfoCard label="Criticidad" value={viewItem.criticidad || "-"} isTag />
                                     <InfoCard label="Área" value={viewItem.area || "-"} />
@@ -1665,13 +1670,13 @@ function TabCamaras({
                                     <InfoCard label="Tiempo Respaldo" value={`${viewItem.tiempo_respaldo || "0"} Días`} />
                                     <InfoCard label="Fecha Instalación" value={viewItem.fecha_instalacion || "-"} />
                                 </div>
-                                
-                                <div className="pt-4 flex justify-end">
-                                    <button 
+
+                                <div className="pt-2 flex justify-end">
+                                    <button
                                         onClick={() => setViewModalOpen(false)}
-                                        className="bg-slate-900 text-white px-8 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors shadow-lg shadow-slate-200"
+                                        className="bg-slate-900 text-white px-8 py-2.5 rounded-xl text-sm font-bold hover:bg-slate-800 transition-colors border border-slate-800"
                                     >
-                                        Cerrar Vista
+                                        Cerrar
                                     </button>
                                 </div>
                             </div>
@@ -1679,22 +1684,43 @@ function TabCamaras({
                     </div>
                 )}
             </Modal>
+
+            {/* Fullscreen Image Overlay (Zoom) */}
+            {isImageFull && signedUrl && (
+                <div
+                    className="fixed inset-0 z-[9999] bg-black/95 flex items-center justify-center p-4 cursor-pointer"
+                    onClick={() => setIsImageFull(false)}
+                >
+                    <button
+                        onClick={(e) => { e.stopPropagation(); setIsImageFull(false); }}
+                        className="absolute top-6 right-6 text-white/70 hover:text-white transition-colors p-2 bg-white/10 rounded-full"
+                        title="Cerrar vista"
+                    >
+                        <Plus size={32} className="rotate-45" />
+                    </button>
+                    <img
+                        src={signedUrl}
+                        alt="Zoom"
+                        className="max-w-full max-h-full object-contain pointer-events-none select-none"
+                    />
+                </div>
+            )}
         </div >
     );
 }
 
 function InfoCard({ label, value, icon, isTag }: { label: string, value: string, icon?: React.ReactNode, isTag?: boolean }) {
     return (
-        <div className="bg-white border border-slate-100 p-3 rounded-xl hover:border-slate-200 transition-colors">
-            <label className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter block mb-1">{label}</label>
-            <div className="flex items-center gap-2">
-                {icon && <span className="text-slate-300">{icon}</span>}
+        <div className="bg-white border border-slate-100 p-3 rounded-xl transition-colors">
+            <label className="text-[9px] font-bold text-slate-400 uppercase tracking-wider block mb-1">{label}</label>
+            <div className="flex items-start gap-2">
+                {icon && <span className="text-slate-300 mt-0.5 shrink-0">{icon}</span>}
                 {isTag ? (
-                    <span className="px-1.5 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">
+                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 text-[10px] font-bold">
                         {value}
                     </span>
                 ) : (
-                    <span className="text-sm font-bold text-slate-700 truncate">{value}</span>
+                    <span className="text-sm font-bold text-slate-700 leading-tight break-words">{value || "-"}</span>
                 )}
             </div>
         </div>

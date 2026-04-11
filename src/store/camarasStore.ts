@@ -213,12 +213,25 @@ async function compressImage(file: File, maxWidth = 1280, quality = 0.7): Promis
     });
 }
 
-export async function getSignedUrlForFoto(path: string): Promise<string> {
+export async function getSignedUrlForFoto(pathOrUrl: string): Promise<string> {
+    if (!pathOrUrl) return "";
+
+    // Si es una URL completa antigua, extraemos solo el path
+    let path = pathOrUrl;
+    if (pathOrUrl.includes("/storage/v1/object/")) {
+        // Formatos posibles: .../public/camaras-fotos/file.jpg o .../authenticated/camaras-fotos/file.jpg
+        const parts = pathOrUrl.split("/camaras-fotos/");
+        if (parts.length > 1) {
+            path = parts[1];
+        }
+    }
+
     const { data, error } = await supabase.storage
         .from('camaras-fotos')
         .createSignedUrl(path, 7200); // 2 horas
 
     if (error) {
+        console.error("Error al generar URL firmada para:", path, error);
         throw new Error(error.message);
     }
 
